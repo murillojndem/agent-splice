@@ -1,0 +1,14 @@
+id: generic-openai-transparent
+version: 0.2.0
+status: planned-stage-1
+purpose: transparent-routing
+match:
+  provider: lmstudio
+ingressProtocols:
+  - openai-chat-completions
+forwarding:
+  unknownFields: passthrough
+  nativeStructuredTools: passthrough
+adapters:
+  enabled: false
+knownLimitations: []

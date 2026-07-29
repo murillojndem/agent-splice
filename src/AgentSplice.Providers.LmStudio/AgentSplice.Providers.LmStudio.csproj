@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stage 0 establishes the module boundary only. The LM Studio provider adapter arrives with
+    Stage 1A (docs/ROADMAP.md). Vendor-specific JSON stays inside this project.
+  -->
+  <PropertyGroup>
+    <Description>LM Studio model runtime provider adapter.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
+  </ItemGroup>
+
+</Project>

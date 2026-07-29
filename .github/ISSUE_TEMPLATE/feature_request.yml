@@ -1,0 +1,24 @@
+name: Feature request
+about: Propose a scoped AgentSplice capability
+title: "[Feature]: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Specification requirement IDs
+  - type: textarea
+    attributes:
+      label: Alternatives and scope boundaries
+  - type: textarea
+    attributes:
+      label: Security and compatibility impact

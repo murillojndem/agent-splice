@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stage 0 establishes the module boundary only. The OpenAI ingress DTOs, SSE reader/writer,
+    and structural summariser arrive with Stage 1A/1B (docs/ROADMAP.md).
+  -->
+  <PropertyGroup>
+    <Description>OpenAI-compatible ingress protocol module.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
+  </ItemGroup>
+
+</Project>

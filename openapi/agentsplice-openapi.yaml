@@ -1,0 +1,406 @@
+openapi: 3.1.0
+info:
+  title: AgentSplice API
+  version: 0.2.0-draft
+  description: >-
+    Draft contract for AgentSplice, a local-first trace, replay, conformance,
+    and evaluation platform for AI-agent/runtime interactions. The /v1 surface
+    is OpenAI-compatible ingress. The /api/v1 surface exposes AgentSplice
+    diagnostics and metadata. Stage 1 does not perform text-to-tool recovery.
+servers:
+  - url: http://127.0.0.1:5280
+    description: Local loopback default
+
+tags:
+  - name: OpenAI compatibility
+  - name: System
+  - name: Runtimes
+  - name: Exchanges
+  - name: Replay
+  - name: Conformance
+
+paths:
+  /v1/models:
+    get:
+      tags: [OpenAI compatibility]
+      operationId: listModels
+      responses:
+        '200':
+          description: OpenAI-compatible model list
+          headers:
+            x-agentsplice-request-id:
+              $ref: '#/components/headers/AgentSpliceRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelList'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/chat/completions:
+    post:
+      tags: [OpenAI compatibility]
+      operationId: createChatCompletion
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatCompletionRequest'
+      responses:
+        '200':
+          description: Completion or SSE stream depending on request.stream
+          headers:
+            x-agentsplice-request-id:
+              $ref: '#/components/headers/AgentSpliceRequestId'
+            x-agentsplice-exchange-id:
+              $ref: '#/components/headers/AgentSpliceExchangeId'
+            x-agentsplice-trace-id:
+              $ref: '#/components/headers/AgentSpliceTraceId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '502':
+          $ref: '#/components/responses/ErrorResponse'
+        '504':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/system:
+    get:
+      tags: [System]
+      operationId: getSystemInfo
+      responses:
+        '200':
+          description: Redacted build and module information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemInfo'
+
+  /api/v1/health/runtimes:
+    get:
+      tags: [Runtimes]
+      operationId: getRuntimeHealth
+      responses:
+        '200':
+          description: Runtime health states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuntimeHealth'
+
+  /api/v1/exchanges:
+    get:
+      tags: [Exchanges]
+      operationId: listExchanges
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: runtimeId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Metadata-only exchange page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangePage'
+
+  /api/v1/exchanges/{exchangeId}:
+    get:
+      tags: [Exchanges]
+      operationId: getExchange
+      parameters:
+        - $ref: '#/components/parameters/ExchangeId'
+      responses:
+        '200':
+          description: Exchange metadata and measurement provenance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeDetail'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/exchanges/{exchangeId}/timeline:
+    get:
+      tags: [Exchanges]
+      operationId: getExchangeTimeline
+      parameters:
+        - $ref: '#/components/parameters/ExchangeId'
+      responses:
+        '200':
+          description: Ordered exchange observations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimelineObservation'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/replay-artifacts:
+    post:
+      tags: [Replay]
+      operationId: createReplayArtifact
+      description: Stage 2 endpoint. Creates a sanitized immutable artifact.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceExchangeId]
+              properties:
+                sourceExchangeId: { type: string, format: uuid }
+                sanitizerPolicyId: { type: string }
+      responses:
+        '202':
+          description: Artifact creation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationAccepted'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/conformance/runs:
+    post:
+      tags: [Conformance]
+      operationId: startConformanceRun
+      description: Stage 2 endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suiteId, target]
+              properties:
+                suiteId: { type: string }
+                suiteVersion: { type: string }
+                target: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationAccepted'
+
+components:
+  parameters:
+    ClientRequestId:
+      name: x-request-id
+      in: header
+      required: false
+      schema: { type: string, maxLength: 128 }
+    ExchangeId:
+      name: exchangeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  headers:
+    AgentSpliceRequestId:
+      description: Stable request correlation identifier
+      schema: { type: string }
+    AgentSpliceExchangeId:
+      description: AgentSplice exchange identifier
+      schema: { type: string, format: uuid }
+    AgentSpliceTraceId:
+      description: OpenTelemetry trace identifier
+      schema: { type: string }
+
+  responses:
+    ErrorResponse:
+      description: Stable OpenAI-compatible error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ModelList:
+      type: object
+      required: [object, data]
+      properties:
+        object: { const: list }
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Model'
+
+    Model:
+      type: object
+      required: [id, object, created, owned_by]
+      properties:
+        id: { type: string }
+        object: { const: model }
+        created: { type: integer }
+        owned_by: { type: string }
+      additionalProperties: true
+
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model: { type: string }
+        messages:
+          type: array
+          minItems: 1
+          items: { type: object, additionalProperties: true }
+        tools:
+          type: array
+          items: { type: object, additionalProperties: true }
+        tool_choice: {}
+        stream: { type: boolean, default: false }
+        stream_options: { type: object, additionalProperties: true }
+        temperature: { type: number }
+        top_p: { type: number }
+        max_tokens: { type: integer, minimum: 1 }
+      additionalProperties: true
+
+    ChatCompletionResponse:
+      type: object
+      required: [id, object, created, model, choices]
+      properties:
+        id: { type: string }
+        object: { type: string }
+        created: { type: integer }
+        model: { type: string }
+        choices:
+          type: array
+          items: { type: object, additionalProperties: true }
+        usage: { type: object, additionalProperties: true }
+      additionalProperties: true
+
+    SystemInfo:
+      type: object
+      required: [version, stage, enabledModules]
+      properties:
+        version: { type: string }
+        stage: { type: string }
+        enabledModules:
+          type: array
+          items: { type: string }
+        contentRetentionEnabled: { type: boolean }
+
+    RuntimeHealth:
+      type: object
+      required: [runtimeId, status, checkedAt]
+      properties:
+        runtimeId: { type: string }
+        status:
+          type: string
+          enum: [healthy, unreachable, authentication_failed, incompatible_response, no_models, unknown]
+        checkedAt: { type: string, format: date-time }
+        safeDetails: { type: object, additionalProperties: true }
+
+    ExchangeSummary:
+      type: object
+      required: [exchangeId, startedAt, status, streaming, contentRetentionState]
+      properties:
+        exchangeId: { type: string, format: uuid }
+        requestId: { type: string }
+        traceId: { type: string }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        status: { type: string }
+        runtimeId: { type: string }
+        clientModelId: { type: string }
+        upstreamModelId: { type: string }
+        streaming: { type: boolean }
+        contentRetentionState:
+          type: string
+          enum: [disabled, metadata_only, sanitized_content, expired, deleted]
+
+    ExchangePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExchangeSummary'
+        nextCursor: { type: [string, 'null'] }
+
+    Measurement:
+      type: object
+      required: [name, value, unit, provenance]
+      properties:
+        name: { type: string }
+        value: { type: number }
+        unit: { type: string }
+        provenance:
+          type: string
+          enum: [measured, client_reported, upstream_reported, runtime_log, estimated, inferred]
+        confidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
+
+    ExchangeDetail:
+      allOf:
+        - $ref: '#/components/schemas/ExchangeSummary'
+        - type: object
+          properties:
+            ingressProtocol: { type: string }
+            streamTermination: { type: string }
+            failureClass: { type: [string, 'null'] }
+            measurements:
+              type: array
+              items:
+                $ref: '#/components/schemas/Measurement'
+            structuralSummary:
+              type: object
+              additionalProperties: true
+
+    TimelineObservation:
+      type: object
+      required: [sequence, type, timestamp, source]
+      properties:
+        sequence: { type: integer, minimum: 0 }
+        type: { type: string }
+        timestamp: { type: string, format: date-time }
+        source: { type: string }
+        confidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
+        safeDetails: { type: object, additionalProperties: true }
+
+    OperationAccepted:
+      type: object
+      required: [operationId, status]
+      properties:
+        operationId: { type: string, format: uuid }
+        status: { const: accepted }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type]
+          properties:
+            message: { type: string }
+            type: { type: string }
+            param: {}
+            code: {}

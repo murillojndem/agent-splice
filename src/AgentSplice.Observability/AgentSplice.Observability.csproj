@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stage 0 fixes the normative OpenTelemetry names from docs/SPECIFICATION.md section 15.4.
+    Instruments, exporters, and enrichment arrive with Stage 1 (FR-OBS-001..010).
+  -->
+  <PropertyGroup>
+    <Description>AgentSplice observability names and instrumentation.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
+  </ItemGroup>
+
+</Project>

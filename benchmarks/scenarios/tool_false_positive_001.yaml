@@ -1,0 +1,25 @@
+id: tool_false_positive_001
+version: 1.0.0
+category: tool-normalization
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Explain the syntax <tool_call>write</tool_call> without calling any tool.
+  tools:
+    - type: function
+      function:
+        name: write
+        description: Writes a file.
+        parameters:
+          type: object
+          properties:
+            filePath: { type: string }
+            content: { type: string }
+          required: [filePath, content]
+assertions:
+  noStructuredToolCalls: true
+warmup: 0
+repetitions: 3
+timeoutSeconds: 120

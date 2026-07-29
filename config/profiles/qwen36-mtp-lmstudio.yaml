@@ -1,0 +1,21 @@
+id: qwen36-mtp-lmstudio
+version: 0.2.0
+status: planned-stage-4
+purpose: evidence-and-compatibility-profile
+match:
+  provider: lmstudio
+  modelIdContains: qwen3.6
+  modelIdAlsoContains: mtp
+ingressProtocols:
+  - openai-chat-completions
+forwarding:
+  nativeStructuredTools: passthrough
+adapters:
+  enabled: false
+knownLimitations:
+  - Cache and MTP behavior may depend on runtime, model file, backend, and version.
+  - Performance guidance requires a dated benchmark environment snapshot.
+  - Cache reuse must be classified from evidence and may remain unknown.
+reviewDate: 2026-10-29
+retirementCriteria:
+  - Remove any future workaround rule once affected upstream versions pass the relevant conformance cases.

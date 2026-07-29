@@ -1,0 +1,33 @@
+<Project>
+
+  <!--
+    Stage 0 build contract (see CLAUDE.md "Engineering constraints").
+    Every project targets .NET 8 / C# 12 with nullable reference types enabled and
+    warnings promoted to errors so that "no new compiler warnings" is enforced by the
+    build rather than by review.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!--
+      Code style is verified by `dotnet format whitespace --verify-no-changes` in CI rather
+      than by the compiler, so that formatting drift never blocks a functional build.
+    -->
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Product>AgentSplice</Product>
+    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionSuffix>alpha</VersionSuffix>
+    <RepositoryUrl>https://github.com/agentsplice/agentsplice</RepositoryUrl>
+  </PropertyGroup>
+
+</Project>

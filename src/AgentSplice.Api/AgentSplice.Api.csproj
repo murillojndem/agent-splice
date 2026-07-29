@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Composition root only. Stage 0 exposes no HTTP surface; endpoints arrive with Stage 1A.
+    Per CLAUDE.md, no domain or orchestration logic may live in this project's endpoints.
+  -->
+  <PropertyGroup>
+    <Description>AgentSplice gateway host.</Description>
+    <UserSecretsId>agentsplice-api</UserSecretsId>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
+    <ProjectReference Include="..\AgentSplice.Infrastructure\AgentSplice.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

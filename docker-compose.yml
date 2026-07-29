@@ -1,0 +1,33 @@
+services:
+  agentsplice:
+    image: agentsplice/agentsplice:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5280
+      AGENTSPLICE_PERSISTENCE_MODE: ${AGENTSPLICE_PERSISTENCE_MODE:-sqlite}
+      AGENTSPLICE_SQLITE_CONNECTION: ${AGENTSPLICE_SQLITE_CONNECTION:-Data Source=/data/agentsplice.db}
+      AGENTSPLICE_LMSTUDIO_BASE_URL: ${AGENTSPLICE_LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY:-}
+    ports:
+      - "5280:5280"
+    volumes:
+      - agentsplice-data:/data
+      - ./config:/app/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-agentsplice}
+      POSTGRES_USER: ${POSTGRES_USER:-agentsplice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  agentsplice-data:
+  postgres-data:

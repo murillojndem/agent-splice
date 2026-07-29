@@ -1,0 +1,16 @@
+id: simple_text_001
+version: 1.0.0
+category: protocol
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Reply with exactly the word OK.
+  stream: false
+assertions:
+  httpStatus: 200
+  assistantContentEquals: OK
+warmup: 1
+repetitions: 5
+timeoutSeconds: 120

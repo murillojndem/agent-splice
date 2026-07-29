@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dependency rule (docs/ARCHITECTURE.md): Domain references no other AgentSplice project
+    and no infrastructure package. Enforced by AgentSplice.ArchitectureTests.
+  -->
+  <PropertyGroup>
+    <Description>AgentSplice domain model: exchanges, timelines, observations, and measurement provenance.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,47 @@
+name: Compatibility bug
+about: Report a reproducible client/runtime/model compatibility defect
+title: "[Bug]: "
+labels: [bug, needs-triage]
+body:
+  - type: textarea
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Client and version
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Runtime and version
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Model file and quantization
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Hardware backend
+      description: ROCm, Vulkan, CUDA, CPU, or other
+  - type: textarea
+    attributes:
+      label: Reproduction
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Sanitized logs or fixture
+  - type: textarea
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

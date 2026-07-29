@@ -1,0 +1,74 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,csx}]
+indent_size = 4
+
+[*.{csproj,props,targets,yml,yaml,json}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.cs]
+# Language conventions
+csharp_using_directive_placement = outside_namespace:warning
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = when_multiline:suggestion
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_prefer_primary_constructors = false:suggestion
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+dotnet_style_qualification_for_event = false:suggestion
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_style_readonly_field = true:warning
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+
+# Naming: interfaces begin with I, types are PascalCase, private fields are camelCase.
+dotnet_naming_rule.interfaces_start_with_i.severity = warning
+dotnet_naming_rule.interfaces_start_with_i.symbols = interface_symbols
+dotnet_naming_rule.interfaces_start_with_i.style = prefixed_with_i
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_style.prefixed_with_i.required_prefix = I
+dotnet_naming_style.prefixed_with_i.capitalization = pascal_case
+
+dotnet_naming_rule.types_are_pascal_case.severity = warning
+dotnet_naming_rule.types_are_pascal_case.symbols = type_symbols
+dotnet_naming_rule.types_are_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.type_symbols.applicable_kinds = class,struct,enum,delegate
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+dotnet_naming_rule.private_fields_are_camel_case.severity = warning
+dotnet_naming_rule.private_fields_are_camel_case.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_are_camel_case.style = camel_case_style
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# CA2227: configuration option classes intentionally expose settable collections so that
+# Microsoft.Extensions.Configuration can bind list sections. See ADR 0007.
+dotnet_diagnostic.CA2227.severity = none
+
+# CA1848: high-performance LoggerMessage delegates are adopted where a hot path is proven
+# by AgentSplice.PerformanceTests, not speculatively across the whole codebase.
+dotnet_diagnostic.CA1848.severity = none
+
+# Culture-sensitive APIs must be explicit: AgentSplice compares protocol tokens, not prose.
+dotnet_diagnostic.CA1304.severity = warning
+dotnet_diagnostic.CA1305.severity = warning
+dotnet_diagnostic.CA1307.severity = warning
+dotnet_diagnostic.CA1310.severity = warning
+dotnet_diagnostic.CA1311.severity = warning

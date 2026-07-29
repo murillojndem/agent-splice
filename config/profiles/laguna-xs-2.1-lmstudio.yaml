@@ -1,0 +1,27 @@
+id: laguna-xs-2.1-lmstudio
+version: 0.2.0
+status: planned-stage-4
+purpose: compatibility-adapter-profile
+match:
+  provider: lmstudio
+  modelIdContains: Laguna-XS-2.1
+ingressProtocols:
+  - openai-chat-completions
+forwarding:
+  nativeStructuredTools: passthrough
+adapters:
+  - id: laguna-xml-tool-call
+    version: 1.0.0-draft
+    enabled: false
+    activation: explicit-profile-only
+    failurePolicy: passthrough
+    reviewDate: 2026-10-29
+    retirementCriteria:
+      - Retire for runtime/model versions that expose equivalent structured tool_calls and pass conformance fixtures.
+knownLimitations:
+  - Observed runtime versions may return XML tool calls inside assistant content instead of structured tool_calls.
+evidence:
+  - type: local-observation
+    note: Add sanitized fixture, exact runtime version, and conformance report before enabling.
+upstream:
+  status: not-filed
