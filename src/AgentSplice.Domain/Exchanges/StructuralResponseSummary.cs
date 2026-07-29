@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace AgentSplice.Domain.Exchanges;
 
 /// <summary>
@@ -63,11 +65,11 @@ public sealed record StructuralResponseSummary
         };
     }
 
-    private static IReadOnlyList<string> NormaliseFinishReasons(IEnumerable<string>? finishReasons)
+    private static ReadOnlyCollection<string> NormaliseFinishReasons(IEnumerable<string>? finishReasons)
     {
         if (finishReasons is null)
         {
-            return [];
+            return ReadOnlyCollection<string>.Empty;
         }
 
         var accumulated = new List<string>();

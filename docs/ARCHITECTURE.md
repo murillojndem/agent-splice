@@ -79,6 +79,7 @@ web/
   AgentSplice.Dashboard
 
 tests/
+  AgentSplice.TestSupport
   AgentSplice.UnitTests
   AgentSplice.ContractTests
   AgentSplice.IntegrationTests
@@ -89,6 +90,8 @@ tests/
 ```
 
 Projects may be consolidated if the initial repository becomes fragmented, but logical boundaries must remain explicit.
+
+`AgentSplice.TestSupport` holds the deterministic fake upstream and shared fixtures. It is required by the contract, integration, and later performance and conformance suites, so it cannot live inside any one of them. It references no production project, so the fake upstream behaves like a third-party runtime rather than a mirror of the gateway's own types. See ADR 0007.
 
 ## Dependency rules
 

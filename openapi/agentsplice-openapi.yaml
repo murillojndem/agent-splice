@@ -101,6 +101,40 @@ paths:
                 items:
                   $ref: '#/components/schemas/RuntimeHealth'
 
+  /api/v1/runtimes:
+    get:
+      tags: [Runtimes]
+      operationId: listRuntimes
+      description: >-
+        Configured runtime endpoints with redacted connection detail. Credentials are referenced by
+        environment-variable name and never returned.
+      responses:
+        '200':
+          description: Configured runtime endpoints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuntimeSummary'
+
+  /api/v1/models:
+    get:
+      tags: [Runtimes]
+      operationId: listModelCatalog
+      description: >-
+        Administrative model catalogue. Distinguishes configured entries from currently reachable
+        ones and retains capability provenance.
+      responses:
+        '200':
+          description: Model catalogue with provenance
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CatalogModel'
+
   /api/v1/exchanges:
     get:
       tags: [Exchanges]
@@ -151,6 +185,27 @@ paths:
       responses:
         '200':
           description: Ordered exchange observations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimelineObservation'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/exchanges/{exchangeId}/observations:
+    get:
+      tags: [Exchanges]
+      operationId: getExchangeObservations
+      description: >-
+        Raw observation records for an exchange. Unlike the timeline projection, this surface returns
+        every recorded observation including repeated boundaries.
+      parameters:
+        - $ref: '#/components/parameters/ExchangeId'
+      responses:
+        '200':
+          description: Recorded observations in sequence order
           content:
             application/json:
               schema:
@@ -317,6 +372,40 @@ components:
           enum: [healthy, unreachable, authentication_failed, incompatible_response, no_models, unknown]
         checkedAt: { type: string, format: date-time }
         safeDetails: { type: object, additionalProperties: true }
+
+    RuntimeSummary:
+      type: object
+      required: [runtimeId, provider, enabled]
+      properties:
+        runtimeId: { type: string }
+        displayName: { type: [string, 'null'] }
+        provider: { type: string }
+        baseUrl:
+          type: string
+          description: Absolute base URL. Never contains embedded credentials.
+        apiKeyEnvironmentVariable:
+          type: [string, 'null']
+          description: Name of the environment variable holding the key. Never the key itself.
+        enabled: { type: boolean }
+        discoveryEnabled: { type: boolean }
+
+    CatalogModel:
+      type: object
+      required: [clientModelId, runtimeId, source, reachable]
+      properties:
+        clientModelId: { type: string }
+        runtimeId: { type: string }
+        upstreamModelId: { type: string }
+        aliasId: { type: [string, 'null'] }
+        source:
+          type: string
+          enum: [configured_alias, pass_through, discovered]
+        reachable:
+          type: boolean
+          description: Whether the owning runtime answered the most recent discovery attempt.
+        capabilityProvenance:
+          type: string
+          enum: [unknown, configured, discovered, probed, inferred]
 
     ExchangeSummary:
       type: object

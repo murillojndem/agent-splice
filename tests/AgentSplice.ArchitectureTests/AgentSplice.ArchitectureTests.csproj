@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    References every production project so that the dependency rules in docs/ARCHITECTURE.md are
+    enforced by the build rather than by review.
+  -->
+  <PropertyGroup>
+    <Description>Architecture tests enforcing module dependency and adapter boundaries.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentSplice.Api\AgentSplice.Api.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Application\AgentSplice.Application.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Domain\AgentSplice.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Infrastructure\AgentSplice.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Observability\AgentSplice.Observability.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Protocols.OpenAI\AgentSplice.Protocols.OpenAI.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Providers.LmStudio\AgentSplice.Providers.LmStudio.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+</Project>

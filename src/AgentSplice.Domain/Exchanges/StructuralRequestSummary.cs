@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Collections.ObjectModel;
 using System.Globalization;
 
 namespace AgentSplice.Domain.Exchanges;
@@ -109,11 +110,11 @@ public sealed record StructuralRequestSummary
         return accumulated.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
-    private static IReadOnlyList<string> NormaliseFieldNames(IEnumerable<string>? names, string parameterName)
+    private static ReadOnlyCollection<string> NormaliseFieldNames(IEnumerable<string>? names, string parameterName)
     {
         if (names is null)
         {
-            return [];
+            return ReadOnlyCollection<string>.Empty;
         }
 
         var accumulated = new List<string>();

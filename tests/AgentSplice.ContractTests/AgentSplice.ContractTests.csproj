@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Contract tests binding published constants to the documents that declare them.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AgentSplice.Application\AgentSplice.Application.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Domain\AgentSplice.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.Observability\AgentSplice.Observability.csproj" />
+    <ProjectReference Include="..\AgentSplice.TestSupport\AgentSplice.TestSupport.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="YamlDotNet" />
+  </ItemGroup>
+
+</Project>

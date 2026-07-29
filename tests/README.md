@@ -1,5 +1,26 @@
 # Test projects
 
-Create unit, contract, integration, architecture, and performance test projects according to `docs/TESTING.md`.
+Test projects follow `docs/TESTING.md`.
 
-Stage 1 requires deterministic fake-upstream tests for transparent forwarding, SSE boundaries, cancellation, timing observations, persistence failure, and privacy defaults. Conformance orchestration and evaluation projects arrive in later stages, although Stage 1 contract fixtures become the foundation for them.
+## Present
+
+| Project | Covers |
+| --- | --- |
+| `AgentSplice.TestSupport` | Deterministic fake upstream runtime and repository path helpers. Not a test project itself. |
+| `AgentSplice.UnitTests` | Domain rules, timeline absence rules, measurement provenance, configuration validation, privacy defaults. |
+| `AgentSplice.ContractTests` | Error codes, OpenTelemetry names, OpenAPI paths and enums, and deployment configuration keys, each against the document that declares it. |
+| `AgentSplice.IntegrationTests` | Host startup and configuration binding, the fake-upstream fixture itself, and the Stage 0 exit criterion that a fake-upstream exchange is representable by the domain model. |
+| `AgentSplice.ArchitectureTests` | Module dependency rules, absence of vendor names in the durable core, domain immutability, no static mutable state. |
+
+## Not yet created
+
+`AgentSplice.PerformanceTests` arrives with Stage 1B, when gateway overhead and streaming allocation
+exist to measure. Conformance and evaluation projects arrive with Stages 2 and 3, although the Stage 1
+contract fixtures become their foundation.
+
+## Fixture families still to come
+
+`docs/TESTING.md` lists the required Stage 1 fixture families. The fake upstream can already produce
+every SSE shape they need. The families that depend on a request path — transparent forwarding
+assertions, timeout phase attribution, metadata persistence failure, and "no prompt or response in
+default logs" — are written by the Stage 1A to 1C slices that introduce those code paths.

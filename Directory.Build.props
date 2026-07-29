@@ -15,8 +15,8 @@
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!--
-      Code style is verified by `dotnet format whitespace --verify-no-changes` in CI rather
-      than by the compiler, so that formatting drift never blocks a functional build.
+      Code style is verified by the CI formatting step ("dotnet format whitespace" in verify
+      mode) rather than by the compiler, so formatting drift never blocks a functional build.
     -->
     <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
     <Deterministic>true</Deterministic>

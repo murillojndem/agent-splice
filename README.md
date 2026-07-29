@@ -63,9 +63,23 @@ See [Product positioning](docs/PRODUCT_POSITIONING.md) and [ADR 0006](docs/adr/0
 
 This repository is specification-first. Implementation is intentionally staged.
 
-The first milestone is a transparent OpenAI-compatible trace proxy for LM Studio with correct non-streaming and SSE behavior, request correlation, metadata capture, latency boundaries, OpenTelemetry, SQLite, and a minimal local dashboard. It does **not** require vendor-specific tool-call normalization.
+**Stage 0 — Repository foundation is complete.** The .NET 8 solution exists with enforced module
+boundaries, the Stage 0 domain model for exchanges and evidence, validated configuration, a
+deterministic fake upstream runtime, and CI on Windows and Ubuntu. The gateway host boots and
+validates its configuration but **exposes no HTTP endpoints yet** — a placeholder response would let a
+client mistake an unimplemented gateway for a working one.
+
+**Stage 1 — Transparent Trace Proxy is next.** It adds `GET /v1/models` and
+`POST /v1/chat/completions` for LM Studio with correct non-streaming and SSE behavior, request
+correlation, metadata capture, latency boundaries, OpenTelemetry, SQLite, and a minimal local
+dashboard. It does **not** require vendor-specific tool-call normalization.
 
 Later milestones add replay, conformance suites, differential comparison, agentic evaluations, protocol adapters, compatibility adapters, model support packs, client integrations, backend comparisons, and upstream contributions.
+
+No compatibility claim is made for any client, model, or runtime. Support claims require a dated
+conformance report (`docs/CONFORMANCE.md`).
+
+See [Development guide](docs/DEVELOPMENT.md) to build and test.
 
 ## Proposed stack
 

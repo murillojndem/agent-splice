@@ -1,0 +1,14 @@
+# Normalise line endings to LF in the repository and in every working tree.
+# The .editorconfig declares end_of_line = lf and CI verifies formatting on both Windows and Linux,
+# so a platform-dependent checkout would fail the formatting step on Windows only.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.db binary
+*.snk binary

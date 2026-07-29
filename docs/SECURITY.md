@@ -2,7 +2,7 @@
 
 ## Defaults
 
-- Listen on loopback unless explicitly configured otherwise.
+- Listen on loopback unless explicitly configured otherwise. The default is applied as a fallback when no binding is configured, so that `ASPNETCORE_URLS` and container port settings still take effect. In a container the process binds the container interface and the operator maps the published port to loopback on the host; see ADR 0007.
 - Require authentication when listening on a non-loopback address.
 - Do not store request or response bodies by default.
 - Do not log authorization headers, prompts, source code, tool arguments, or model output.

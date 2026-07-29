@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Test-only support library shared by the contract, integration, and performance suites
+    (docs/TESTING.md "Fake upstream server"). It references no AgentSplice production project on
+    purpose: the fake upstream must behave like a third-party runtime, not like a mirror of the
+    gateway's own types.
+  -->
+  <PropertyGroup>
+    <Description>Deterministic fake upstream runtime and shared test fixtures.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

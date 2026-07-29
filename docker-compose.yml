@@ -4,14 +4,24 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # Configuration keys use the double-underscore form that
+    # Microsoft.Extensions.Configuration maps onto the agentsplice section, so a Compose override and
+    # an appsettings.json value address exactly the same setting.
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:5280
-      AGENTSPLICE_PERSISTENCE_MODE: ${AGENTSPLICE_PERSISTENCE_MODE:-sqlite}
-      AGENTSPLICE_SQLITE_CONNECTION: ${AGENTSPLICE_SQLITE_CONNECTION:-Data Source=/data/agentsplice.db}
-      AGENTSPLICE_LMSTUDIO_BASE_URL: ${AGENTSPLICE_LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      AGENTSPLICE__PERSISTENCE__MODE: ${AGENTSPLICE__PERSISTENCE__MODE:-Sqlite}
+      AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING: ${AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING:-Data Source=/data/agentsplice.db}
+      AGENTSPLICE__RUNTIMES__0__ID: lmstudio-local
+      AGENTSPLICE__RUNTIMES__0__PROVIDER: lmstudio
+      AGENTSPLICE__RUNTIMES__0__BASEURL: ${AGENTSPLICE__RUNTIMES__0__BASEURL:-http://host.docker.internal:1234/v1}
+      # The gateway reads a key by variable name and never stores the value (FR-DATA-010).
+      AGENTSPLICE__RUNTIMES__0__APIKEYENVIRONMENTVARIABLE: LM_STUDIO_API_KEY
       LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY:-}
+      AGENTSPLICE__CAPTURE__CONTENTENABLED: ${AGENTSPLICE__CAPTURE__CONTENTENABLED:-false}
     ports:
-      - "5280:5280"
+      # Bound to loopback on the host. AgentSplice traffic carries prompts and model output, so the
+      # default must not be reachable from the local network (docs/SECURITY.md).
+      - "127.0.0.1:5280:5280"
     volumes:
       - agentsplice-data:/data
       - ./config:/app/config:ro
@@ -25,6 +35,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-agentsplice}
       POSTGRES_USER: ${POSTGRES_USER:-agentsplice}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 

@@ -91,7 +91,23 @@
 
 ## Fake upstream server
 
-Implement a test-only controllable HTTP server with scenario endpoints and scripted timing. It must expose received requests so tests can verify exact forwarding. It should support malformed streams, delayed headers, delayed events, premature close, usage chunks, and cancellation observation.
+`tests/AgentSplice.TestSupport` provides `FakeUpstreamServer`: a real Kestrel listener on an ephemeral loopback port that answers with scripted responses and records every request verbatim.
+
+It is a real listener rather than an in-memory handler because streaming preservation, cancellation propagation, and timeout phases are properties of the transport. An in-memory handler cannot demonstrate that a client disconnect reached the runtime, nor that events were flushed rather than buffered.
+
+Capabilities:
+
+- `UpstreamResponseScripts` for JSON, status-only, malformed, and truncated responses;
+- `SseScript` for byte-exact event streams, with LF or CRLF endings, multiline `data`, comments and keepalives, named events, `retry` directives, and the `[DONE]` sentinel;
+- byte-level rechunking, including one byte at a time, so events split across arbitrary network and UTF-8 boundaries;
+- per-event delays, delayed headers, and trailing stalls for the response-header and idle-stream timeout phases;
+- connection reset for premature EOF;
+- `ReceivedRequests` for exact-forwarding assertions;
+- `RecordedUpstreamRequest.WaitForAbortAsync` for upstream-side cancellation evidence.
+
+Response resolution is path-specific queue, then shared queue, then default. The out-of-the-box default is HTTP 404, so a test that forgot to script a call fails loudly instead of receiving an accidental 200.
+
+The fixture is itself tested in `AgentSplice.IntegrationTests`. Every streaming, cancellation, and timeout test depends on it, so a fixture that silently buffered or completed cleanly where it was told to reset would let those tests pass while the gateway was broken.
 
 ## Testcontainers
 

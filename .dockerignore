@@ -1,0 +1,34 @@
+# Build output must never enter the image context. Copying a host obj/ directory over the container's
+# restore output makes `dotnet publish --no-restore` read a project.assets.json full of host paths,
+# which fails the build in a way whose error message does not mention the cause.
+**/bin/
+**/obj/
+
+.git/
+.github/
+.vs/
+.idea/
+.vscode/
+
+# Test projects are not part of the published image.
+tests/
+benchmarks/
+
+node_modules/
+dist/
+coverage/
+TestResults/
+artifacts/
+
+.env
+*.db
+*.db-shm
+*.db-wal
+/data/
+*.user
+*.suo
+
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml

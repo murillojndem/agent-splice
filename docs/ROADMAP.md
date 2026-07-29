@@ -4,6 +4,9 @@ The roadmap is outcome-based. Dates are intentionally omitted until implementati
 
 ## Stage 0 — Repository foundation
 
+Status: complete. See `CHANGELOG.md` and ADR 0007. `AgentSplice.PerformanceTests` is deferred to
+Stage 1B, where gateway overhead first exists to measure.
+
 Deliverables:
 
 - .NET solution and project boundaries;
