@@ -929,12 +929,22 @@ Example:
 ```yaml
 agentsplice:
   publicBaseUrl: http://localhost:5280
+  # Optional. When set, a model identifier matching no alias and no discovered model is forwarded
+  # unchanged to this runtime (ModelResolutionSource.PassThrough). Unset means such a request is
+  # rejected, so the strict posture is the default.
+  defaultRuntimeId: lmstudio-local
   persistence:
     mode: sqlite
     connectionString: Data Source=/data/agentsplice.db
   diagnostics:
     storeBodies: false
     storeHeaders: allowlist
+  limits:
+    # The non-streaming path buffers whole bodies so they can be forwarded verbatim, so both
+    # directions are bounded. Reading stops at the limit plus one byte.
+    maxRequestBodyBytes: 4194304
+    maxUpstreamCompletionBodyBytes: 67108864
+    maxCatalogueBodyBytes: 4194304
   runtimes:
     - id: lmstudio-local
       provider: lmstudio

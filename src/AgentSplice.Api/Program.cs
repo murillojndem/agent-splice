@@ -1,5 +1,9 @@
+using AgentSplice.Api.Endpoints;
 using AgentSplice.Api.Hosting;
+using AgentSplice.Infrastructure.Composition;
 using AgentSplice.Infrastructure.Configuration;
+using AgentSplice.Protocols.OpenAI;
+using AgentSplice.Providers.LmStudio;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,14 +18,17 @@ if (LoopbackBindingDefault.ShouldApply(builder.Configuration))
 // deterministic under test (CLAUDE.md: "Use TimeProvider for time-dependent logic").
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddAgentSpliceConfiguration(builder.Configuration);
+builder.Services.AddAgentSpliceRequestPath();
+builder.Services.AddOpenAiCompatibilityProtocol();
+builder.Services.AddLmStudioProvider();
 
 var app = builder.Build();
 
-// Stage 0 is the repository foundation: the host boots and validates its configuration, and
-// deliberately exposes no HTTP surface. GET /v1/models and POST /v1/chat/completions arrive with
-// Stage 1A, and the /api/v1 administrative surface with Stage 1C (docs/ROADMAP.md).
-// Serving a placeholder response would let a client mistake an unimplemented gateway for a
-// working one, which the "an HTTP 200 result must never be recorded as proof of full
-// compatibility" rule in CLAUDE.md exists to prevent.
+// Stage 1A serves model discovery. POST /v1/chat/completions arrives with the next slice and the
+// /api/v1 administrative surface with Stage 1C (docs/ROADMAP.md). Nothing is mapped before it can
+// answer honestly: a placeholder response would let a client mistake an unimplemented gateway for a
+// working one, which the "an HTTP 200 result must never be recorded as proof of full compatibility"
+// rule in CLAUDE.md exists to prevent.
+app.MapOpenAiCompatibilityEndpoints();
 
 await app.RunAsync().ConfigureAwait(false);

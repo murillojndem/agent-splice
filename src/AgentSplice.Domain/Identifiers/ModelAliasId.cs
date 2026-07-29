@@ -21,8 +21,14 @@ public readonly record struct ModelAliasId
     public bool IsEmpty => string.IsNullOrEmpty(Value);
 
     /// <summary>Validates a configured alias identifier.</summary>
+    /// <remarks>
+    /// Held to the same opaque rule as <see cref="ClientModelId"/>
+    /// (<see cref="IdentifierText.OpaqueRule"/>), because an alias is the string a client sends back
+    /// as its model: an alias an operator can configure but a client could not then send would be
+    /// unusable.
+    /// </remarks>
     public static ModelAliasId Create(string value) =>
-        new(IdentifierText.RequireModelIdentifier(value, MaxLength, nameof(value)));
+        new(IdentifierText.RequireOpaqueText(value, MaxLength, nameof(value)));
 
     /// <summary>Attempts to accept an alias identifier without throwing.</summary>
     public static bool TryCreate(string? value, out ModelAliasId modelAliasId)

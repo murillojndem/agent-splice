@@ -4,6 +4,56 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A — Model discovery and routing
+
+- Added `GET /v1/models`, composing configured aliases with models discovered from enabled runtimes
+  (FR-MOD-001, FR-MOD-002). The first HTTP surface the gateway serves.
+- Added deterministic model resolution (FR-MOD-005): an enabled alias, then a discovered model, then
+  an optional configured pass-through runtime. Aliases resolve without any network call, so an
+  alias-only deployment never pays for discovery on the request path.
+- Distinguished "the catalogue was consulted and the model is absent" from "no runtime could be
+  asked". The first is a 404, the second a 502. Reporting a model as missing when the truth is that
+  AgentSplice could not ask is precisely the misleading evidence this product exists to remove.
+- Separated *a routing decision was made* from *the forwarded body must change*. An alias that
+  selects a runtime without renaming the model, a duplicate identifier resolved by tie-break, and a
+  pass-through are all routing decisions FR-TRACE-007 requires to be visible, and none of them
+  changes a byte. `ModelResolution.IsRoutingChange` answers only the second question.
+- Added per-runtime discovery caching with the configured window, the stale-serve policy, and
+  refresh coalescing (FR-MOD-003). A failed refresh is remembered for the same window: without that,
+  every request naming an unknown model would wait out the connect timeout again while a runtime is
+  down. A failed refresh never destroys the catalogue it failed to replace.
+- Made model identifiers opaque. They previously had to match a punctuation allowlist, which would
+  have rejected values a runtime would have accepted and made AgentSplice the source of a failure
+  that does not exist downstream. Validation now bounds length and rejects only control characters
+  and text that cannot be encoded as UTF-8.
+- Kept creation times honest. `created` is a Unix timestamp, so zero is a claim about 1970 rather
+  than a way of saying "unknown". The catalogue holds `null`, an alias inherits the evidence of the
+  model it targets, and the compatibility sentinel the OpenAI schema forces exists only inside the
+  response writer.
+- Added `agentsplice:defaultRuntimeId`, validated to name a configured *enabled* runtime, which
+  makes `ModelResolutionSource.PassThrough` reachable and keeps a discovery-disabled runtime
+  routable. Unset by default.
+- Added `agentsplice:limits`, bounding request, completion, and catalogue bodies. Mandatory because
+  the non-streaming path is deliberately fully buffered, which without a ceiling turns one defective
+  runtime into gateway-wide memory pressure.
+- Added the LM Studio provider with one named HTTP client per runtime. `ConnectTimeout` is a
+  property of the handler while `timeouts:connect` is configured per runtime, so a shared handler
+  could honour only one runtime's budget; per-runtime clients also isolate connection pools.
+  `HttpClient.Timeout` is infinite, because the 100-second default throws a cancellation
+  indistinguishable from a client disconnect and would make timeout-phase attribution impossible.
+- Contained upstream credentials. They are resolved inside the provider at the moment the request is
+  built rather than carried through orchestration, and `RuntimeCredential.ToString()` returns a
+  placeholder so an accidental `{Credential}` in a log template cannot leak a key. Redirects and
+  system proxies are disabled so a bearer token cannot be sent to a host the operator did not name.
+- Enforced two new boundaries by test: `AgentSplice.Application` may not reference
+  `System.Net.Http`, which forces transport classification into the provider; and the API project
+  may not parse protocol JSON, record exchange evidence, or open its own connections, which is the
+  checkable form of "no orchestration in endpoint lambdas".
+
+Measurements in this slice are taken against the deterministic fake upstream and are fixture
+measurements, not hardware claims. Stage 1A makes no compatibility claim; that requires a
+conformance report.
+
 ### Stage 0 — Repository foundation
 
 - Bootstrapped the .NET 8 solution with the seven Stage 1 production projects and enforced the

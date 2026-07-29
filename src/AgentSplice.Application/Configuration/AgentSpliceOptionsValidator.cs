@@ -28,9 +28,11 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         ValidateDiagnostics(options, failures);
         ValidateCapture(options, failures);
         ValidateAdapters(options, failures);
+        ValidateLimits(options, failures);
 
-        var runtimeIds = ValidateRuntimes(options, failures);
-        ValidateAliases(options, runtimeIds, failures);
+        var enabledRuntimeIds = ValidateRuntimes(options, failures);
+        ValidateAliases(options, enabledRuntimeIds.All, failures);
+        ValidateDefaultRuntime(options, enabledRuntimeIds, failures);
 
         return failures.Count == 0
             ? ValidateOptionsResult.Success
@@ -145,9 +147,10 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         }
     }
 
-    private static HashSet<string> ValidateRuntimes(AgentSpliceOptions options, List<string> failures)
+    private static RuntimeIdentifierSet ValidateRuntimes(AgentSpliceOptions options, List<string> failures)
     {
         var runtimeIds = new HashSet<string>(StringComparer.Ordinal);
+        var enabledRuntimeIds = new HashSet<string>(StringComparer.Ordinal);
 
         for (var index = 0; index < options.Runtimes.Count; index++)
         {
@@ -166,6 +169,10 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
                     FormattableString.Invariant(
                         $"{prefix}:id '{runtimeId.Value}' is declared more than once; runtime identifiers must be unique so that routing is deterministic."));
             }
+            else if (runtime.Enabled)
+            {
+                enabledRuntimeIds.Add(runtimeId.Value);
+            }
 
             if (string.IsNullOrWhiteSpace(runtime.Provider))
             {
@@ -178,8 +185,78 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
             ValidateTimeouts(runtime.Timeouts, prefix, failures);
         }
 
-        return runtimeIds;
+        return new RuntimeIdentifierSet(runtimeIds, enabledRuntimeIds);
     }
+
+    /// <summary>
+    /// Validates the optional pass-through target.
+    /// </summary>
+    /// <remarks>
+    /// The target must be enabled, not merely configured. A default runtime that is switched off
+    /// would make every unrecognised model fail at request time with a routing error that names a
+    /// runtime the operator believes is in use, which is harder to diagnose than a startup failure
+    /// naming the setting.
+    /// </remarks>
+    private static void ValidateDefaultRuntime(
+        AgentSpliceOptions options,
+        RuntimeIdentifierSet runtimeIds,
+        List<string> failures)
+    {
+        if (options.DefaultRuntimeId is null)
+        {
+            return;
+        }
+
+        if (!RuntimeEndpointId.TryCreate(options.DefaultRuntimeId, out var defaultRuntimeId))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"agentsplice:defaultRuntimeId '{options.DefaultRuntimeId}' is not a valid runtime identifier ({IdentifierDescriptions.Slug})."));
+            return;
+        }
+
+        if (!runtimeIds.All.Contains(defaultRuntimeId.Value))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"agentsplice:defaultRuntimeId '{defaultRuntimeId.Value}' does not match any configured runtime."));
+            return;
+        }
+
+        if (!runtimeIds.Enabled.Contains(defaultRuntimeId.Value))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"agentsplice:defaultRuntimeId '{defaultRuntimeId.Value}' names a runtime that is not enabled; pass-through routing would never reach it."));
+        }
+    }
+
+    private static void ValidateLimits(AgentSpliceOptions options, List<string> failures)
+    {
+        var limits = options.Limits;
+
+        var bounds = new (string Name, long Value)[]
+        {
+            ("maxRequestBodyBytes", limits.MaxRequestBodyBytes),
+            ("maxUpstreamCompletionBodyBytes", limits.MaxUpstreamCompletionBodyBytes),
+            ("maxCatalogueBodyBytes", limits.MaxCatalogueBodyBytes),
+        };
+
+        foreach (var (name, value) in bounds)
+        {
+            if (value <= 0)
+            {
+                failures.Add(
+                    FormattableString.Invariant(
+                        $"agentsplice:limits:{name} must be greater than zero; an unbounded body would let a single request exhaust process memory."));
+            }
+        }
+    }
+
+    /// <summary>Configured runtime identifiers, split by whether the runtime participates in routing.</summary>
+    private readonly record struct RuntimeIdentifierSet(
+        HashSet<string> All,
+        HashSet<string> Enabled);
 
     private static void ValidateRuntimeBaseUrl(
         RuntimeEndpointOptions runtime,
@@ -408,6 +485,11 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
     private static class IdentifierDescriptions
     {
         internal const string Slug = "letters, digits, '-', '_', and '.'";
-        internal const string Model = "letters, digits, '-', '_', '.', ':', '/', and '@'";
+
+        /// <summary>
+        /// Mirrors <c>IdentifierText.OpaqueRule</c>. Model identifiers are opaque third-party values,
+        /// so the constraint is length and printability rather than a punctuation allowlist.
+        /// </summary>
+        internal const string Model = "non-blank text of at most 256 characters with no control characters";
     }
 }

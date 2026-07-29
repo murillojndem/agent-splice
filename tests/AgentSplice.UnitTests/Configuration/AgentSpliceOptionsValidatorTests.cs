@@ -220,9 +220,29 @@ public sealed class AgentSpliceOptionsValidatorTests
     public void An_alias_requires_a_valid_upstream_model_identifier()
     {
         var options = Valid();
-        options.Aliases.Add(Alias("local-coder", "lmstudio-local", "model with spaces"));
+        options.Aliases.Add(Alias("local-coder", "lmstudio-local", "model" + (char)0x00 + "name"));
 
         AssertFailure(options, "is not a valid model identifier");
+    }
+
+    [Fact]
+    public void An_alias_requires_a_non_blank_upstream_model_identifier()
+    {
+        var options = Valid();
+        options.Aliases.Add(Alias("local-coder", "lmstudio-local", "   "));
+
+        AssertFailure(options, "is not a valid model identifier");
+    }
+
+    [Fact]
+    public void An_alias_accepts_the_opaque_punctuation_real_model_names_use()
+    {
+        // Model identifiers belong to the runtime, not to AgentSplice. An operator must be able to
+        // configure any name the runtime will answer to, including one with spaces (P-002).
+        var options = Valid();
+        options.Aliases.Add(Alias("local-coder", "lmstudio-local", "Meta Llama 3.1 8B Instruct"));
+
+        Assert.True(Validate(options).Succeeded);
     }
 
     [Fact]
@@ -337,6 +357,89 @@ public sealed class AgentSpliceOptionsValidatorTests
         options.PublicBaseUrl = null;
 
         Assert.True(Validate(options).Succeeded);
+    }
+
+    [Fact]
+    public void An_omitted_default_runtime_is_accepted()
+    {
+        var options = Valid();
+        options.DefaultRuntimeId = null;
+
+        Assert.True(Validate(options).Succeeded);
+    }
+
+    [Fact]
+    public void A_default_runtime_naming_a_configured_enabled_runtime_is_accepted()
+    {
+        var options = Valid();
+        options.DefaultRuntimeId = "lmstudio-local";
+
+        Assert.True(Validate(options).Succeeded);
+    }
+
+    [Fact]
+    public void An_unknown_default_runtime_fails()
+    {
+        var options = Valid();
+        options.DefaultRuntimeId = "not-configured";
+
+        AssertFailure(options, "does not match any configured runtime");
+    }
+
+    [Fact]
+    public void A_disabled_default_runtime_fails()
+    {
+        // Configured but switched off would make every unrecognised model fail at request time
+        // against a runtime the operator believes is in use.
+        var options = Valid();
+        options.Runtimes[0].Enabled = false;
+        options.DefaultRuntimeId = "lmstudio-local";
+
+        AssertFailure(options, "is not enabled");
+    }
+
+    [Fact]
+    public void A_malformed_default_runtime_identifier_fails()
+    {
+        var options = Valid();
+        options.DefaultRuntimeId = "lm studio";
+
+        AssertFailure(options, "is not a valid runtime identifier");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void A_non_positive_request_body_limit_fails(long value)
+    {
+        var options = Valid();
+        options.Limits.MaxRequestBodyBytes = value;
+
+        AssertFailure(options, "maxRequestBodyBytes");
+    }
+
+    [Fact]
+    public void A_non_positive_upstream_completion_limit_fails()
+    {
+        var options = Valid();
+        options.Limits.MaxUpstreamCompletionBodyBytes = 0;
+
+        AssertFailure(options, "maxUpstreamCompletionBodyBytes");
+    }
+
+    [Fact]
+    public void A_non_positive_catalogue_limit_fails()
+    {
+        var options = Valid();
+        options.Limits.MaxCatalogueBodyBytes = 0;
+
+        AssertFailure(options, "maxCatalogueBodyBytes");
+    }
+
+    [Fact]
+    public void The_default_limits_are_accepted()
+    {
+        Assert.True(Validate(Valid()).Succeeded);
     }
 
     [Fact]

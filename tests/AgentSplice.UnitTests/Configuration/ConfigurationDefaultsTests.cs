@@ -109,6 +109,34 @@ public sealed class ConfigurationDefaultsTests
     }
 
     [Fact]
+    public void Pass_through_routing_is_disabled_by_default()
+    {
+        // Without a default runtime an unrecognised model is rejected rather than forwarded, so the
+        // strict posture is what a deployment gets without asking for it.
+        Assert.Null(new AgentSpliceOptions().DefaultRuntimeId);
+    }
+
+    [Fact]
+    public void Every_body_limit_has_a_positive_default()
+    {
+        var limits = new LimitsOptions();
+
+        Assert.True(limits.MaxRequestBodyBytes > 0);
+        Assert.True(limits.MaxUpstreamCompletionBodyBytes > 0);
+        Assert.True(limits.MaxCatalogueBodyBytes > 0);
+    }
+
+    [Fact]
+    public void A_model_catalogue_is_bounded_more_tightly_than_a_completion_by_default()
+    {
+        // A catalogue is a small, predictable document. A runtime answering model discovery with a
+        // completion-sized payload is a defect worth failing on early.
+        var limits = new LimitsOptions();
+
+        Assert.True(limits.MaxCatalogueBodyBytes < limits.MaxUpstreamCompletionBodyBytes);
+    }
+
+    [Fact]
     public void The_configuration_section_name_is_stable()
     {
         Assert.Equal("agentsplice", AgentSpliceOptions.SectionName);

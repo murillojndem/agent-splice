@@ -121,6 +121,24 @@ public sealed class IdentifierTests
         Assert.Equal(value, ModelAliasId.Create(value).Value);
     }
 
+    [Theory]
+    [InlineData("model name")]
+    [InlineData("Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")]
+    [InlineData("publisher/repo#branch")]
+    [InlineData("model (draft)")]
+    [InlineData("modèle-français")]
+    [InlineData("模型-中文")]
+    [InlineData("model+variant=2")]
+    public void Model_identifiers_accept_opaque_third_party_values(string value)
+    {
+        // A model identifier is chosen by a runtime, a registry, or a model author. Rejecting a value
+        // the runtime would have accepted would make AgentSplice the source of a failure that does
+        // not exist downstream, which is the opposite of transparent forwarding (P-002).
+        Assert.Equal(value, UpstreamModelId.Create(value).Value);
+        Assert.Equal(value, ClientModelId.Create(value).Value);
+        Assert.Equal(value, ModelAliasId.Create(value).Value);
+    }
+
     [Fact]
     public void Model_identifiers_preserve_case_because_clients_echo_them_verbatim()
     {
@@ -130,10 +148,57 @@ public sealed class IdentifierTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("model name")]
-    public void Model_identifiers_reject_blank_and_spaced_values(string value)
+    public void Model_identifiers_reject_blank_values(string value)
     {
         Assert.False(ClientModelId.TryCreate(value, out _));
+    }
+
+    [Fact]
+    public void Model_identifiers_reject_control_characters()
+    {
+        // Built in code rather than declared as inline data: NUL and DEL have no readable escape in
+        // an attribute argument, and embedding them literally would put invisible control bytes in
+        // the source file.
+        string[] values =
+        [
+            "model\nname",
+            "model\tname",
+            "model" + (char)0x00 + "name",
+            "model" + (char)0x1b + "name",
+            "model" + (char)0x7f + "name",
+        ];
+
+        foreach (var value in values)
+        {
+            // Control characters are the one class AgentSplice cannot carry: they permit log and
+            // header injection wherever the identifier is later rendered.
+            Assert.False(ClientModelId.TryCreate(value, out _));
+            Assert.False(UpstreamModelId.TryCreate(value, out _));
+            Assert.False(ModelAliasId.TryCreate(value, out _));
+        }
+    }
+
+    [Fact]
+    public void Model_identifiers_reject_text_that_cannot_be_encoded_as_utf8()
+    {
+        // A lone high surrogate has no UTF-8 encoding, so such an identifier could never be
+        // forwarded upstream, persisted, or exported.
+        Assert.False(ClientModelId.TryCreate("model-\ud83d", out _));
+    }
+
+    [Fact]
+    public void Model_identifiers_accept_a_well_formed_surrogate_pair()
+    {
+        const string Value = "model-🚀";
+
+        Assert.Equal(Value, ClientModelId.Create(Value).Value);
+    }
+
+    [Fact]
+    public void Model_identifiers_reject_values_longer_than_the_documented_maximum()
+    {
+        Assert.False(ClientModelId.TryCreate(new string('a', ClientModelId.MaxLength + 1), out _));
+        Assert.True(ClientModelId.TryCreate(new string('a', ClientModelId.MaxLength), out _));
     }
 
     [Fact]

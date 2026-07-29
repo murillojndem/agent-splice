@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <!--
+      Abstractions only. Application emits structured diagnostics but must not choose or configure a
+      logging provider, which is a hosting concern.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
 </Project>

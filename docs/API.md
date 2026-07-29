@@ -13,6 +13,28 @@ AgentSplice exposes two API surfaces:
 
 Returns configured and discovered client-visible model IDs. Provider-specific administrative detail belongs under `/api/v1`.
 
+The catalogue combines, per enabled runtime in configuration order:
+
+1. every enabled alias targeting that runtime, ordered by priority then declaration order;
+2. every model discovered from that runtime, when its discovery is enabled.
+
+Aliases are configuration, so they are offered whether or not discovery ran. A runtime with discovery disabled remains fully usable through its aliases.
+
+Duplicate client-visible identifiers are collapsed to one entry. The winner is an alias over a discovered model, then the earlier runtime in configuration order, then alias priority. FR-MOD-004 disambiguates duplicates *internally* by runtime endpoint ID: the listed `id` stays the bare model identifier, because a composite `runtime/model` identifier would be a value AgentSplice invented, and a client copying it back into `model` would send something no runtime recognises. The full multi-runtime picture belongs to `/api/v1/models`.
+
+Status:
+
+| Situation | Status |
+|---|---|
+| At least one alias or discovered model is known | `200` |
+| Some runtimes failed, others answered | `200` with what is known |
+| Every consulted runtime failed and nothing is known | `502` `agentsplice_runtime_unavailable` |
+| Nothing configured, or every runtime disabled | `200` with an empty `data` array |
+
+The last row is deliberate: an empty catalogue caused by configuration is an operator fact, and reporting it as an upstream outage would send a user looking in the wrong place.
+
+`created` is a Unix timestamp, so zero means 1970-01-01 rather than "unknown". A discovered model passes through whatever the runtime reported. An alias inherits the value of the model it targets when that model was discovered. When there is no creation evidence at all the envelope emits `0` purely because the OpenAI schema marks the field required and integral and mainstream SDKs deserialize it into a non-nullable integer. That substitution exists only in this envelope; the value is never stored, compared, or re-read as a date, and `/api/v1/models` reports the honest absence alongside `capabilityProvenance`.
+
 ### `POST /v1/chat/completions`
 
 Supports streaming and non-streaming operation. Stage 1 prioritizes transparent forwarding, valid SSE, cancellation, stable errors, and trace capture. Stage 1 does not reinterpret text as tool calls.

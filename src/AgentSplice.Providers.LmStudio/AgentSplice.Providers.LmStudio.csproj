@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Stage 0 establishes the module boundary only. The LM Studio provider adapter arrives with
-    Stage 1A (docs/ROADMAP.md). Vendor-specific JSON stays inside this project.
+    Vendor-specific JSON and transport handling stay inside this project. It is the only production
+    project permitted to reference System.Net.Http, which AgentSplice.ArchitectureTests enforces.
   -->
   <PropertyGroup>
     <Description>LM Studio model runtime provider adapter.</Description>
@@ -10,6 +10,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Provides IHttpClientFactory and the named-client-per-runtime registration (ADR 0008). -->
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
 </Project>

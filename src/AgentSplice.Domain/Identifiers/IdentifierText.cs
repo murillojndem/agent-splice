@@ -17,8 +17,9 @@ internal static class IdentifierText
     /// <summary>Characters permitted in slug-shaped identifiers such as runtime endpoint IDs.</summary>
     internal const string SlugCharacters = "letters, digits, '-', '_', and '.'";
 
-    /// <summary>Characters permitted in model-shaped identifiers, which commonly contain paths and colons.</summary>
-    internal const string ModelCharacters = "letters, digits, '-', '_', '.', ':', '/', and '@'";
+    /// <summary>What an opaque, externally owned identifier such as a model ID must satisfy.</summary>
+    internal const string OpaqueRule =
+        "non-blank text of bounded length containing no control characters";
 
     internal static string RequireSlug(string? value, int maxLength, string parameterName)
     {
@@ -38,19 +39,53 @@ internal static class IdentifierText
         return trimmed.ToLowerInvariant();
     }
 
-    internal static string RequireModelIdentifier(string? value, int maxLength, string parameterName)
+    /// <summary>
+    /// Validates an identifier that a third party owns and AgentSplice merely carries, such as a
+    /// model ID.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately permissive. Model identifiers are opaque values chosen by runtimes, registries,
+    /// and model authors; the set of punctuation they use is not AgentSplice's to decide, and
+    /// rejecting an identifier a runtime would have accepted would make the gateway the source of a
+    /// failure that does not exist downstream (P-002).
+    ///
+    /// The two rules that remain are the ones AgentSplice cannot carry a value without. Control
+    /// characters would allow log and header injection, and a lone surrogate cannot be encoded as
+    /// UTF-8, so it could never be forwarded, persisted, or exported.
+    /// </remarks>
+    internal static string RequireOpaqueText(string? value, int maxLength, string parameterName)
     {
         var trimmed = Require(value, maxLength, parameterName);
 
-        foreach (var character in trimmed)
+        for (var index = 0; index < trimmed.Length; index++)
         {
-            if (!IsModelCharacter(character))
+            var character = trimmed[index];
+
+            if (char.IsControl(character))
             {
                 throw new ArgumentException(
                     FormattableString.Invariant(
-                        $"'{parameterName}' may only contain {ModelCharacters}."),
+                        $"'{parameterName}' must not contain control characters."),
                     parameterName);
             }
+
+            if (!char.IsSurrogate(character))
+            {
+                continue;
+            }
+
+            if (!char.IsHighSurrogate(character)
+                || index + 1 >= trimmed.Length
+                || !char.IsLowSurrogate(trimmed[index + 1]))
+            {
+                throw new ArgumentException(
+                    FormattableString.Invariant(
+                        $"'{parameterName}' must be text that can be encoded as UTF-8."),
+                    parameterName);
+            }
+
+            // The pair is well formed; skip its low half so it is not inspected on its own.
+            index++;
         }
 
         return trimmed;
@@ -104,9 +139,6 @@ internal static class IdentifierText
 
     internal static bool IsSlugCharacter(char character) =>
         char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.';
-
-    internal static bool IsModelCharacter(char character) =>
-        char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.' or ':' or '/' or '@';
 
     private static bool IsLowerHexCharacter(char character) =>
         char.IsAsciiDigit(character) || character is >= 'a' and <= 'f';

@@ -91,6 +91,37 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
+    public void Application_does_not_reference_the_http_client_stack()
+    {
+        // The load-bearing boundary of the request path. It forces transport-exception
+        // classification into the provider module, which is what makes error translation
+        // deterministic, vendor-free, and unit-testable without a socket. Without the test, the
+        // rule holds only until the first time catching HttpRequestException in Application is
+        // convenient.
+        AssertNoReferenceTo(Application, "System.Net.Http");
+    }
+
+    [Fact]
+    public void Only_the_provider_module_talks_to_the_network()
+    {
+        foreach (var assembly in new[] { Domain, Application, Observability, ProtocolsOpenAI })
+        {
+            AssertNoReferenceTo(assembly, "System.Net.Http", "System.Net.Sockets");
+        }
+    }
+
+    [Fact]
+    public void No_assembly_references_an_opentelemetry_package()
+    {
+        // Stage 1A instruments with System.Diagnostics alone (ADR 0008). Stage 1B replaces the
+        // self-registered ActivityListener with the SDK, and must not run both.
+        foreach (var assembly in AllProductionAssemblies())
+        {
+            AssertNoReferenceTo(assembly, "OpenTelemetry");
+        }
+    }
+
+    [Fact]
     public void No_assembly_references_newtonsoft_json()
     {
         // ADR 0002 selects System.Text.Json. Adding Newtonsoft.Json requires a superseding ADR, so

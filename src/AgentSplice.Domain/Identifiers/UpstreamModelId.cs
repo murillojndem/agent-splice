@@ -22,8 +22,14 @@ public readonly record struct UpstreamModelId
     public bool IsEmpty => string.IsNullOrEmpty(Value);
 
     /// <summary>Validates an upstream model identifier.</summary>
+    /// <remarks>
+    /// Opaque, like <see cref="ClientModelId"/>: the runtime owns the naming scheme
+    /// (<see cref="IdentifierText.OpaqueRule"/>). Because a value may therefore contain characters
+    /// that are significant in JSON, anything writing one into a document must encode it rather than
+    /// copy its bytes.
+    /// </remarks>
     public static UpstreamModelId Create(string value) =>
-        new(IdentifierText.RequireModelIdentifier(value, MaxLength, nameof(value)));
+        new(IdentifierText.RequireOpaqueText(value, MaxLength, nameof(value)));
 
     /// <summary>Attempts to accept an upstream model identifier without throwing.</summary>
     public static bool TryCreate(string? value, out UpstreamModelId upstreamModelId)

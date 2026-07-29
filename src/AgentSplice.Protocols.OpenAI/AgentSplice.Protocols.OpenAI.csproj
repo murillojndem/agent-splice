@@ -12,4 +12,12 @@
     <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      Registration extensions only. This module never opens a connection: an architecture test
+      asserts it has no dependency on System.Net.Http.
+    -->
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+  </ItemGroup>
+
 </Project>

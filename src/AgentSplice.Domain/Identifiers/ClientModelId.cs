@@ -21,8 +21,13 @@ public readonly record struct ClientModelId
     public bool IsEmpty => string.IsNullOrEmpty(Value);
 
     /// <summary>Validates a client-supplied model identifier.</summary>
+    /// <remarks>
+    /// A model identifier is an opaque third-party value, so validation bounds its length and
+    /// rejects only what AgentSplice cannot carry. It does not constrain punctuation: a value the
+    /// runtime would have accepted must not fail here (<see cref="IdentifierText.OpaqueRule"/>).
+    /// </remarks>
     public static ClientModelId Create(string value) =>
-        new(IdentifierText.RequireModelIdentifier(value, MaxLength, nameof(value)));
+        new(IdentifierText.RequireOpaqueText(value, MaxLength, nameof(value)));
 
     /// <summary>Attempts to accept a client-supplied model identifier without throwing.</summary>
     public static bool TryCreate(string? value, out ClientModelId clientModelId)

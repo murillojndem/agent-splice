@@ -25,6 +25,17 @@ public readonly record struct PublicRequestId
     public static PublicRequestId FromExchangeId(ExchangeId exchangeId) =>
         new(exchangeId.ToString());
 
+    /// <summary>
+    /// Creates a fresh correlation token for a request that is not a completion exchange.
+    /// </summary>
+    /// <remarks>
+    /// Model discovery is correlatable but is not an exchange, so minting an
+    /// <see cref="ExchangeId"/> for it would put an identifier in a response header that names a
+    /// record which does not exist.
+    /// </remarks>
+    public static PublicRequestId New() =>
+        new(Guid.NewGuid().ToString("D", System.Globalization.CultureInfo.InvariantCulture));
+
     /// <summary>Validates and normalises a caller-supplied correlation token.</summary>
     public static PublicRequestId Create(string value) =>
         new(IdentifierText.RequireCorrelationToken(value, MaxLength, nameof(value)));
