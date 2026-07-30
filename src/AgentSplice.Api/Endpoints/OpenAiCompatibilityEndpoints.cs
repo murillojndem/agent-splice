@@ -22,13 +22,6 @@ namespace AgentSplice.Api.Endpoints;
 /// </remarks>
 internal static class OpenAiCompatibilityEndpoints
 {
-    private static readonly GatewayError BodyTooLarge = GatewayError.Create(
-        ErrorCodes.InvalidRequest,
-        ErrorTypes.InvalidRequest,
-        413,
-        "The request body exceeds the configured maximum size.",
-        failureClass: FailureClass.InvalidRequest);
-
     internal static WebApplication MapOpenAiCompatibilityEndpoints(this WebApplication app)
     {
         app.MapGet("/v1/models", ListModelsAsync);
@@ -64,7 +57,12 @@ internal static class OpenAiCompatibilityEndpoints
             // Refused before the application sees it, so an oversized payload never reaches the
             // parser and never reaches a runtime.
             await GatewayResponseWriter
-                .WriteErrorAsync(context, BodyTooLarge, errorWriter, requestId, cancellationToken)
+                .WriteErrorAsync(
+                    context,
+                    GatewayErrorCatalogue.BodyTooLarge,
+                    errorWriter,
+                    requestId,
+                    cancellationToken)
                 .ConfigureAwait(false);
 
             return;

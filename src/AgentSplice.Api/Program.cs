@@ -22,7 +22,15 @@ builder.Services.AddAgentSpliceRequestPath();
 builder.Services.AddOpenAiCompatibilityProtocol();
 builder.Services.AddLmStudioProvider();
 
+// Last resort only. The gateways translate their own faults into an error carrying correlation
+// identifiers; this exists so that a fault escaping the pipeline still produces the stable envelope
+// rather than a framework error page that could disclose a stack trace.
+builder.Services.AddExceptionHandler<GatewayExceptionHandler>();
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 // Stage 1A serves model discovery. POST /v1/chat/completions arrives with the next slice and the
 // /api/v1 administrative surface with Stage 1C (docs/ROADMAP.md). Nothing is mapped before it can

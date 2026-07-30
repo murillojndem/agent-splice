@@ -20,20 +20,6 @@ namespace AgentSplice.Application.Models;
 /// </remarks>
 public sealed class ModelListGateway
 {
-    private static readonly GatewayError DiscoveryUnavailable = GatewayError.Create(
-        ErrorCodes.RuntimeUnavailable,
-        ErrorTypes.UpstreamUnavailable,
-        502,
-        "No configured runtime could be reached to list models.",
-        failureClass: FailureClass.RuntimeUnavailable);
-
-    private static readonly GatewayError Internal = GatewayError.Create(
-        ErrorCodes.InternalError,
-        ErrorTypes.Internal,
-        500,
-        "The gateway failed to build the model list.",
-        failureClass: FailureClass.InternalError);
-
     private readonly ModelCatalogueService catalogue;
     private readonly IModelListWriter writer;
     private readonly IErrorEnvelopeWriter errorWriter;
@@ -78,7 +64,7 @@ public sealed class ModelListGateway
 
             if (composed.Entries.Count == 0 && composed.EveryDiscoveryAttemptFailed)
             {
-                return Failure(DiscoveryUnavailable, requestId);
+                return Failure(GatewayErrorCatalogue.ModelDiscoveryUnavailable, requestId);
             }
 
             return GatewayResponse.Success(
@@ -91,7 +77,7 @@ public sealed class ModelListGateway
         {
             // The message is never surfaced; only the fact and the correlation token are.
             logger.LogError(exception, "Building the model list failed for request {RequestId}.", requestId.Value);
-            return Failure(Internal, requestId);
+            return Failure(GatewayErrorCatalogue.For(FailureClass.InternalError), requestId);
         }
     }
 

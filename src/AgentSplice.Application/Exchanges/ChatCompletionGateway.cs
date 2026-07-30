@@ -82,11 +82,7 @@ public sealed class ChatCompletionGateway
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            recorder.Cancel(SafeDetails.Create("cancellation.source", "client"));
-
-            // Nothing is written: the socket is gone, and setting a status on a response that has
-            // already started would throw over the top of the real cause.
-            return await FinishAsync(recorder, ChatCompletionOutcome.Disconnected(recorder)).ConfigureAwait(false);
+            return await CancelAsync(recorder).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -97,7 +93,8 @@ public sealed class ChatCompletionGateway
                 "Completion request {RequestId} failed unexpectedly.",
                 request.RequestId.Value);
 
-            return await FailAsync(recorder, InternalError).ConfigureAwait(false);
+            return await FailAsync(recorder, GatewayErrorCatalogue.For(FailureClass.InternalError))
+                .ConfigureAwait(false);
         }
     }
 
@@ -137,7 +134,10 @@ public sealed class ChatCompletionGateway
 
         if (providers.Find(target) is not { } provider)
         {
-            return await FailAsync(recorder, RuntimeNotFound, target.Id).ConfigureAwait(false);
+            return await FailAsync(
+                recorder,
+                GatewayErrorCatalogue.For(FailureClass.RuntimeNotFound),
+                target.Id).ConfigureAwait(false);
         }
 
         var body = Forwardable(request, recorder, envelope, resolution);
@@ -212,7 +212,18 @@ public sealed class ChatCompletionGateway
 
         if (result.Failure is { } failure)
         {
-            return await FailAsync(recorder, Translate(failure), target.Id).ConfigureAwait(false);
+            // A disconnect is a cancellation, not a failure. The provider catches the cancellation
+            // itself and reports it as a classified result, so without this branch the exchange
+            // would be recorded as Failed and ExchangeStatus.Cancelled would be unreachable — which
+            // would make a real disconnect indistinguishable from a runtime fault in both the
+            // exchange list and the metrics.
+            if (failure.Reason == UpstreamFailureReason.Cancelled)
+            {
+                return await CancelAsync(recorder).ConfigureAwait(false);
+            }
+
+            return await FailAsync(recorder, GatewayErrorCatalogue.Translate(failure), target.Id)
+                .ConfigureAwait(false);
         }
 
         recorder.Observe(ObservationType.UpstreamCompleted);
@@ -262,6 +273,19 @@ public sealed class ChatCompletionGateway
             result.RelayedHeaders);
 
         return await FinishAsync(recorder, outcome).ConfigureAwait(false);
+    }
+
+    /// <summary>Records a client disconnect and writes nothing back.</summary>
+    /// <remarks>
+    /// The socket is gone, so writing would throw and setting a status on a response that has
+    /// already started would throw over the top of the real cause.
+    /// </remarks>
+    private async Task<ChatCompletionOutcome> CancelAsync(ExchangeRecorder recorder)
+    {
+        recorder.Cancel(SafeDetails.Create("cancellation.source", "client"));
+
+        return await FinishAsync(recorder, ChatCompletionOutcome.Disconnected(recorder))
+            .ConfigureAwait(false);
     }
 
     private async Task<ChatCompletionOutcome> FailAsync(
@@ -328,77 +352,8 @@ public sealed class ChatCompletionGateway
         return SafeDetails.Create(entries);
     }
 
-    private static GatewayError Unresolved(FailureClass? failure) => failure switch
-    {
-        FailureClass.RuntimeUnavailable => GatewayError.Create(
-            ErrorCodes.RuntimeUnavailable,
-            ErrorTypes.UpstreamUnavailable,
-            502,
-            "No configured runtime could be reached to resolve the requested model.",
-            failureClass: FailureClass.RuntimeUnavailable),
-
-        _ => GatewayError.Create(
-            ErrorCodes.ModelNotFound,
-            ErrorTypes.InvalidRequest,
-            404,
-            "The requested model is not available through this gateway.",
-            "model",
-            FailureClass.ModelNotFound),
-    };
-
-    private static GatewayError Translate(UpstreamFailure failure) => failure.Reason switch
-    {
-        UpstreamFailureReason.AuthenticationRejected => GatewayError.Create(
-            ErrorCodes.RuntimeAuthenticationFailed,
-            ErrorTypes.UpstreamAuthentication,
-
-            // Never 401: the credential is the gateway's, and a 401 would tell the client to fix a
-            // key it does not own.
-            502,
-            "The runtime rejected the gateway's credentials.",
-            failureClass: FailureClass.RuntimeAuthenticationFailed),
-
-        UpstreamFailureReason.Timeout => GatewayError.Create(
-            ErrorCodes.UpstreamTimeout,
-            ErrorTypes.UpstreamTimeout,
-            504,
-            "The runtime did not answer within the configured timeout.",
-            failureClass: FailureClass.UpstreamTimeout),
-
-        UpstreamFailureReason.InvalidResponse or UpstreamFailureReason.ResponseTooLarge =>
-            GatewayError.Create(
-                ErrorCodes.InvalidUpstreamResponse,
-                ErrorTypes.UpstreamProtocol,
-                502,
-                "The runtime's response could not be read.",
-                failureClass: FailureClass.InvalidUpstreamResponse),
-
-        UpstreamFailureReason.Cancelled => GatewayError.Create(
-            ErrorCodes.RequestCancelled,
-            ErrorTypes.Cancellation,
-            499,
-            "The client disconnected before the runtime answered.",
-            failureClass: FailureClass.RequestCancelled),
-
-        _ => GatewayError.Create(
-            ErrorCodes.RuntimeUnavailable,
-            ErrorTypes.UpstreamUnavailable,
-            502,
-            "The runtime could not be reached.",
-            failureClass: FailureClass.RuntimeUnavailable),
-    };
-
-    private static GatewayError RuntimeNotFound { get; } = GatewayError.Create(
-        ErrorCodes.RuntimeNotFound,
-        ErrorTypes.Configuration,
-        503,
-        "The resolved runtime is served by no configured provider module.",
-        failureClass: FailureClass.RuntimeNotFound);
-
-    private static GatewayError InternalError { get; } = GatewayError.Create(
-        ErrorCodes.InternalError,
-        ErrorTypes.Internal,
-        500,
-        "The gateway failed to complete the request.",
-        failureClass: FailureClass.InternalError);
+    private static GatewayError Unresolved(FailureClass? failure) =>
+        failure == FailureClass.RuntimeUnavailable
+            ? GatewayErrorCatalogue.DiscoveryUnavailable
+            : GatewayErrorCatalogue.For(FailureClass.ModelNotFound);
 }

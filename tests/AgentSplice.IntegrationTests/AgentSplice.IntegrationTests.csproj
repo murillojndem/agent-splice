@@ -6,9 +6,13 @@
 
   <ItemGroup>
     <!--
-      Nearly every test here binds a real loopback listener and boots a full host. Unbounded
-      parallelism makes the suite compete with itself for sockets and threads, which shows up as
-      startup tests failing for a reason other than the one they assert.
+      Collections run serially here, which is a real cost and a deliberate one.
+
+      WebApplicationFactory resolves a top-level-statements entry point through static handoff state
+      shared across the process. Booting several hosts concurrently lets one factory observe
+      another's provider, and the tests that deliberately fail startup then see an
+      ObjectDisposedException instead of the validation failure they assert. Capping the thread
+      count narrowed that window without closing it.
     -->
     <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

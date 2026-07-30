@@ -157,6 +157,44 @@ Later stages:
 - `agentsplice_adapter_failed`
 - `agentsplice_translation_loss`
 
+## Stable error types
+
+Every error envelope carries a `type` alongside its `code`. The `code` is the stable machine-readable identity; the `type` is the coarse category a client switches on.
+
+Client-validation failures reuse OpenAI's own `invalid_request_error`, including model-not-found, so an SDK that branches on `type` keeps working. The remaining categories exist because a plain model provider has no vocabulary for them, and flattening them into one would discard the only distinction that matters: which side of the gateway failed.
+
+- `invalid_request_error`
+- `configuration_error`
+- `upstream_unavailable_error`
+- `upstream_authentication_error`
+- `upstream_timeout_error`
+- `upstream_status_error`
+- `upstream_protocol_error`
+- `cancellation_error`
+- `internal_error`
+
+## Error status mapping
+
+| Trigger | Code | Status | Type |
+|---|---|---|---|
+| Body is not valid JSON, not an object, or fails validation | `agentsplice_invalid_request` | 400 | `invalid_request_error` |
+| Body exceeds the configured maximum size | `agentsplice_invalid_request` | 413 | `invalid_request_error` |
+| Model resolves to nothing | `agentsplice_model_not_found` | 404 | `invalid_request_error` |
+| Resolved runtime has no provider module | `agentsplice_runtime_not_found` | 503 | `configuration_error` |
+| Runtime unreachable, or no runtime could be consulted | `agentsplice_runtime_unavailable` | 502 | `upstream_unavailable_error` |
+| Runtime rejected the gateway's credentials | `agentsplice_runtime_authentication_failed` | 502 | `upstream_authentication_error` |
+| A configured timeout phase elapsed | `agentsplice_upstream_timeout` | 504 | `upstream_timeout_error` |
+| Upstream **2xx** body unreadable, truncated, or oversized | `agentsplice_invalid_upstream_response` | 502 | `upstream_protocol_error` |
+| Client disconnected | `agentsplice_request_cancelled` | *(nothing written)* | `cancellation_error` |
+| Unhandled gateway fault | `agentsplice_internal_error` | 500 | `internal_error` |
+| **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
+
+An upstream `401` or `403` is never echoed to the client. The credential is the gateway's, not the client's, so returning `401` would tell a client to fix a key it does not own, and the upstream body is discarded because it can hint at the key's shape.
+
+Every other non-2xx is relayed unchanged, whether or not its body is JSON. Parsing gathers evidence and never gates forwarding: a runtime answering `429 text/plain` is still answering, and substituting a gateway error would discard the most actionable diagnostic a user has. The exchange completes with no failure class in that case — the transport cycle finished and AgentSplice did not fail — and the runtime's status is recorded separately, which is what success and error are classified from.
+
+Error messages are compile-time constants. None is derived from an upstream message, a response body, an exception, or a URL, so no error can disclose a credential, an internal hostname, or model output.
+
 ## Compatibility policy
 
 AgentSplice should preserve unknown request fields when safe and practical. Any dropped or changed field must appear in a routing or adapter event.

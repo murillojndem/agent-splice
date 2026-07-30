@@ -4,6 +4,41 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A — Failures, limits, and credential containment
+
+- Consolidated error translation into a single table, total over `FailureClass`, so a new failure
+  class cannot be added without deciding what it means to a client. Spread across call sites the
+  same mapping drifts, and two places translating one condition into two statuses is a defect
+  neither place looks wrong for.
+- Published the `error.type` vocabulary. The specification supplies exactly one by example, so
+  Stage 1A defines the rest: client-validation failures reuse OpenAI's `invalid_request_error` so an
+  SDK that branches on `type` keeps working, and the gateway-only conditions get categories a plain
+  model provider has no vocabulary for.
+- Fixed a defect in the completion path: a client disconnect was recorded as a failure rather than a
+  cancellation. The provider catches the cancellation itself and reports it as a classified result,
+  so the exchange never reached `Cancelled` — which would have made a real disconnect
+  indistinguishable from a runtime fault in both the exchange list and the metrics.
+- Proved cancellation reaches the runtime. The test waits on the fake upstream's own abort signal,
+  because anything less only shows that AgentSplice stopped reading, which a client experiences
+  identically while the runtime keeps generating and burning the compute cancellation exists to
+  reclaim.
+- Verified timeout-phase attribution against a real listener, including that a runtime which
+  accepted the connection and went quiet is never reported as unreachable.
+- Verified credential containment end to end: the configured key is attached, a client's own
+  `Authorization` never replaces it, and the key appears in no response, error, or header. An
+  upstream authentication body is discarded rather than relayed, because it can hint at the key's
+  shape.
+- Verified the header allowlists in both directions, including that an invented client header and an
+  upstream `Set-Cookie` are dropped while `Retry-After` and rate-limit headers are relayed.
+- Added a last-resort exception handler so a fault escaping the pipeline still produces the stable
+  envelope rather than a framework page that could disclose a stack trace.
+- Diagnosed the intermittent integration failure reported in the previous slice. It was not
+  contention: `WebApplicationFactory` resolves a top-level-statements entry point through static
+  handoff state shared across the process, so concurrent hosts let one factory observe another's
+  disposed provider, and the tests that deliberately fail startup saw `ObjectDisposedException`
+  instead of the validation failure they assert. Collections now run serially in that assembly,
+  which closes the window rather than narrowing it.
+
 ### Stage 1A — Non-streaming completions
 
 - Added `POST /v1/chat/completions` for non-streaming requests (FR-CHAT-001, FR-CHAT-003,
