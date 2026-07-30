@@ -306,16 +306,38 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
                 metadata);
         }
 
-        var stream = await response.Content.ReadAsStreamAsync(total.Token).ConfigureAwait(false);
         var firstByteObserved = false;
 
-        var body = await BoundedBodyReader.ReadAsync(
-                stream,
-                options.Value.Limits.MaxUpstreamCompletionBodyBytes,
-                response.Content.Headers.ContentLength,
-                () => firstByteObserved = true,
-                total.Token)
-            .ConfigureAwait(false);
+        BoundedBodyReader.Result body;
+
+        try
+        {
+            var stream = await response.Content.ReadAsStreamAsync(total.Token).ConfigureAwait(false);
+
+            body = await BoundedBodyReader.ReadAsync(
+                    stream,
+                    options.Value.Limits.MaxUpstreamCompletionBodyBytes,
+                    response.Content.Headers.ContentLength,
+                    () => firstByteObserved = true,
+                    total.Token)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or HttpRequestException)
+        {
+            // Classified here rather than by the outer handler, because by this point the runtime
+            // has already answered: it was reachable, it chose a status, and it then died partway
+            // through its own body. A connection that dies mid-body surfaces as an IOException or an
+            // HttpRequestException depending on how the peer closed and which side noticed first, so
+            // letting it reach a handler that cannot tell the phase apart makes the reported cause a
+            // race — and "the runtime could not be reached" sends an operator to the network when
+            // the runtime is right there, failing.
+            return ProviderCompletionResult.Failed(
+                UpstreamFailure.Create(
+                    UpstreamFailureReason.InvalidResponse,
+                    details: SafeDetails.Create("upstream.completion", "body.truncated")),
+                metadata,
+                firstByteObserved ? timeProvider.GetUtcNow() : null);
+        }
 
         var firstByteAt = firstByteObserved ? timeProvider.GetUtcNow() : (DateTimeOffset?)null;
 
@@ -426,18 +448,33 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
             : LmStudioModelCatalogueReader.Read(new ReadOnlySequence<byte>(body.Body!));
     }
 
+    /// <summary>
+    /// Reads a catalogue body, treating a connection that dies mid-body as a truncated answer.
+    /// </summary>
+    /// <remarks>
+    /// The runtime has already answered by this point, so the failure cannot mean it was
+    /// unreachable. Which exception the platform raises depends on how the peer closed, and letting
+    /// that decide the reported cause would make the diagnosis a race.
+    /// </remarks>
     private async Task<BoundedBodyReader.Result> ReadBodyAsync(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
-        return await BoundedBodyReader.ReadAsync(
-                stream,
-                options.Value.Limits.MaxCatalogueBodyBytes,
-                response.Content.Headers.ContentLength,
-                cancellationToken)
-            .ConfigureAwait(false);
+        try
+        {
+            return await BoundedBodyReader.ReadAsync(
+                    stream,
+                    options.Value.Limits.MaxCatalogueBodyBytes,
+                    response.Content.Headers.ContentLength,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or HttpRequestException)
+        {
+            return BoundedBodyReader.Result.PrematureEnd();
+        }
     }
 
     private void Authorise(HttpRequestMessage request, RuntimeTarget target)

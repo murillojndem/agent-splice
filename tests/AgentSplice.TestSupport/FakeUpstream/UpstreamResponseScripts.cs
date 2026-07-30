@@ -102,4 +102,24 @@ public static class UpstreamResponseScripts
         Body = Encoding.UTF8.GetBytes("{\"id\": \"chatcmpl-1\""),
         ClosePrematurely = true,
     };
+
+    /// <summary>
+    /// Promises more bytes than it delivers, then ends the response.
+    /// </summary>
+    /// <remarks>
+    /// The other way a body ends early, and the reason it exists separately from
+    /// <see cref="TruncatedJson"/>: a reset connection and a declared length the sender never
+    /// honours reach the client as different exceptions, and a gateway that classified them
+    /// differently would report the same runtime fault two ways depending on timing.
+    /// </remarks>
+    public static UpstreamResponseScript UnderDeliveredContentLength() => new()
+    {
+        StatusCode = (int)HttpStatusCode.OK,
+        ContentType = "application/json",
+        Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["content-length"] = "4096",
+        }.AsReadOnly(),
+        Body = Encoding.UTF8.GetBytes("{\"id\": \"chatcmpl-1\""),
+    };
 }

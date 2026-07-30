@@ -13,6 +13,20 @@ namespace AgentSplice.IntegrationTests.Chat;
 /// </summary>
 public sealed class ChatCompletionErrorTests
 {
+    /// <summary>
+    /// The two honest classifications of a connection reset partway through a response body.
+    /// </summary>
+    /// <remarks>
+    /// Which one occurs depends on whether the reset outran the bytes that preceded it. If it did,
+    /// the gateway genuinely never saw a response, and "the runtime could not be reached" is the
+    /// truthful account of that.
+    /// </remarks>
+    private static readonly string[] ResetMidBodyCodes =
+    [
+        "agentsplice_invalid_upstream_response",
+        "agentsplice_runtime_unavailable",
+    ];
+
     [Theory]
     [InlineData("not json at all")]
     [InlineData("[1,2,3]")]
@@ -184,13 +198,35 @@ public sealed class ChatCompletionErrorTests
     public async Task A_malformed_upstream_success_is_a_protocol_error()
     {
         // A malformed 2xx is a protocol violation; a malformed error is still the runtime's answer.
+        //
+        // The runtime declares a length and then stops short of it, rather than resetting the
+        // connection. Both are the same fault, but only this one is deterministic: a reset can
+        // outrun the bytes that preceded it, and then the gateway never saw an answer at all — see
+        // the sibling test below.
         await using var fixture = await StartAsync();
-        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.TruncatedJson());
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.UnderDeliveredContentLength());
 
         var error = await PostForErrorAsync(fixture, Minimal(), HttpStatusCode.BadGateway);
 
         Assert.Equal("agentsplice_invalid_upstream_response", error.GetProperty("code").GetString());
         Assert.Equal("upstream_protocol_error", error.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task A_connection_reset_mid_body_never_reaches_the_client_as_a_success()
+    {
+        // A reset races the data that preceded it: the gateway either read a partial body, or the
+        // reset arrived first and it never saw a response at all. Both are honest — the second
+        // genuinely is "nothing was received" — so this asserts what is true either way rather than
+        // pinning a code the transport decides. Pinning one is what made this test flaky.
+        await using var fixture = await StartAsync();
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.TruncatedJson());
+
+        var error = await PostForErrorAsync(fixture, Minimal(), HttpStatusCode.BadGateway);
+
+        Assert.Contains(error.GetProperty("code").GetString(), ResetMidBodyCodes);
     }
 
     [Fact]

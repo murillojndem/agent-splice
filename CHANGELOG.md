@@ -86,6 +86,19 @@ All notable changes will be documented here.
   outlives the exchange that filled it, and content escapes through a later renter that trusts the
   array's length rather than its read count. They are rented once per exchange rather than once per
   read, so this costs a single memset against a stream that ran for seconds.
+- Fixed a misclassification CI caught on Windows: a runtime that answered and then died partway
+  through its own body was reported as `agentsplice_runtime_unavailable`. The buffered path's catch
+  blocks could not tell which phase had failed, so whether a truncated body surfaced as an
+  `IOException` or an `HttpRequestException` decided the reported cause — a diagnosis by race. Body
+  reads now classify their own failures: once response headers have arrived, "unreachable" is
+  factually impossible. The catalogue path had the same defect and the streaming path already
+  handled it.
+- Made two fixtures deterministic rather than leaving them to that race. A connection reset can
+  outrun the bytes that preceded it, so a test pinning one error code to it was asserting a coin
+  flip; the strict assertion now uses a runtime that declares a length and stops short of it, and the
+  reset case asserts what is true either way. The streamed-reset test gates the reset until the
+  client is blocked waiting, because ungated the client could finish reading buffered bytes and see a
+  clean end — reporting success for a truncated stream about one run in three.
 - Closed three further gaps found by reviewing the slice against the architecture documents.
   `docs/TESTING.md` claimed the duplicate terminal-event family was covered when no test produced
   one. The threat model names excessive nesting among malicious-stream behaviours and nothing

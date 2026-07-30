@@ -138,15 +138,30 @@ public sealed class ChatCompletionStreamFailureTests
     [Fact]
     public async Task An_upstream_reset_mid_stream_does_not_end_the_client_transfer_cleanly()
     {
+        // Gated so the reset lands while the client is blocked waiting for more, rather than while
+        // it still has buffered bytes to hand back. Ungated, the client can finish reading what
+        // already arrived and see a clean end before the abort reaches it — which made this test
+        // report success for a truncated stream perhaps one run in four.
+        var gate = new UpstreamGate();
+
         await using var fixture = await StartAsync();
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",
-            SseScript.Create().Data(ContentChunk).ClosePrematurely().Build());
+            SseScript.Create().Data(ContentChunk).Gate(gate).ClosePrematurely().Build());
 
-        // Whether the abort surfaces while the response is being handed over or while its body is
-        // being read is the transport's business. The claim is only that it surfaces: a client must
-        // not be able to mistake this for a complete answer.
-        Assert.False(await CompletesCleanlyAsync(fixture));
+        using var response = await SendAsync(fixture);
+        using var stream = await response.Content.ReadAsStreamAsync();
+
+        using (var reader = new SseClientReader(stream))
+        {
+            Assert.NotNull(await reader.ReadEventAsync());
+
+            await gate.WaitForReachedAsync(WaitBudget);
+            gate.Release();
+
+            // The claim: a client must not be able to mistake a truncated stream for a whole one.
+            await Assert.ThrowsAnyAsync<Exception>(() => reader.ReadToEndAsync());
+        }
     }
 
     [Fact]
