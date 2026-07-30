@@ -1,5 +1,6 @@
 using AgentSplice.Application.Models;
 using AgentSplice.Application.Runtimes;
+using AgentSplice.UnitTests.Observability;
 using AgentSplice.UnitTests.Runtimes;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -211,7 +212,7 @@ public sealed class ModelDiscoveryCacheTests
     public async Task Each_runtime_is_cached_independently()
     {
         var clock = new FakeTimeProvider(Origin);
-        var cache = new ModelDiscoveryCache(clock);
+        var cache = new ModelDiscoveryCache(clock, new RecordingExchangeTelemetry());
         var provider = new RecordingModelRuntimeProvider();
         var first = RuntimeTargetTests.Target("http://127.0.0.1:1234/v1", "first");
         var second = RuntimeTargetTests.Target("http://127.0.0.1:5678/v1", "second", ordinal: 1);
@@ -221,6 +222,53 @@ public sealed class ModelDiscoveryCacheTests
         await cache.GetAsync(first, provider, CancellationToken.None);
 
         Assert.Equal(2, provider.CallCount);
+    }
+
+    [Fact]
+    public async Task A_refresh_records_how_long_the_runtime_took()
+    {
+        // The instrument is declared live in TelemetryNames, so something has to emit it. Declaring
+        // a name nothing writes to publishes a capability the product does not have.
+        var clock = new FakeTimeProvider(Origin);
+        var telemetry = new RecordingExchangeTelemetry();
+        var cache = new ModelDiscoveryCache(clock, telemetry);
+        var target = RuntimeTargetTests.Target("http://127.0.0.1:1234/v1");
+
+        await cache.GetAsync(target, new RecordingModelRuntimeProvider(), CancellationToken.None);
+
+        var recorded = Assert.Single(telemetry.Discoveries);
+        Assert.Equal(target.Id, recorded.Runtime);
+    }
+
+    [Fact]
+    public async Task A_failed_refresh_records_its_duration_too()
+    {
+        // How long a runtime takes to refuse is as diagnostic as how long it takes to answer.
+        var clock = new FakeTimeProvider(Origin);
+        var telemetry = new RecordingExchangeTelemetry();
+        var cache = new ModelDiscoveryCache(clock, telemetry);
+        var target = RuntimeTargetTests.Target("http://127.0.0.1:1234/v1");
+        var provider = new RecordingModelRuntimeProvider()
+            .Answers(RuntimeModelListResult.Failed(UpstreamFailure.Create(UpstreamFailureReason.Unreachable)));
+
+        await cache.GetAsync(target, provider, CancellationToken.None);
+
+        Assert.Single(telemetry.Discoveries);
+    }
+
+    [Fact]
+    public async Task A_cache_hit_records_no_discovery_duration()
+    {
+        var clock = new FakeTimeProvider(Origin);
+        var telemetry = new RecordingExchangeTelemetry();
+        var cache = new ModelDiscoveryCache(clock, telemetry);
+        var target = RuntimeTargetTests.Target("http://127.0.0.1:1234/v1");
+        var provider = new RecordingModelRuntimeProvider();
+
+        await cache.GetAsync(target, provider, CancellationToken.None);
+        await cache.GetAsync(target, provider, CancellationToken.None);
+
+        Assert.Single(telemetry.Discoveries);
     }
 
     [Fact]
@@ -261,6 +309,6 @@ public sealed class ModelDiscoveryCacheTests
                 cacheDuration: cacheDuration ?? Window,
                 serveStaleOnFailure: serveStaleOnFailure));
 
-        return (new ModelDiscoveryCache(clock), new RecordingModelRuntimeProvider(), target);
+        return (new ModelDiscoveryCache(clock, new RecordingExchangeTelemetry()), new RecordingModelRuntimeProvider(), target);
     }
 }

@@ -144,10 +144,10 @@ The durable core must not reference Laguna, Qwen, OpenCode, LM Studio log format
 
 The Stage 1 request path is transparent by default:
 
-1. validate the supported ingress envelope;
-2. assign correlation identifiers;
-3. resolve runtime and model alias;
-4. record a safe structural summary;
+1. assign correlation identifiers;
+2. validate the supported ingress envelope;
+3. record a safe structural summary;
+4. resolve runtime and model alias;
 5. forward without semantic rewriting;
 6. incrementally parse and forward SSE;
 7. record timing and protocol observations;

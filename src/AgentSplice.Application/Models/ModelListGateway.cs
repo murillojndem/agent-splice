@@ -1,3 +1,4 @@
+using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Exchanges;
@@ -55,6 +56,7 @@ public sealed class ModelListGateway
                 if (outcome.Failure is not null || !outcome.YieldedCatalogue)
                 {
                     logger.LogWarning(
+                        GatewayEventIds.RuntimeDiscoveryFailed,
                         "Model discovery for runtime {RuntimeId} reported {RuntimeHealth}. Served from stale cache: {ServedStale}.",
                         outcome.Runtime.Value,
                         outcome.Status,
@@ -76,7 +78,11 @@ public sealed class ModelListGateway
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // The message is never surfaced; only the fact and the correlation token are.
-            logger.LogError(exception, "Building the model list failed for request {RequestId}.", requestId.Value);
+            logger.LogError(
+                GatewayEventIds.ModelListFailed,
+                exception,
+                "Building the model list failed for request {RequestId}.",
+                requestId.Value);
             return Failure(GatewayErrorCatalogue.For(FailureClass.InternalError), requestId);
         }
     }

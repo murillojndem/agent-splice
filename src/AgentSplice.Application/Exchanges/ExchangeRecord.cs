@@ -1,6 +1,7 @@
 using AgentSplice.Application.Errors;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Identifiers;
+using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 
 namespace AgentSplice.Application.Exchanges;
@@ -34,6 +35,18 @@ public sealed record ExchangeRecord
     /// <summary>The ordered observations recorded for this request.</summary>
     public IReadOnlyList<ExchangeObservation> Observations { get; private init; } = [];
 
+    /// <summary>
+    /// The values derived from those observations, each carrying its provenance.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the metric stream on purpose. A histogram records a number; a
+    /// <see cref="Measurement"/> records a number together with where it came from, which is what
+    /// lets a reader tell a clock reading from an upstream-reported token count from an estimate
+    /// (P-008, FR-OBS-003, FR-OBS-010). A boundary that was never observed produces no measurement
+    /// rather than a zero.
+    /// </remarks>
+    public IReadOnlyList<Measurement> Measurements { get; private init; } = [];
+
     /// <summary>The error reported to the client, or <c>null</c> when none was.</summary>
     public GatewayError? Error { get; private init; }
 
@@ -42,6 +55,7 @@ public sealed record ExchangeRecord
         ExchangeId exchangeId,
         PublicRequestId requestId,
         IReadOnlyList<ExchangeObservation> observations,
+        IReadOnlyList<Measurement>? measurements = null,
         CompletionExchange? exchange = null,
         GatewayError? gatewayError = null)
     {
@@ -53,6 +67,7 @@ public sealed record ExchangeRecord
             RequestId = requestId,
             Exchange = exchange,
             Observations = observations,
+            Measurements = measurements ?? [],
             Error = gatewayError,
         };
     }

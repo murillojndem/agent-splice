@@ -1,6 +1,7 @@
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Models;
 using AgentSplice.Application.Runtimes;
+using AgentSplice.UnitTests.Observability;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
@@ -135,7 +136,7 @@ internal sealed class CatalogueFixture
                 runtimes,
                 aliases,
                 providers,
-                new ModelDiscoveryCache(clock));
+                new ModelDiscoveryCache(clock, new RecordingExchangeTelemetry()));
 
             return new CatalogueFixture(
                 new ModelResolver(runtimes, aliases, catalogue),

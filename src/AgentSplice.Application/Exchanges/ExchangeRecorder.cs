@@ -1,6 +1,7 @@
 using AgentSplice.Application.Errors;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Identifiers;
+using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 
 namespace AgentSplice.Application.Exchanges;
@@ -167,7 +168,66 @@ public sealed class ExchangeRecorder
 
     /// <summary>Produces the evidence record for this request.</summary>
     public ExchangeRecord ToRecord() =>
-        ExchangeRecord.Create(ExchangeId, RequestId, timeline.Observations, Exchange, Error);
+        ExchangeRecord.Create(ExchangeId, RequestId, timeline.Observations, BuildMeasurements(), Exchange, Error);
+
+    /// <summary>
+    /// Derives the measurements the observed boundaries actually support.
+    /// </summary>
+    /// <remarks>
+    /// Each entry is added only when both of its boundaries were observed, so a phase that did not
+    /// happen produces no measurement rather than a zero — the difference between "took no time" and
+    /// "we do not know" (FR-TRACE-006, FR-OBS-004).
+    ///
+    /// Durations carry <see cref="MeasurementProvenance.Measured"/> because AgentSplice read its own
+    /// clock. Token counts carry whatever provenance the count itself arrived with, which for a
+    /// runtime-reported usage object is <see cref="MeasurementProvenance.UpstreamReported"/> — never
+    /// silently upgraded to measured.
+    ///
+    /// Throughput is deliberately absent. A non-streamed exchange offers no boundary separating
+    /// prompt processing from generation, so <c>ThroughputCalculator</c> would have to borrow one
+    /// interval for the other, and labelling prompt throughput as generation throughput is the exact
+    /// reporting error CLAUDE.md calls out (FR-OBS-005).
+    /// </remarks>
+    private List<Measurement> BuildMeasurements()
+    {
+        var measurements = new List<Measurement>();
+
+        Add(measurements, MeasurementNames.ValidationDuration, ObservationType.RequestBodyRead, ObservationType.ValidationCompleted);
+        Add(measurements, MeasurementNames.RoutingDuration, ObservationType.StructuralSummaryCreated, ObservationType.ModelResolved);
+        Add(measurements, MeasurementNames.UpstreamHeadersDuration, ObservationType.UpstreamRequestOpened, ObservationType.UpstreamHeadersReceived);
+        Add(measurements, MeasurementNames.TimeToFirstUpstreamByte, ObservationType.UpstreamRequestOpened, ObservationType.FirstUpstreamByte);
+        Add(measurements, MeasurementNames.TotalDuration, ObservationType.RequestAccepted, ObservationType.ClientCompleted);
+
+        if (Exchange is not { } exchange)
+        {
+            return measurements;
+        }
+
+        if (exchange.ResponseSummary is { } response)
+        {
+            measurements.Add(Measurement.Bytes(MeasurementNames.ClientResponseBytes, response.ResponseBodyBytes, ExchangeId));
+        }
+
+        if (exchange.Usage.PromptTokens is { } prompt)
+        {
+            measurements.Add(Measurement.Tokens(MeasurementNames.PromptTokens, prompt, ExchangeId));
+        }
+
+        if (exchange.Usage.CompletionTokens is { } completion)
+        {
+            measurements.Add(Measurement.Tokens(MeasurementNames.CompletionTokens, completion, ExchangeId));
+        }
+
+        return measurements;
+    }
+
+    private void Add(List<Measurement> measurements, string name, ObservationType from, ObservationType to)
+    {
+        if (timeline.DurationBetween(from, to) is { } elapsed && elapsed >= TimeSpan.Zero)
+        {
+            measurements.Add(Measurement.Duration(name, elapsed, ExchangeId));
+        }
+    }
 
     private bool TryTerminate()
     {

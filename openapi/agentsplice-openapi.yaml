@@ -30,8 +30,6 @@ paths:
           headers:
             x-agentsplice-request-id:
               $ref: '#/components/headers/AgentSpliceRequestId'
-            x-agentsplice-trace-id:
-              $ref: '#/components/headers/AgentSpliceTraceId'
           content:
             application/json:
               schema:
@@ -555,7 +553,6 @@ components:
                 - upstream_unavailable_error
                 - upstream_authentication_error
                 - upstream_timeout_error
-                - upstream_status_error
                 - upstream_protocol_error
                 - cancellation_error
                 - internal_error

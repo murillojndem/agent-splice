@@ -16,16 +16,11 @@ public static class ObservabilityRegistration
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        // The listener is a constructor dependency of the telemetry rather than something resolved
+        // from the container at call time, so "spans exist before the first one is started" is a
+        // compile-time fact rather than a registration ordering convention.
         services.AddSingleton<AgentSpliceActivityListener>();
-        services.AddSingleton<ExchangeTelemetry>();
-        services.AddSingleton<IExchangeTelemetry>(provider =>
-        {
-            // Resolved so the listener is constructed before the first span is started. Without it,
-            // StartActivity returns null and no trace identifier ever exists.
-            provider.GetRequiredService<AgentSpliceActivityListener>();
-
-            return provider.GetRequiredService<ExchangeTelemetry>();
-        });
+        services.AddSingleton<IExchangeTelemetry, ExchangeTelemetry>();
 
         return services;
     }

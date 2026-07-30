@@ -1,3 +1,4 @@
+using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Exchanges;
@@ -47,7 +48,10 @@ internal sealed class GatewayExceptionHandler : IExceptionHandler
             return false;
         }
 
-        logger.LogError(exception, "An unhandled fault escaped the request pipeline.");
+        logger.LogError(
+            GatewayEventIds.UnhandledPipelineFault,
+            exception,
+            "An unhandled fault escaped the request pipeline.");
 
         var error = GatewayErrorCatalogue.For(FailureClass.InternalError);
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Runtimes;
 using Microsoft.Extensions.Logging;
 
@@ -46,6 +47,7 @@ public sealed class EnvironmentRuntimeApiKeyResolver : IRuntimeApiKeyResolver
         {
             // The variable name is configuration, not a secret. The value is never logged.
             logger.LogWarning(
+                GatewayEventIds.RuntimeCredentialMissing,
                 "Runtime {RuntimeId} names environment variable {ApiKeyVariable} for its API key, but that variable is unset or blank. Requests will be sent without a credential.",
                 target.Id.Value,
                 variableName);

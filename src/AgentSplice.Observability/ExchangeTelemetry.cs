@@ -29,8 +29,15 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     private readonly Histogram<double> discoveryDuration;
 
     /// <summary>Creates the instruments.</summary>
-    public ExchangeTelemetry()
+    /// <param name="listener">
+    /// Required, not merely available. Without a listener subscribed to the AgentSplice sources
+    /// every <c>StartActivity</c> returns null, so taking it as a dependency makes the ordering a
+    /// compile-time fact instead of a registration convention.
+    /// </param>
+    public ExchangeTelemetry(AgentSpliceActivityListener listener)
     {
+        ArgumentNullException.ThrowIfNull(listener);
+
         exchanges = meter.CreateCounter<long>(
             TelemetryNames.Instruments.Exchanges,
             unit: "{exchange}",

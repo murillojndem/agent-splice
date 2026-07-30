@@ -168,7 +168,6 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 - `upstream_unavailable_error`
 - `upstream_authentication_error`
 - `upstream_timeout_error`
-- `upstream_status_error`
 - `upstream_protocol_error`
 - `cancellation_error`
 - `internal_error`
@@ -188,6 +187,8 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 | Client disconnected | `agentsplice_request_cancelled` | *(nothing written)* | `cancellation_error` |
 | Unhandled gateway fault | `agentsplice_internal_error` | 500 | `internal_error` |
 | **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
+
+There is no AgentSplice error type for a relayed upstream status: the runtime's own envelope is what the client receives, so the gateway writes nothing for a type to describe.
 
 An upstream `401` or `403` is never echoed to the client. The credential is the gateway's, not the client's, so returning `401` would tell a client to fix a key it does not own, and the upstream body is discarded because it can hint at the key's shape.
 

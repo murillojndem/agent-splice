@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentSplice.Application.Observability;
 using AgentSplice.Application.Runtimes;
 
 namespace AgentSplice.Application.Models;
@@ -26,12 +27,16 @@ public sealed class ModelDiscoveryCache
     private readonly ConcurrentDictionary<string, CacheEntry> entries = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> refreshGates = new(StringComparer.Ordinal);
     private readonly TimeProvider timeProvider;
+    private readonly IExchangeTelemetry telemetry;
 
     /// <summary>Creates a cache driven by the supplied clock.</summary>
-    public ModelDiscoveryCache(TimeProvider timeProvider)
+    public ModelDiscoveryCache(TimeProvider timeProvider, IExchangeTelemetry telemetry)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(telemetry);
+
         this.timeProvider = timeProvider;
+        this.telemetry = telemetry;
     }
 
     /// <summary>
@@ -126,8 +131,13 @@ public sealed class ModelDiscoveryCache
         IModelRuntimeProvider provider,
         CancellationToken cancellationToken)
     {
+        var startedAt = timeProvider.GetUtcNow();
         var result = await provider.ListModelsAsync(target, cancellationToken).ConfigureAwait(false);
         var now = timeProvider.GetUtcNow();
+
+        // Recorded for a failed refresh too: how long a runtime takes to refuse is as diagnostic as
+        // how long it takes to answer.
+        telemetry.RecordDiscovery(target.Id, now - startedAt);
 
         if (result.Succeeded)
         {

@@ -1,3 +1,4 @@
+using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Models;
 using AgentSplice.Application.Observability;
@@ -96,6 +97,7 @@ public sealed class ChatCompletionGateway
             // The exception message never reaches the client. Only the fact and the correlation
             // token do (docs/SECURITY.md "Trace safety").
             logger.LogError(
+                GatewayEventIds.ExchangeFaulted,
                 exception,
                 "Completion request {RequestId} failed unexpectedly.",
                 request.RequestId.Value);
@@ -329,6 +331,7 @@ public sealed class ChatCompletionGateway
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogError(
+                GatewayEventIds.EvidenceRecordingFailed,
                 exception,
                 "Recording evidence for request {RequestId} failed. The client response is unaffected.",
                 recorder.RequestId.Value);
@@ -377,6 +380,7 @@ public sealed class ChatCompletionGateway
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             logger.LogError(
+                GatewayEventIds.InstrumentationFailed,
                 exception,
                 "Instrumenting request {RequestId} failed. The client response is unaffected.",
                 recorder.RequestId.Value);

@@ -211,4 +211,21 @@ public sealed class GatewayErrorCatalogueTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => GatewayErrorCatalogue.For((FailureClass)999));
     }
+
+    [Fact]
+    public void Every_declared_error_type_has_something_that_produces_it()
+    {
+        // Publishing a category no code path can emit is the same defect as declaring an activity
+        // source nothing writes to: a client branching on it waits for a value that never arrives,
+        // and the contract claims a capability the product does not have.
+        var produced = Enum.GetValues<FailureClass>()
+            .Select(failureClass => GatewayErrorCatalogue.For(failureClass).Type)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var orphaned = ErrorTypes.All.Except(produced, StringComparer.Ordinal).ToArray();
+
+        Assert.True(
+            orphaned.Length == 0,
+            "Declared but unreachable error types: " + string.Join(", ", orphaned));
+    }
 }

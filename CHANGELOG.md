@@ -4,6 +4,41 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A — Review against the architecture documents
+
+A pass over the four Stage 1A slices against `CLAUDE.md`, `docs/ARCHITECTURE.md`,
+`docs/SPECIFICATION.md`, `docs/OBSERVABILITY.md`, and `docs/THREAT_MODEL.md`.
+
+- Removed `upstream_status_error`. It was published in the client contract with nothing able to emit
+  it: an upstream non-2xx is relayed verbatim with the runtime's own body, so AgentSplice writes no
+  envelope and there was nothing for the type to describe.
+- Gave `agentsplice.model_discovery.duration` a producer. It was declared as a live instrument and
+  never fired. A failed refresh is timed too, because how long a runtime takes to refuse is as
+  diagnostic as how long it takes to answer.
+- Withdrew the `x-agentsplice-trace-id` claim from `GET /v1/models`. The OpenAPI declared a header the
+  endpoint never sent: model discovery is not an exchange, none of the four declared activity sources
+  covers it, so it has no span and must not advertise one.
+- Added a test for the class of defect all three share —
+  `Every_declared_error_type_has_something_that_produces_it` — because the existing contract tests
+  only checked that a name was *documented*, not that anything *emitted* it.
+- Produced `Measurement` values from the request path. The measurement-with-provenance model, one of
+  the product's stated differentiators, was fully built and tested but used only by tests: durations
+  reached metrics as bare histogram values with no provenance, and the exchange record carried none
+  at all. Latency phases now carry `Measured`, token counts keep `UpstreamReported`, and no
+  throughput value is derived, because a non-streamed exchange has no boundary separating prompt
+  processing from generation.
+- Added stable log event identifiers. `docs/OBSERVABILITY.md` requires them and there were none; a
+  message is prose that will be reworded, while an identifier is what an alert rule can match on.
+- Removed a service-locator call from the observability registration. The activity listener is now a
+  constructor dependency of the telemetry, so "spans exist before the first one is started" is a
+  compile-time fact rather than a registration ordering convention.
+- Corrected `CLAUDE.md` and `docs/ARCHITECTURE.md` to put the structural summary before model
+  resolution, matching the implementation. A request naming an unknown model is the case an operator
+  most needs evidence for, and resolving first leaves it with no record of what arrived.
+- Recorded three further decisions in ADR 0008: the request-path reordering, the rule that declared
+  vocabulary must have a producer, and the deliberate process-global mutation of the activity
+  identifier format.
+
 ### Stage 1A — Observability and published contracts
 
 - Added spans and metrics through `System.Diagnostics` alone. No OpenTelemetry SDK is referenced and

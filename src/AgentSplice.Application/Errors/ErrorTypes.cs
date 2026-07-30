@@ -20,6 +20,10 @@ namespace AgentSplice.Application.Errors;
 ///
 /// <see cref="ErrorCodes"/> remains the stable machine-readable identity; the type is the coarse
 /// category a client switches on.
+///
+/// There is deliberately no type for "the runtime returned a non-2xx". Such a response is relayed
+/// verbatim with the runtime's own body, so AgentSplice writes no envelope and there is nothing for
+/// a type to describe. Declaring one would publish a category no code path can emit.
 /// </remarks>
 public static class ErrorTypes
 {
@@ -38,9 +42,6 @@ public static class ErrorTypes
     /// <summary>A configured timeout phase elapsed.</summary>
     public const string UpstreamTimeout = "upstream_timeout_error";
 
-    /// <summary>The runtime answered with a status the gateway is relaying.</summary>
-    public const string UpstreamStatus = "upstream_status_error";
-
     /// <summary>The runtime's answer violated the protocol. The one type the specification names.</summary>
     public const string UpstreamProtocol = "upstream_protocol_error";
 
@@ -58,7 +59,6 @@ public static class ErrorTypes
         UpstreamUnavailable,
         UpstreamAuthentication,
         UpstreamTimeout,
-        UpstreamStatus,
         UpstreamProtocol,
         Cancellation,
         Internal,

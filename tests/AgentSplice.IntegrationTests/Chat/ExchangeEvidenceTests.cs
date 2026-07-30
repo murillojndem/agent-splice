@@ -201,6 +201,58 @@ public sealed class ExchangeEvidenceTests
     }
 
     [Fact]
+    public async Task Latency_phases_are_recorded_as_measurements_that_carry_their_provenance()
+    {
+        // A histogram records a number; a Measurement records a number and where it came from. P-008
+        // is the reason the second exists at all.
+        var record = await ProxyAsync();
+
+        Assert.Contains(record.Measurements, m => m.Name == MeasurementNames.TotalDuration);
+        Assert.Contains(record.Measurements, m => m.Name == MeasurementNames.UpstreamHeadersDuration);
+        Assert.All(record.Measurements, m => Assert.Equal(record.ExchangeId, m.ExchangeId));
+        Assert.All(record.Measurements, m => Assert.True(double.IsFinite(m.Value)));
+    }
+
+    [Fact]
+    public async Task A_duration_is_measured_while_a_token_count_stays_upstream_reported()
+    {
+        // A clock reading and a runtime's claim are different kinds of evidence, and a token count
+        // must never be silently upgraded to "measured".
+        var record = await ProxyAsync();
+
+        Assert.Equal(
+            MeasurementProvenance.Measured,
+            record.Measurements.Single(m => m.Name == MeasurementNames.TotalDuration).Provenance);
+        Assert.Equal(
+            MeasurementProvenance.UpstreamReported,
+            record.Measurements.Single(m => m.Name == MeasurementNames.PromptTokens).Provenance);
+    }
+
+    [Fact]
+    public async Task No_throughput_measurement_is_derived_from_a_non_streamed_exchange()
+    {
+        // There is no boundary separating prompt processing from generation, so a throughput value
+        // would have to borrow one interval for the other (FR-OBS-005).
+        var record = await ProxyAsync();
+
+        Assert.DoesNotContain(
+            record.Measurements,
+            m => m.Name == MeasurementNames.PromptThroughput || m.Name == MeasurementNames.GenerationThroughput);
+    }
+
+    [Fact]
+    public async Task An_unobserved_phase_produces_no_measurement_rather_than_a_zero()
+    {
+        var record = await ProxyAsync();
+
+        Assert.DoesNotContain(
+            record.Measurements,
+            m => m.Name == MeasurementNames.TimeToFirstSemanticEvent
+                || m.Name == MeasurementNames.TimeToFirstClientEvent
+                || m.Name == MeasurementNames.PersistenceDuration);
+    }
+
+    [Fact]
     public async Task Every_observation_detail_is_bounded()
     {
         var record = await ProxyAsync();

@@ -226,6 +226,48 @@ runtime without renaming, a tie-break between two runtimes offering the same ide
 pass-through would all have been invisible. `ModelResolutionOutcome` carries `RoutingWasApplied` and
 `RequiresBodyRewrite` separately, and FR-TRACE-007's event is driven by the first.
 
+### 19. The structural summary is built before model resolution
+
+Both CLAUDE.md's request-path rule (validate → correlate → resolve → summary) and
+docs/ARCHITECTURE.md's Stage 1 flow (step 4 resolve, step 5 summary) place the summary after
+resolution. The implementation deliberately inverts those two steps.
+
+A request naming an unknown model is exactly the case an operator most needs evidence for, and
+resolving first means such a request leaves no record of what arrived — no message count, no role
+mix, no unknown-field names. Building the summary first costs nothing, because it depends only on the
+parsed body, and it makes `ModelNotFound` diagnosable.
+
+**Both documents should be corrected to match**; until they are, this decision is the reconciliation.
+
+### 20. Declared vocabulary must have a producer
+
+Three names were published in Stage 1A with nothing able to emit them: an `upstream_status_error`
+type (unreachable, because a non-2xx is relayed verbatim and AgentSplice writes no envelope), the
+`agentsplice.model_discovery.duration` instrument, and an `x-agentsplice-trace-id` header on
+`GET /v1/models`.
+
+Each is the same defect as declaring an activity source nothing writes to: a client or an operator
+waits for a value that never arrives, and the contract claims a capability the product does not have.
+The type was removed, the instrument given a producer, and the header claim withdrawn — model
+discovery is not an exchange and none of the four declared activity sources covers it, so it has no
+span and must not advertise one.
+
+The rule this establishes: a published name is a promise, and a test should fail when nothing keeps
+it. `GatewayErrorCatalogueTests.Every_declared_error_type_has_something_that_produces_it` and
+`ModelDiscoveryCacheTests.A_refresh_records_how_long_the_runtime_took` are those tests.
+
+### 21. Process-global activity format is mutated at startup
+
+`AgentSpliceActivityListener` sets `Activity.DefaultIdFormat` and `Activity.ForceDefaultIdFormat`,
+which are static and process-wide. CLAUDE.md says to avoid static mutable state, and this is a
+deliberate exception rather than an oversight.
+
+`Domain.Identifiers.TraceId` accepts only a 32-character lowercase hexadecimal value. Under the
+legacy hierarchical format the identifier would not parse and `x-agentsplice-trace-id` would silently
+disappear — on exactly the deployments that had not configured tracing, which are the ones least
+likely to notice. The mutation is idempotent, happens once at construction, and is confined to the
+observability module.
+
 ## Consequences
 
 - Adding a `FailureClass` member requires an `ErrorCodes` member and a docs/API.md bullet in the same

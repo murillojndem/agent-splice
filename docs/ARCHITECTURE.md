@@ -112,8 +112,8 @@ Projects may be consolidated if the initial repository becomes fragmented, but l
 1. HTTP request enters an ingress protocol adapter.
 2. Request limits, optional local authentication, and correlation run.
 3. Protocol shape is validated.
-4. Application resolves model alias and runtime.
-5. A safe structural request observation is created.
+4. A safe structural request observation is created.
+5. Application resolves model alias and runtime.
 6. Provider adapter creates the upstream request with no semantic rewriting.
 7. Upstream headers and body/stream are received incrementally.
 8. Protocol observations and timing boundaries are emitted.
@@ -121,7 +121,11 @@ Projects may be consolidated if the initial repository becomes fragmented, but l
 10. Metadata persistence completes outside any long-lived request transaction.
 11. OpenTelemetry spans and metrics are finalized with provenance.
 
-Routing-only changes, such as mapping a client-visible model alias to an upstream model ID, must be represented as explicit events.
+The summary precedes resolution deliberately. A request naming an unknown model is the case an
+operator most needs evidence for, and resolving first would leave it with no record of what arrived
+(ADR 0008).
+
+Routing-only changes, such as mapping a client-visible model alias to an upstream model ID, must be represented as explicit events. A routing decision is not the same as a changed field: selecting a runtime, breaking a tie between two runtimes offering the same model, and passing through to a default runtime are all decisions the client did not make, and each produces an event even though no byte of the request changes.
 
 ## Later-stage request flow with adapters
 
