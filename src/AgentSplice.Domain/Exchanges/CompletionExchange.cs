@@ -66,8 +66,14 @@ public sealed record CompletionExchange
     /// <summary>Structural request summary, once created.</summary>
     public StructuralRequestSummary? RequestSummary { get; private init; }
 
-    /// <summary>Structural response summary, once the response has been observed.</summary>
+    /// <summary>Structural response summary, once the response body has been interpreted.</summary>
     public StructuralResponseSummary? ResponseSummary { get; private init; }
+
+    /// <summary>
+    /// What the runtime's response headers said, once they were observed. Present even when the body
+    /// could not be interpreted and <see cref="ResponseSummary"/> is therefore absent.
+    /// </summary>
+    public UpstreamResponseMetadata? UpstreamResponse { get; private init; }
 
     /// <summary>Token usage with per-component provenance. <see cref="UsageObservation.Unknown"/> until reported.</summary>
     public UsageObservation Usage { get; private init; } = UsageObservation.Unknown;
@@ -159,6 +165,13 @@ public sealed record CompletionExchange
     {
         ArgumentNullException.ThrowIfNull(summary);
         return this with { ResponseSummary = summary };
+    }
+
+    /// <summary>Records what the runtime's response headers said.</summary>
+    public CompletionExchange WithUpstreamResponse(UpstreamResponseMetadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        return this with { UpstreamResponse = metadata };
     }
 
     /// <summary>Attaches token usage.</summary>

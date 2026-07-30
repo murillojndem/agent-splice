@@ -5,6 +5,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Nearly every test here binds a real loopback listener and boots a full host. Unbounded
+      parallelism makes the suite compete with itself for sockets and threads, which shows up as
+      startup tests failing for a reason other than the one they assert.
+    -->
+    <None Update="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\AgentSplice.Api\AgentSplice.Api.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Application\AgentSplice.Application.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Domain\AgentSplice.Domain.csproj" />

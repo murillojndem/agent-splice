@@ -40,6 +40,13 @@ public sealed record StructuralResponseSummary
     /// <summary>True when the runtime reported a usage object.</summary>
     public bool UsageReported { get; private init; }
 
+    /// <summary>True when more distinct finish reasons were observed than <see cref="MaxFinishReasons"/>.</summary>
+    /// <remarks>
+    /// Finish reasons are runtime-chosen tokens, so the list is bounded. The flag exists so a
+    /// silently truncated list cannot read as a complete one.
+    /// </remarks>
+    public bool FinishReasonsTruncated { get; private init; }
+
     /// <summary>Creates a validated structural response summary.</summary>
     public static StructuralResponseSummary Create(
         int choiceCount = 0,
@@ -54,10 +61,13 @@ public sealed record StructuralResponseSummary
         ArgumentOutOfRangeException.ThrowIfNegative(responseBodyBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(streamEventCount);
 
+        var reasons = NormaliseFinishReasons(finishReasons);
+
         return new StructuralResponseSummary
         {
             ChoiceCount = choiceCount,
-            FinishReasons = NormaliseFinishReasons(finishReasons),
+            FinishReasons = reasons.Reasons,
+            FinishReasonsTruncated = reasons.Truncated,
             NativeToolCallCount = nativeToolCallCount,
             ResponseBodyBytes = responseBodyBytes,
             StreamEventCount = streamEventCount,
@@ -65,22 +75,19 @@ public sealed record StructuralResponseSummary
         };
     }
 
-    private static ReadOnlyCollection<string> NormaliseFinishReasons(IEnumerable<string>? finishReasons)
+    private static (ReadOnlyCollection<string> Reasons, bool Truncated) NormaliseFinishReasons(
+        IEnumerable<string>? finishReasons)
     {
         if (finishReasons is null)
         {
-            return ReadOnlyCollection<string>.Empty;
+            return (ReadOnlyCollection<string>.Empty, false);
         }
 
         var accumulated = new List<string>();
+        var truncated = false;
 
         foreach (var reason in finishReasons)
         {
-            if (accumulated.Count == MaxFinishReasons)
-            {
-                break;
-            }
-
             if (string.IsNullOrWhiteSpace(reason))
             {
                 continue;
@@ -91,12 +98,20 @@ public sealed record StructuralResponseSummary
                 ? trimmed
                 : trimmed[..MaxFinishReasonLength];
 
-            if (!accumulated.Contains(bounded, StringComparer.Ordinal))
+            if (accumulated.Contains(bounded, StringComparer.Ordinal))
             {
-                accumulated.Add(bounded);
+                continue;
             }
+
+            if (accumulated.Count == MaxFinishReasons)
+            {
+                truncated = true;
+                break;
+            }
+
+            accumulated.Add(bounded);
         }
 
-        return accumulated.AsReadOnly();
+        return (accumulated.AsReadOnly(), truncated);
     }
 }

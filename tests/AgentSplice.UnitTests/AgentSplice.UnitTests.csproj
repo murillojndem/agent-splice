@@ -7,6 +7,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentSplice.Application\AgentSplice.Application.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Domain\AgentSplice.Domain.csproj" />
+    <!--
+      The request scanner and splicer are deterministic byte-level logic, so they are unit tested
+      directly rather than only through the transport.
+    -->
+    <ProjectReference Include="..\..\src\AgentSplice.Protocols.OpenAI\AgentSplice.Protocols.OpenAI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

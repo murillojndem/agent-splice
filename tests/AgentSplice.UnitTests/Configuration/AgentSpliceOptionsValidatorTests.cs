@@ -187,15 +187,6 @@ public sealed class AgentSpliceOptionsValidatorTests
     }
 
     [Fact]
-    public void A_self_referencing_alias_fails_validation()
-    {
-        var options = Valid();
-        options.Aliases.Add(Alias("loop", "lmstudio-local", "loop"));
-
-        AssertFailure(options, "resolution cycle");
-    }
-
-    [Fact]
     public void A_longer_alias_cycle_fails_validation()
     {
         var options = Valid();
@@ -212,6 +203,22 @@ public sealed class AgentSpliceOptionsValidatorTests
         var options = Valid();
         options.Aliases.Add(Alias("friendly-name", "lmstudio-local", "team-default"));
         options.Aliases.Add(Alias("team-default", "lmstudio-local", "qwen3.6-27b-mtp"));
+
+        Assert.True(Validate(options).Succeeded);
+    }
+
+    [Fact]
+    public void An_identity_alias_is_not_a_resolution_cycle()
+    {
+        // Stage 0 rejected this, reasoning about a resolver that chains alias to alias. The resolver
+        // that now exists does not chain: an alias resolves to a runtime and an upstream model in
+        // one step and stops, so an identity alias terminates immediately.
+        //
+        // It is also the only way an operator can pin a model to a chosen runtime when two runtimes
+        // both offer it, so rejecting it would remove the sole deterministic override of the
+        // FR-MOD-004 tie-break.
+        var options = Valid();
+        options.Aliases.Add(Alias("qwen3.6-27b-mtp", "lmstudio-local", "qwen3.6-27b-mtp"));
 
         Assert.True(Validate(options).Succeeded);
     }

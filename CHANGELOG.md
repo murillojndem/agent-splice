@@ -4,6 +4,52 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A — Non-streaming completions
+
+- Added `POST /v1/chat/completions` for non-streaming requests (FR-CHAT-001, FR-CHAT-003,
+  FR-CHAT-004, FR-CHAT-009, FR-CHAT-010, FR-CHAT-014, FR-CHAT-015). A standard client can now
+  complete a request through AgentSplice.
+- Forwarding is byte-preserving. The runtime receives the client's original bytes unless routing
+  renames the model, in which case only the bytes of the top-level `model` value are replaced.
+  The body is spliced using offsets recorded during the same pass that builds the structural
+  summary, rather than reparsed and re-emitted: a JSON writer normalises escape forms and number
+  formatting, so `A` would become `A` and `1.0` would become `1`, and an exact-forwarding test
+  built on that would only prove that our own parser round-trips.
+- Made `ExchangeStatus.Completed` mean the transport cycle finished, not that the operation
+  succeeded. A relayed 429 or 500 completes with no failure class, because AgentSplice did not fail;
+  the runtime's own status is recorded separately and is what success and error are classified from.
+- Added `UpstreamResponseMetadata` to the domain. Status is transport metadata, not body structure,
+  and the two come apart exactly when it matters: a 204 has no body, a `429 text/plain` has one that
+  is not protocol data, and a truncated 500 has one that cannot be parsed. Attaching status to the
+  structural summary would have lost it in all three cases.
+- Bounded the cardinality of recorded role names and made every truncation visible. The summary
+  already bounded each name's length but not how many distinct names it held, so a request with a
+  unique role per message would have grown it without limit — defeating the bound's own rationale.
+  Folded roles still sum to the message count, and silent truncation no longer reads as completeness.
+- Rejected `stream: true` with a stable message that names no roadmap stage, since the message is a
+  public contract that outlives the stage. Buffering an event stream into a JSON body would be an
+  invisible semantic transformation, and a `200` would make an unimplemented capability look
+  implemented.
+- Rejected a repeated `model`, `messages`, or `stream`. "Last wins" can differ between AgentSplice's
+  validation, the splice arithmetic, and the runtime's parser, so the three could disagree about
+  what was actually sent.
+- Added header allowlists in both directions. The client's `Authorization` is never forwarded, no
+  hop-by-hop header is copied, and a relayed 429 keeps its `Retry-After` — without which the status
+  conveys nothing actionable.
+- Built the structural summary *before* resolving the model, so a request naming an unknown model
+  still leaves safe evidence of what arrived.
+- Added `IExchangeRecordSink` with a discarding default. It is the only way Stage 1A's timeline is
+  observable before persistence exists, so the "routing changes are represented as events" exit
+  criterion would otherwise be untestable, and it is the seam Stage 1C implements.
+- Fixed a Stage 0 validator defect: an identity alias, mapping a model name to itself on a chosen
+  runtime, was rejected as a resolution cycle. The resolver does not chain alias to alias, so it
+  terminates immediately — and an identity alias is the only way an operator can pin a model to one
+  runtime when two offer it, so rejecting it removed the sole deterministic override of the
+  FR-MOD-004 tie-break. Multi-alias cycles are still rejected.
+- Capped integration-suite parallelism. Nearly every test binds a real listener and boots a host, and
+  unbounded parallelism made the suite compete with itself, which surfaced as a startup test failing
+  for a reason other than the one it asserts.
+
 ### Stage 1A — Model discovery and routing
 
 - Added `GET /v1/models`, composing configured aliases with models discovered from enabled runtimes

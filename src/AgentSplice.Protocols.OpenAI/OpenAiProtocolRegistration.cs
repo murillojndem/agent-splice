@@ -1,4 +1,5 @@
 using AgentSplice.Application.Protocols;
+using AgentSplice.Protocols.OpenAI.ChatCompletions;
 using AgentSplice.Protocols.OpenAI.Errors;
 using AgentSplice.Protocols.OpenAI.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,8 @@ public static class OpenAiProtocolRegistration
 
         services.AddSingleton<IModelListWriter, OpenAiModelListWriter>();
         services.AddSingleton<IErrorEnvelopeWriter, OpenAiErrorEnvelopeWriter>();
+        services.AddSingleton<IChatCompletionRequestCodec, OpenAiChatCompletionRequestCodec>();
+        services.AddSingleton<IChatCompletionResponseCodec, OpenAiChatCompletionResponseCodec>();
 
         return services;
     }

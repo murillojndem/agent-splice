@@ -56,6 +56,25 @@ internal sealed class RecordingModelRuntimeProvider : IModelRuntimeProvider
         return this;
     }
 
+    /// <summary>The completion requests this provider was asked to forward, in order.</summary>
+    public List<ProviderCompletionRequest> ForwardedCompletions { get; } = [];
+
+    /// <summary>What the next completion call answers with.</summary>
+    public Func<ProviderCompletionRequest, ProviderCompletionResult>? CompletionAnswer { get; set; }
+
+    public Task<ProviderCompletionResult> CompleteAsync(
+        ProviderCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ForwardedCompletions.Add(request);
+
+        var answer = CompletionAnswer
+            ?? throw new InvalidOperationException(
+                "No completion answer was scripted; a test that forgot to script one should fail loudly.");
+
+        return Task.FromResult(answer(request));
+    }
+
     public async Task<RuntimeModelListResult> ListModelsAsync(
         RuntimeTarget target,
         CancellationToken cancellationToken)

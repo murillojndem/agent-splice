@@ -1,3 +1,4 @@
+using AgentSplice.Application.Exchanges;
 using AgentSplice.Application.Models;
 using AgentSplice.Application.Runtimes;
 using AgentSplice.Infrastructure.Runtimes;
@@ -28,8 +29,13 @@ public static class AgentSpliceRequestPathRegistration
         services.AddSingleton<ModelCatalogueService>();
         services.AddSingleton<ModelResolver>();
 
-        // Resolves the protocol writer ports, so an ingress protocol module must also be registered.
+        // Stage 1A stores nothing, so evidence is handed to a sink that discards it. Stage 1C
+        // replaces this registration with the metadata store; nothing else has to change.
+        services.AddSingleton<IExchangeRecordSink, NullExchangeRecordSink>();
+
+        // These resolve the protocol ports, so an ingress protocol module must also be registered.
         services.AddSingleton<ModelListGateway>();
+        services.AddSingleton<ChatCompletionGateway>();
 
         return services;
     }

@@ -30,10 +30,28 @@ internal static class BoundedBodyReader
     /// <param name="maxBytes">The inclusive upper bound on body size.</param>
     /// <param name="expectedLength">The declared content length, when the runtime declared one.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    internal static Task<Result> ReadAsync(
+        Stream stream,
+        long maxBytes,
+        long? expectedLength,
+        CancellationToken cancellationToken) =>
+        ReadAsync(stream, maxBytes, expectedLength, onFirstByte: null, cancellationToken);
+
+    /// <summary>Reads a bounded body, signalling when the first byte arrives.</summary>
+    /// <param name="stream">The response body.</param>
+    /// <param name="maxBytes">The inclusive upper bound on body size.</param>
+    /// <param name="expectedLength">The declared content length, when the runtime declared one.</param>
+    /// <param name="onFirstByte">
+    /// Invoked once, when the first body byte is read. This is what makes
+    /// <c>FirstUpstreamByte</c> a boundary AgentSplice observed rather than one inferred after the
+    /// body had already arrived (FR-TRACE-006).
+    /// </param>
+    /// <param name="cancellationToken">Cancels the read.</param>
     internal static async Task<Result> ReadAsync(
         Stream stream,
         long maxBytes,
         long? expectedLength,
+        Action? onFirstByte,
         CancellationToken cancellationToken)
     {
         // A declared length over the bound is refusable before a single byte is transferred.
@@ -51,6 +69,11 @@ internal static class BoundedBodyReader
 
             while ((read = await stream.ReadAsync(rented, cancellationToken).ConfigureAwait(false)) > 0)
             {
+                if (buffer.Length == 0)
+                {
+                    onFirstByte?.Invoke();
+                }
+
                 if (buffer.Length + read > maxBytes)
                 {
                     return Result.TooLarge();

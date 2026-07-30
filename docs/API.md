@@ -39,6 +39,23 @@ The last row is deliberate: an empty catalogue caused by configuration is an ope
 
 Supports streaming and non-streaming operation. Stage 1 prioritizes transparent forwarding, valid SSE, cancellation, stable errors, and trace capture. Stage 1 does not reinterpret text as tool calls.
 
+**Streaming is not yet implemented.** A request with `stream: true` is refused with `400` and `param: "stream"`. Buffering an event stream into a single JSON body would be an invisible semantic transformation, and answering `200` would make an unimplemented capability look implemented.
+
+Forwarding is byte-preserving. When routing does not rename the model, the runtime receives the client's original bytes unchanged. When an alias renames it, only the bytes of the top-level `model` value are replaced; property order, escape forms, number formatting, and insignificant whitespace are all preserved, because the body is spliced rather than reparsed and re-emitted.
+
+Only `model` and `messages` are validated. Every other field, known or unknown, is forwarded verbatim, and unknown top-level names are recorded so transparent forwarding is verifiable. A field that determines handling — `model`, `messages`, or `stream` — supplied more than once is refused, because "last wins" can differ between AgentSplice and the runtime.
+
+The response is relayed unchanged: its status, its body, and the headers on the relay allowlist. The response `model` field is **not** rewritten back to the client's alias, because that is not required for routing (P-002). The body is parsed only to gather evidence, and a body that cannot be parsed costs a structural summary and nothing else.
+
+Headers crossing the gateway are allowlisted in both directions:
+
+| Direction | Forwarded |
+|---|---|
+| Client to runtime | `Content-Type`, `Accept`, `x-request-id` (the AgentSplice correlation token), and the runtime's own `Authorization` |
+| Runtime to client | `Content-Type`, `Retry-After`, `x-ratelimit-*` |
+
+The client's `Authorization` header is never forwarded upstream, and no hop-by-hop header is copied in either direction. A relayed `429` keeps its `Retry-After`, without which the status conveys nothing actionable.
+
 ## Gateway headers
 
 Accepted request headers:

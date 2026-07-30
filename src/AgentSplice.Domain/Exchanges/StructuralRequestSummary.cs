@@ -23,6 +23,22 @@ public sealed record StructuralRequestSummary
     /// <summary>Maximum recorded length of a single field name.</summary>
     public const int MaxFieldNameLength = 64;
 
+    /// <summary>
+    /// Maximum number of distinct role names counted individually.
+    /// </summary>
+    /// <remarks>
+    /// Role names are client-supplied. Without a cardinality bound, a request carrying a unique
+    /// role per message would grow this dictionary without limit, which is the very thing the
+    /// per-name length bound exists to prevent.
+    /// </remarks>
+    public const int MaxRoleNames = 16;
+
+    /// <summary>Bucket for roles beyond <see cref="MaxRoleNames"/>.</summary>
+    public const string OtherRoleName = "(other)";
+
+    /// <summary>Bucket for a message whose role was absent or not a string.</summary>
+    public const string UnspecifiedRoleName = "(unspecified)";
+
     private StructuralRequestSummary()
     {
     }
@@ -61,6 +77,18 @@ public sealed record StructuralRequestSummary
     /// </summary>
     public IReadOnlyList<string> DroppedFieldNames { get; private init; } = [];
 
+    /// <summary>
+    /// True when more unknown field names were present than <see cref="MaxUnknownFieldNames"/>.
+    /// </summary>
+    /// <remarks>
+    /// Truncation has to be visible, or a reader cannot tell "there were exactly 32" from "there
+    /// were at least 32", and a silent bound reads as completeness.
+    /// </remarks>
+    public bool UnknownFieldNamesTruncated { get; private init; }
+
+    /// <summary>True when distinct roles exceeded <see cref="MaxRoleNames"/> and were folded.</summary>
+    public bool RoleNamesTruncated { get; private init; }
+
     /// <summary>Creates a validated structural summary.</summary>
     public static StructuralRequestSummary Create(
         int messageCount,
@@ -77,66 +105,95 @@ public sealed record StructuralRequestSummary
         ArgumentOutOfRangeException.ThrowIfNegative(toolDeclarationCount);
         ArgumentOutOfRangeException.ThrowIfNegative(requestBodyBytes);
 
+        var roles = NormaliseRoleCounts(messageCountsByRole);
+        var unknownNames = NormaliseFieldNames(unknownTopLevelFieldNames, nameof(unknownTopLevelFieldNames));
+        var droppedNames = NormaliseFieldNames(droppedFieldNames, nameof(droppedFieldNames));
+
         return new StructuralRequestSummary
         {
             MessageCount = messageCount,
-            MessageCountsByRole = NormaliseRoleCounts(messageCountsByRole),
+            MessageCountsByRole = roles.Counts,
+            RoleNamesTruncated = roles.Truncated,
             ToolDeclarationCount = toolDeclarationCount,
             ToolChoicePresent = toolChoicePresent,
             StreamRequested = streamRequested,
             StreamOptionsPresent = streamOptionsPresent,
             RequestBodyBytes = requestBodyBytes,
-            UnknownTopLevelFieldNames = NormaliseFieldNames(unknownTopLevelFieldNames, nameof(unknownTopLevelFieldNames)),
-            DroppedFieldNames = NormaliseFieldNames(droppedFieldNames, nameof(droppedFieldNames)),
+            UnknownTopLevelFieldNames = unknownNames.Names,
+            UnknownFieldNamesTruncated = unknownNames.Truncated,
+            DroppedFieldNames = droppedNames.Names,
         };
     }
 
-    private static FrozenDictionary<string, int> NormaliseRoleCounts(
+    /// <summary>
+    /// Counts messages per role, folding roles beyond the cardinality bound into a single bucket.
+    /// </summary>
+    /// <remarks>
+    /// Folding rather than dropping keeps <see cref="MessageCount"/> reconcilable with the sum of
+    /// the per-role counts, so a reader can still tell that every message was accounted for.
+    /// </remarks>
+    private static (FrozenDictionary<string, int> Counts, bool Truncated) NormaliseRoleCounts(
         IEnumerable<KeyValuePair<string, int>>? roleCounts)
     {
         if (roleCounts is null)
         {
-            return FrozenDictionary<string, int>.Empty;
+            return (FrozenDictionary<string, int>.Empty, false);
         }
 
         var accumulated = new Dictionary<string, int>(StringComparer.Ordinal);
+        var truncated = false;
 
         foreach (var (role, count) in roleCounts)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(count, nameof(roleCounts));
-            accumulated[TruncateName(role, nameof(roleCounts))] = count;
+
+            var name = TruncateName(role, nameof(roleCounts));
+
+            if (!accumulated.ContainsKey(name) && accumulated.Count >= MaxRoleNames)
+            {
+                name = OtherRoleName;
+                truncated = true;
+            }
+
+            accumulated[name] = accumulated.GetValueOrDefault(name) + count;
         }
 
-        return accumulated.ToFrozenDictionary(StringComparer.Ordinal);
+        return (accumulated.ToFrozenDictionary(StringComparer.Ordinal), truncated);
     }
 
-    private static ReadOnlyCollection<string> NormaliseFieldNames(IEnumerable<string>? names, string parameterName)
+    private static (ReadOnlyCollection<string> Names, bool Truncated) NormaliseFieldNames(
+        IEnumerable<string>? names,
+        string parameterName)
     {
         if (names is null)
         {
-            return ReadOnlyCollection<string>.Empty;
+            return (ReadOnlyCollection<string>.Empty, false);
         }
 
         var accumulated = new List<string>();
+        var truncated = false;
 
         foreach (var name in names)
         {
+            var candidate = TruncateName(name, parameterName);
+
+            if (accumulated.Contains(candidate, StringComparer.Ordinal))
+            {
+                continue;
+            }
+
             if (accumulated.Count == MaxUnknownFieldNames)
             {
                 // Bounded on purpose: an adversarial or generated request could otherwise turn the
                 // summary into an unbounded store of attacker-chosen strings.
+                truncated = true;
                 break;
             }
 
-            var truncated = TruncateName(name, parameterName);
-
-            if (!accumulated.Contains(truncated, StringComparer.Ordinal))
-            {
-                accumulated.Add(truncated);
-            }
+            accumulated.Add(candidate);
         }
 
-        return accumulated.AsReadOnly();
+        return (accumulated.AsReadOnly(), truncated);
     }
 
     private static string TruncateName(string? name, string parameterName)

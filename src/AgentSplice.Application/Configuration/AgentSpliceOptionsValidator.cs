@@ -413,8 +413,13 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
                     FormattableString.Invariant(
                         $"{prefix}:upstreamModelId '{alias.UpstreamModelId}' is not a valid model identifier ({IdentifierDescriptions.Model})."));
             }
-            else if (aliasIdValid)
+            else if (aliasIdValid
+                && !string.Equals(aliasId.Value, upstreamModelId.Value, StringComparison.Ordinal))
             {
+                // An alias whose upstream identifier equals its own is an identity alias: it pins a
+                // model name to a specific runtime without renaming anything. That is a normal and
+                // useful configuration, and resolution terminates on it immediately, so it must not
+                // be reported as a cycle.
                 aliasTargets[aliasId.Value] = upstreamModelId.Value;
             }
         }
