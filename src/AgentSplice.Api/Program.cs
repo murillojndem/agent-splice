@@ -2,6 +2,7 @@ using AgentSplice.Api.Endpoints;
 using AgentSplice.Api.Hosting;
 using AgentSplice.Infrastructure.Composition;
 using AgentSplice.Infrastructure.Configuration;
+using AgentSplice.Observability;
 using AgentSplice.Protocols.OpenAI;
 using AgentSplice.Providers.LmStudio;
 
@@ -21,6 +22,7 @@ builder.Services.AddAgentSpliceConfiguration(builder.Configuration);
 builder.Services.AddAgentSpliceRequestPath();
 builder.Services.AddOpenAiCompatibilityProtocol();
 builder.Services.AddLmStudioProvider();
+builder.Services.AddAgentSpliceObservability();
 
 // Last resort only. The gateways translate their own faults into an error carrying correlation
 // identifiers; this exists so that a fault escaping the pipeline still produces the stable envelope

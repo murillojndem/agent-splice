@@ -8,7 +8,14 @@
 - Do not log authorization headers, prompts, source code, tool arguments, or model output.
 - Do not execute tools in the core gateway or replay subsystem.
 - Do not permit clients to supply arbitrary upstream URLs.
-- Apply request-body, header, event, stream-duration, and concurrency limits.
+- Apply request-body, header, event, stream-duration, and concurrency limits. Stage 1A bounds the
+  request body (4 MiB), the upstream completion body (64 MiB), and the upstream model catalogue
+  (4 MiB); reading stops at the bound plus one byte. A concurrency limit is owed by Stage 1B.
+- Never forward the client's `Authorization` header upstream, and never relay an upstream
+  `WWW-Authenticate` or `Set-Cookie` to the client. Both directions use an allowlist, because a
+  denylist admits every header invented after it was written.
+- Redact credential-bearing headers from HTTP client logging. `IHttpClientFactory` logs request
+  headers at `Trace`, so without redaction the runtime's bearer token reaches any enabled sink.
 - Treat dashboard and administrative APIs as sensitive even in local deployments.
 
 ## Authentication

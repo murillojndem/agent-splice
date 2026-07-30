@@ -25,7 +25,11 @@ public sealed class ExchangeRecorder
     private bool terminated;
 
     /// <summary>Opens a recorder for a request.</summary>
-    public ExchangeRecorder(ExchangeId exchangeId, PublicRequestId requestId, TimeProvider timeProvider)
+    public ExchangeRecorder(
+        ExchangeId exchangeId,
+        PublicRequestId requestId,
+        TimeProvider timeProvider,
+        Observability.IExchangeTrace? trace = null)
     {
         ArgumentNullException.ThrowIfNull(timeProvider);
 
@@ -36,6 +40,8 @@ public sealed class ExchangeRecorder
 
         ExchangeId = exchangeId;
         RequestId = requestId;
+        Trace = trace;
+        TraceId = trace?.TraceId;
         this.timeProvider = timeProvider;
         timeline = new ExchangeTimeline(exchangeId);
     }
@@ -46,6 +52,12 @@ public sealed class ExchangeRecorder
     /// <summary>The correlation token returned to the client.</summary>
     public PublicRequestId RequestId { get; }
 
+    /// <summary>The trace identifier, or <c>null</c> when tracing produced no activity.</summary>
+    public TraceId? TraceId { get; }
+
+    /// <summary>The span covering this exchange, when one exists.</summary>
+    public Observability.IExchangeTrace? Trace { get; }
+
     /// <summary>The exchange, once the requested model was known.</summary>
     public CompletionExchange? Exchange { get; private set; }
 
@@ -55,12 +67,32 @@ public sealed class ExchangeRecorder
     /// <summary>The current time from the injected clock.</summary>
     public DateTimeOffset Now => timeProvider.GetUtcNow();
 
+    /// <summary>The provider serving the resolved runtime, once routing has chosen one.</summary>
+    public string? ProviderKey { get; private set; }
+
     /// <summary>Appends a timeline boundary.</summary>
     public void Observe(ObservationType type, SafeDetails? details = null) =>
         timeline.Append(type, Now, ObservationSource.Gateway, details: details);
 
+    /// <summary>
+    /// Elapsed time between two boundaries, or <c>null</c> when either was never observed.
+    /// </summary>
+    /// <remarks>
+    /// Returns <c>null</c> rather than zero so that a measurement derived from it is absent rather
+    /// than reported as instantaneous (FR-TRACE-006, FR-OBS-004).
+    /// </remarks>
+    public TimeSpan? DurationBetween(ObservationType from, ObservationType to) =>
+        timeline.DurationBetween(from, to);
+
+    /// <summary>Records which runtime and provider will serve the exchange.</summary>
+    public void SetRuntime(RuntimeEndpointId runtime, string providerKey)
+    {
+        ProviderKey = providerKey;
+        Trace?.SetRuntime(runtime, providerKey);
+    }
+
     /// <summary>Opens the exchange, once the requested model is known.</summary>
-    public void Accept(ClientModelId model, bool streaming, DateTimeOffset startedAt, TraceId? traceId = null) =>
+    public void Accept(ClientModelId model, bool streaming, DateTimeOffset startedAt) =>
         Exchange = CompletionExchange.Accept(
             ExchangeId,
             RequestId,
@@ -72,7 +104,7 @@ public sealed class ExchangeRecorder
             // Stage 1A retains nothing: there is no store, so claiming metadata retention would be
             // a claim about evidence that does not outlive the process (FR-DATA-005).
             ContentRetentionState.Disabled,
-            traceId);
+            TraceId);
 
     /// <summary>Applies a transition to the exchange, if one exists.</summary>
     public void Update(Func<CompletionExchange, CompletionExchange> transition)

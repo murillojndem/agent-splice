@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AgentSplice.Application\AgentSplice.Application.csproj" />
     <ProjectReference Include="..\AgentSplice.Infrastructure\AgentSplice.Infrastructure.csproj" />
+    <ProjectReference Include="..\AgentSplice.Observability\AgentSplice.Observability.csproj" />
     <ProjectReference Include="..\AgentSplice.Protocols.OpenAI\AgentSplice.Protocols.OpenAI.csproj" />
     <ProjectReference Include="..\AgentSplice.Providers.LmStudio\AgentSplice.Providers.LmStudio.csproj" />
   </ItemGroup>

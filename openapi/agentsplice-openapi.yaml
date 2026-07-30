@@ -30,10 +30,14 @@ paths:
           headers:
             x-agentsplice-request-id:
               $ref: '#/components/headers/AgentSpliceRequestId'
+            x-agentsplice-trace-id:
+              $ref: '#/components/headers/AgentSpliceTraceId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelList'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
         '502':
           $ref: '#/components/responses/ErrorResponse'
 
@@ -51,7 +55,9 @@ paths:
               $ref: '#/components/schemas/ChatCompletionRequest'
       responses:
         '200':
-          description: Completion or SSE stream depending on request.stream
+          description: >-
+            Completion response. Streaming is not implemented in the current stage; a request with
+            stream=true is refused with 400. text/event-stream returns with Stage 1B.
           headers:
             x-agentsplice-request-id:
               $ref: '#/components/headers/AgentSpliceRequestId'
@@ -59,21 +65,35 @@ paths:
               $ref: '#/components/headers/AgentSpliceExchangeId'
             x-agentsplice-trace-id:
               $ref: '#/components/headers/AgentSpliceTraceId'
+            x-agentsplice-runtime:
+              $ref: '#/components/headers/AgentSpliceRuntime'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatCompletionResponse'
-            text/event-stream:
-              schema:
-                type: string
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
+        '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
         '502':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
           $ref: '#/components/responses/ErrorResponse'
         '504':
           $ref: '#/components/responses/ErrorResponse'
+        default:
+          description: >-
+            A non-2xx status the runtime returned, relayed verbatim with its own body. Only 401 and
+            403 are withheld, because the credential is the gateway's rather than the client's.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
   /api/v1/system:
     get:
@@ -285,12 +305,25 @@ components:
       description: AgentSplice exchange identifier
       schema: { type: string, format: uuid }
     AgentSpliceTraceId:
-      description: OpenTelemetry trace identifier
+      description: >-
+        OpenTelemetry trace identifier, as 32 lowercase hexadecimal characters. Absent when tracing
+        produced no activity; AgentSplice never invents one.
+      schema: { type: string, pattern: '^[0-9a-f]{32}$' }
+    AgentSpliceRuntime:
+      description: >-
+        The runtime that served the request. Absent when the request failed before routing chose one.
       schema: { type: string }
 
   responses:
     ErrorResponse:
       description: Stable OpenAI-compatible error envelope
+      headers:
+        x-agentsplice-request-id:
+          $ref: '#/components/headers/AgentSpliceRequestId'
+        x-agentsplice-exchange-id:
+          $ref: '#/components/headers/AgentSpliceExchangeId'
+        x-agentsplice-trace-id:
+          $ref: '#/components/headers/AgentSpliceTraceId'
       content:
         application/json:
           schema:
@@ -313,7 +346,12 @@ components:
       properties:
         id: { type: string }
         object: { const: model }
-        created: { type: integer }
+        created:
+          type: integer
+          description: >-
+            Unix timestamp as the runtime reported it. When nothing reported one, zero is emitted as
+            a compatibility sentinel because this schema requires a present integer. It is not a
+            claim that the model was created in 1970; /api/v1/models reports the honest absence.
         owned_by: { type: string }
       additionalProperties: true
 
@@ -330,7 +368,13 @@ components:
           type: array
           items: { type: object, additionalProperties: true }
         tool_choice: {}
-        stream: { type: boolean, default: false }
+        stream:
+          type: boolean
+          default: false
+          const: false
+          description: >-
+            Streaming is not implemented in the current stage. A request with stream=true is refused
+            with 400 and param "stream"; the constraint is lifted in Stage 1B.
         stream_options: { type: object, additionalProperties: true }
         temperature: { type: number }
         top_p: { type: number }
@@ -455,6 +499,12 @@ components:
             ingressProtocol: { type: string }
             streamTermination: { type: string }
             failureClass: { type: [string, 'null'] }
+            upstreamStatusCode:
+              type: [integer, 'null']
+              description: >-
+                The status the runtime returned. Recorded separately from the structural summary
+                because a 204, a text/plain 429, and a truncated 500 all have an observed status and
+                no interpretable body.
             measurements:
               type: array
               items:
@@ -489,7 +539,25 @@ components:
           type: object
           required: [message, type]
           properties:
-            message: { type: string }
-            type: { type: string }
+            message:
+              type: string
+              description: >-
+                A constant chosen by AgentSplice. Never derived from an upstream message, a response
+                body, an exception, or a URL.
+            type:
+              type: string
+              description: >-
+                Closed on purpose, so that a later stage adding a category is a visible schema change
+                rather than a silent new string.
+              enum:
+                - invalid_request_error
+                - configuration_error
+                - upstream_unavailable_error
+                - upstream_authentication_error
+                - upstream_timeout_error
+                - upstream_status_error
+                - upstream_protocol_error
+                - cancellation_error
+                - internal_error
             param: {}
             code: {}

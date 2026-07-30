@@ -109,6 +109,31 @@ Response resolution is path-specific queue, then shared queue, then default. The
 
 The fixture is itself tested in `AgentSplice.IntegrationTests`. Every streaming, cancellation, and timeout test depends on it, so a fixture that silently buffered or completed cleanly where it was told to reset would let those tests pass while the gateway was broken.
 
+## Log and trace capture fixtures
+
+`tests/AgentSplice.TestSupport` also provides `CapturingLoggerProvider`, which records every log
+message, structured state value, and active scope. The formatted message alone is not enough to prove
+content never leaks: a structured value or a scope property reaches a sink just as surely.
+
+The privacy suite runs with logging at `Trace`. The claim worth making is that content is absent even
+at the most verbose setting, not that the default level filters it out — the weak form of that test
+passes on a gateway that logs prompts at `Debug`.
+
+Integration collections run serially. `WebApplicationFactory` resolves a top-level-statements entry
+point through static handoff state shared across the process, so concurrent hosts let one factory
+observe another's disposed provider, and tests that deliberately fail startup then see
+`ObjectDisposedException` instead of the validation failure they assert.
+
+## Delivered by Stage 1A
+
+From the fixture families above: minimal chat, system/user/assistant messages, unknown fields, tools
+and `tool_choice` passed transparently, malformed input, model alias resolution, stable errors,
+timeline event ordering, unknown timestamps remaining absent, measurement provenance, body retention
+disabled by default, no prompt or response in default logs, headers sanitised, and trace/request ID
+correlation.
+
+Still owed: every SSE family (Stage 1B) and persistence-failure behaviour (Stage 1C).
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

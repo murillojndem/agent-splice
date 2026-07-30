@@ -1,5 +1,6 @@
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Models;
+using AgentSplice.Application.Observability;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Application.Runtimes;
 using AgentSplice.Domain.Exchanges;
@@ -30,6 +31,7 @@ public sealed class ChatCompletionGateway
     private readonly ModelResolver resolver;
     private readonly ModelRuntimeProviderRegistry providers;
     private readonly IExchangeRecordSink sink;
+    private readonly IExchangeTelemetry telemetry;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<ChatCompletionGateway> logger;
 
@@ -41,6 +43,7 @@ public sealed class ChatCompletionGateway
         ModelResolver resolver,
         ModelRuntimeProviderRegistry providers,
         IExchangeRecordSink sink,
+        IExchangeTelemetry telemetry,
         TimeProvider timeProvider,
         ILogger<ChatCompletionGateway> logger)
     {
@@ -50,6 +53,7 @@ public sealed class ChatCompletionGateway
         ArgumentNullException.ThrowIfNull(resolver);
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(sink);
+        ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -59,6 +63,7 @@ public sealed class ChatCompletionGateway
         this.resolver = resolver;
         this.providers = providers;
         this.sink = sink;
+        this.telemetry = telemetry;
         this.timeProvider = timeProvider;
         this.logger = logger;
     }
@@ -70,7 +75,9 @@ public sealed class ChatCompletionGateway
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var recorder = new ExchangeRecorder(ExchangeId.New(), request.RequestId, timeProvider);
+        using var trace = telemetry.StartExchange();
+
+        var recorder = new ExchangeRecorder(ExchangeId.New(), request.RequestId, timeProvider, trace);
         var acceptedAt = recorder.Now;
 
         recorder.Observe(ObservationType.RequestAccepted);
@@ -189,9 +196,12 @@ public sealed class ChatCompletionGateway
         PublicRequestId requestId,
         CancellationToken cancellationToken)
     {
+        recorder.SetRuntime(target.Id, target.ProviderKey);
         recorder.Observe(
             ObservationType.UpstreamRequestOpened,
             SafeDetails.Create("runtime.id", target.Id.Value, "provider.type", target.ProviderKey));
+
+        using var providerSpan = telemetry.StartProviderRequest(target.Id, target.ProviderKey);
 
         var result = await provider
             .CompleteAsync(
@@ -308,6 +318,8 @@ public sealed class ChatCompletionGateway
     /// <summary>Hands the evidence to the sink, which must never be able to fail an exchange.</summary>
     private async Task<ChatCompletionOutcome> FinishAsync(ExchangeRecorder recorder, ChatCompletionOutcome outcome)
     {
+        Instrument(recorder, outcome);
+
         try
         {
             // Not the request's token: the evidence for a cancelled exchange is exactly the evidence
@@ -324,6 +336,58 @@ public sealed class ChatCompletionGateway
 
         return outcome;
     }
+
+    /// <summary>
+    /// Emits the span outcome and the exchange metrics.
+    /// </summary>
+    /// <remarks>
+    /// Instrumentation must never be able to fail a request that already succeeded, so a fault here
+    /// is logged and swallowed. An exchange that failed before its model was known has no
+    /// <see cref="CompletionExchange"/>, and no metric is emitted for it: a dimension set with no
+    /// protocol, runtime, or status would be a row that describes nothing.
+    /// </remarks>
+    private void Instrument(ExchangeRecorder recorder, ChatCompletionOutcome outcome)
+    {
+        try
+        {
+            if (recorder.Exchange is not { } exchange)
+            {
+                recorder.Trace?.SetOutcome(ExchangeStatus.Failed, outcome.Error?.Type);
+                return;
+            }
+
+            recorder.Trace?.SetOutcome(exchange.Status, outcome.Error?.Type);
+
+            var completedAt = exchange.CompletedAt ?? recorder.Now;
+
+            telemetry.RecordExchange(new ExchangeTelemetrySnapshot(
+                exchange.IngressProtocol,
+                exchange.RuntimeEndpointId,
+                recorder.ProviderKey,
+                exchange.Streaming,
+                exchange.Status,
+                outcome.Error?.Type,
+                exchange.UpstreamResponse?.StatusClass,
+                completedAt - exchange.StartedAt,
+                UpstreamDuration(recorder),
+                TimeToHeaders(recorder),
+                exchange.Usage.PromptTokens,
+                exchange.Usage.CompletionTokens));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(
+                exception,
+                "Instrumenting request {RequestId} failed. The client response is unaffected.",
+                recorder.RequestId.Value);
+        }
+    }
+
+    private static TimeSpan? UpstreamDuration(ExchangeRecorder recorder) =>
+        recorder.DurationBetween(ObservationType.UpstreamRequestOpened, ObservationType.UpstreamCompleted);
+
+    private static TimeSpan? TimeToHeaders(ExchangeRecorder recorder) =>
+        recorder.DurationBetween(ObservationType.UpstreamRequestOpened, ObservationType.UpstreamHeadersReceived);
 
     private static SafeDetails Describe(UpstreamResponseMetadata metadata)
     {

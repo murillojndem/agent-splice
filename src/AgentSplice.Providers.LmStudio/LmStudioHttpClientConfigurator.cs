@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using AgentSplice.Application.Runtimes;
 using AgentSplice.Domain.Identifiers;
 using Microsoft.Extensions.Http;
@@ -15,6 +16,27 @@ namespace AgentSplice.Providers.LmStudio;
 /// </remarks>
 internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<HttpClientFactoryOptions>
 {
+    /// <summary>
+    /// Headers whose values must never appear in a log, whatever the level.
+    /// </summary>
+    /// <remarks>
+    /// <c>IHttpClientFactory</c> logs request and response headers at <c>Trace</c>, so without this
+    /// the runtime's bearer token is written verbatim to any sink an operator has enabled — a
+    /// disclosure that has nothing to do with AgentSplice's own logging and would survive every
+    /// precaution taken elsewhere in the request path.
+    /// </remarks>
+    private static readonly FrozenSet<string> RedactedHeaders = new[]
+    {
+        "authorization",
+        "proxy-authorization",
+        "www-authenticate",
+        "proxy-authenticate",
+        "cookie",
+        "set-cookie",
+        "api-key",
+        "x-api-key",
+    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     private readonly RuntimeRegistry runtimes;
 
     public LmStudioHttpClientConfigurator(RuntimeRegistry runtimes)
@@ -39,6 +61,10 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
         }
 
         var runtimeId = name[LmStudioProviderRegistration.ClientNamePrefix.Length..];
+
+        // Applied before the early return, so a client whose runtime cannot be resolved still never
+        // logs a credential.
+        options.ShouldRedactHeaderValue = RedactedHeaders.Contains;
 
         if (!RuntimeEndpointId.TryCreate(runtimeId, out var id) || runtimes.Find(id) is not { } target)
         {

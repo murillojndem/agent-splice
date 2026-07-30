@@ -137,6 +137,41 @@ agentsplice.evaluation.runs
 
 Dimensions must be bounded to normalized runtime ID, provider type, protocol, adapter ID, streaming boolean, status class, error class, suite ID, and scenario ID. Raw request IDs and arbitrary model identifiers must not become metric labels.
 
+### Stage 1A instruments
+
+These are live. The rest of the list above is declared but not yet emitted.
+
+- `agentsplice.exchanges`
+- `agentsplice.active_exchanges`
+- `agentsplice.exchange.duration`
+- `agentsplice.upstream.duration`
+- `agentsplice.time_to_headers`
+- `agentsplice.prompt.tokens`
+- `agentsplice.completion.tokens`
+- `agentsplice.model_discovery.duration`
+
+Every streaming instrument, the first-byte and first-event timings, and both throughput instruments are deliberately absent. A non-streamed exchange offers no boundary to measure them against, and emitting a zero would be worse than emitting nothing: in a metric stream where Stage 1B will mean something by the value, a zero reads as "this happened, and it was none".
+
+Token instruments record only what a runtime actually reported. Absent usage produces no data point rather than a zero.
+
+### Stage 1A dimensions
+
+- `agentsplice.ingress.protocol`
+- `agentsplice.runtime.id`
+- `agentsplice.provider.type`
+- `agentsplice.streaming`
+- `agentsplice.exchange.status`
+- `agentsplice.upstream.status_class`
+- `error.type`
+
+`agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx` — and is what success and failure are classified from. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
+
+There is deliberately no model dimension. A model identifier is client-supplied and unbounded, so using it as a label would let one caller multiply the cardinality of every series without limit.
+
+### Stage 1A tracing
+
+Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1B replaces that listener with the SDK and must not run both.
+
 ## Structured logs
 
 Use stable event IDs and templates. Examples:

@@ -29,6 +29,9 @@ Exit criteria:
 
 ### Stage 1A — OpenAI-compatible LM Studio proxy
 
+Status: complete. See `CHANGELOG.md` and ADR 0008. Pass-through routing is reachable through the
+optional `agentsplice:defaultRuntimeId` setting; without it an unrecognised model is rejected.
+
 - `GET /v1/models`;
 - `POST /v1/chat/completions`, non-streaming;
 - runtime endpoint configuration;

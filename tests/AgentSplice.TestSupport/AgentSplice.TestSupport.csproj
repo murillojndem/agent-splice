@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Brings in the logging abstractions the capturing provider implements, without this project
+      taking a dependency on any AgentSplice production assembly.
+    -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 

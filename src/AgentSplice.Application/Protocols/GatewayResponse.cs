@@ -33,6 +33,9 @@ public sealed record GatewayResponse
     /// <summary>The runtime that served the request, when one was resolved.</summary>
     public RuntimeEndpointId? Runtime { get; private init; }
 
+    /// <summary>The trace identifier, or <c>null</c> when tracing produced no activity.</summary>
+    public TraceId? TraceId { get; private init; }
+
     /// <summary>The error being reported, or <c>null</c> for a successful response.</summary>
     public GatewayError? Error { get; private init; }
 
@@ -42,7 +45,8 @@ public sealed record GatewayResponse
         string mediaType,
         ReadOnlyMemory<byte> body,
         PublicRequestId requestId,
-        RuntimeEndpointId? runtime = null)
+        RuntimeEndpointId? runtime = null,
+        TraceId? traceId = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
 
@@ -53,6 +57,7 @@ public sealed record GatewayResponse
             Body = body,
             RequestId = requestId,
             Runtime = runtime,
+            TraceId = traceId,
         };
     }
 
@@ -62,7 +67,8 @@ public sealed record GatewayResponse
         string mediaType,
         ReadOnlyMemory<byte> body,
         PublicRequestId requestId,
-        RuntimeEndpointId? runtime = null)
+        RuntimeEndpointId? runtime = null,
+        TraceId? traceId = null)
     {
         ArgumentNullException.ThrowIfNull(error);
         ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
@@ -74,6 +80,7 @@ public sealed record GatewayResponse
             Body = body,
             RequestId = requestId,
             Runtime = runtime,
+            TraceId = traceId,
             Error = error,
         };
     }

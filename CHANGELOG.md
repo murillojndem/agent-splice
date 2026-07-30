@@ -4,6 +4,40 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A — Observability and published contracts
+
+- Added spans and metrics through `System.Diagnostics` alone. No OpenTelemetry SDK is referenced and
+  an architecture test enforces that; these are the primitives the SDK itself consumes, so adopting
+  it later adds an exporter rather than rewriting instrumentation.
+- Registered AgentSplice's own `ActivityListener`, which is what makes tracing exist at all.
+  `StartActivity` returns null when nothing subscribes to a source, and with no SDK nothing does — so
+  every span would have been absent and `x-agentsplice-trace-id` could never have been populated,
+  despite the API contract promising it. The W3C identifier format is forced because the domain's
+  `TraceId` accepts only 32 lowercase hexadecimal characters.
+- Declared only the instruments this stage can honestly emit. Every streaming instrument, the
+  first-byte and first-event timings, and both throughput instruments are absent, because a
+  non-streamed exchange offers no boundary to measure them against and a zero would read as "this
+  happened, and it was none".
+- Classified success and failure from the recorded upstream status class rather than from the absence
+  of an error, so a relayed upstream 500 is never counted as a success.
+- Kept model identifiers out of metric dimensions. They are client-supplied and unbounded, so one
+  caller could otherwise multiply the cardinality of every series without limit.
+- Closed a credential leak that had nothing to do with AgentSplice's own logging:
+  `IHttpClientFactory` writes request headers at `Trace`, so the runtime's bearer token reached any
+  enabled sink verbatim. The provider's clients now redact credential-bearing headers. Found by the
+  privacy suite, which runs at `Trace` precisely so that "content is absent even at the most verbose
+  setting" is the claim being made.
+- Added the privacy suite: four distinct sentinels for prompt, completion, tool argument, and API
+  key, asserted absent from every log channel — message, structured state, and scope — because a
+  structured value reaches a sink just as surely as a formatted message.
+- Published the `error.type` vocabulary and the observability names in their documents, bound by
+  contract tests, so code and specification cannot drift.
+- Updated the OpenAPI draft to describe what the gateway actually does: `text/event-stream` removed
+  and `stream` constrained to `false` until Stage 1B, a closed `error.type` enum so a later category
+  is a visible schema change, correlation headers on every error response, the statuses the gateway
+  can return, and the `created` sentinel's meaning stated where a reader will find it.
+- Added ADR 0008 recording all eighteen Stage 1A decisions with the alternatives rejected.
+
 ### Stage 1A — Failures, limits, and credential containment
 
 - Consolidated error translation into a single table, total over `FailureClass`, so a new failure

@@ -21,7 +21,7 @@ internal static class GatewayResponseWriter
         GatewayResponse response,
         CancellationToken cancellationToken)
     {
-        SetCorrelation(context, response.RequestId, exchangeId: null, response.Runtime);
+        SetCorrelation(context, response.RequestId, exchangeId: null, response.TraceId, response.Runtime);
 
         context.Response.StatusCode = response.StatusCode;
         context.Response.ContentType = response.MediaType;
@@ -41,7 +41,7 @@ internal static class GatewayResponseWriter
             return;
         }
 
-        SetCorrelation(context, outcome.RequestId, outcome.ExchangeId, outcome.Runtime);
+        SetCorrelation(context, outcome.RequestId, outcome.ExchangeId, outcome.TraceId, outcome.Runtime);
 
         foreach (var (name, value) in outcome.RelayedHeaders)
         {
@@ -62,7 +62,7 @@ internal static class GatewayResponseWriter
         PublicRequestId requestId,
         CancellationToken cancellationToken)
     {
-        SetCorrelation(context, requestId, exchangeId: null, runtime: null);
+        SetCorrelation(context, requestId, exchangeId: null, traceId: null, runtime: null);
 
         context.Response.StatusCode = gatewayError.StatusCode;
         context.Response.ContentType = errorWriter.MediaType;
@@ -85,6 +85,7 @@ internal static class GatewayResponseWriter
         HttpContext context,
         PublicRequestId requestId,
         ExchangeId? exchangeId,
+        TraceId? traceId,
         RuntimeEndpointId? runtime)
     {
         context.Response.Headers[GatewayHeaderNames.RequestId] = requestId.Value;
@@ -92,6 +93,11 @@ internal static class GatewayResponseWriter
         if (exchangeId is { } exchange && !exchange.IsEmpty)
         {
             context.Response.Headers[GatewayHeaderNames.ExchangeId] = exchange.ToString();
+        }
+
+        if (traceId is { } trace)
+        {
+            context.Response.Headers[GatewayHeaderNames.TraceId] = trace.Value;
         }
 
         if (runtime is { } resolved)

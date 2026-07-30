@@ -38,6 +38,9 @@ public sealed record ChatCompletionOutcome
     /// <summary>The exchange identity, returned on every completion response.</summary>
     public ExchangeId ExchangeId { get; private init; }
 
+    /// <summary>The trace identifier, or <c>null</c> when tracing produced no activity.</summary>
+    public TraceId? TraceId { get; private init; }
+
     /// <summary>The runtime that served the request, or <c>null</c> when none was resolved.</summary>
     public RuntimeEndpointId? Runtime { get; private init; }
 
@@ -67,6 +70,7 @@ public sealed record ChatCompletionOutcome
             Body = body,
             RequestId = recorder.RequestId,
             ExchangeId = recorder.ExchangeId,
+            TraceId = recorder.TraceId,
             Runtime = runtime,
             RelayedHeaders = relayedHeaders,
         };
@@ -91,6 +95,7 @@ public sealed record ChatCompletionOutcome
             Body = body,
             RequestId = recorder.RequestId,
             ExchangeId = recorder.ExchangeId,
+            TraceId = recorder.TraceId,
             Runtime = runtime,
             Error = gatewayError,
         };
@@ -106,6 +111,7 @@ public sealed record ChatCompletionOutcome
             ClientDisconnected = true,
             RequestId = recorder.RequestId,
             ExchangeId = recorder.ExchangeId,
+            TraceId = recorder.TraceId,
         };
     }
 }
