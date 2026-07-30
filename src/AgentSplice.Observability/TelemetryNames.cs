@@ -43,6 +43,22 @@ public static class TelemetryNames
         ActivitySources.Persistence,
     }.ToFrozenSet(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The activity sources this stage actually starts spans on.
+    /// </summary>
+    /// <remarks>
+    /// A subset of <see cref="Stage1ActivitySources"/>, which mirrors the specification's Stage 1
+    /// list. Subscribing to a source nothing writes to would let a dashboard show a permanently
+    /// empty panel and read as a capability that exists — the same reason later-stage sources are
+    /// not declared at all. <c>agentsplice.stream</c> arrives with Stage 1B and
+    /// <c>agentsplice.persistence</c> with Stage 1C.
+    /// </remarks>
+    public static FrozenSet<string> Stage1AActivitySources { get; } = new[]
+    {
+        ActivitySources.Exchange,
+        ActivitySources.ProviderRequest,
+    }.ToFrozenSet(StringComparer.Ordinal);
+
     /// <summary>Instrument names from docs/OBSERVABILITY.md.</summary>
     public static class Instruments
     {

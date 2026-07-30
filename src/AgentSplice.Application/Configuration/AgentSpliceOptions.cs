@@ -45,6 +45,9 @@ public sealed class AgentSpliceOptions
     /// <summary>Size bounds on request and upstream bodies.</summary>
     public LimitsOptions Limits { get; set; } = new();
 
+    /// <summary>How strictly the ingress protocol is enforced.</summary>
+    public CompatibilityOptions Compatibility { get; set; } = new();
+
     /// <summary>Compatibility adapter settings.</summary>
     public AdapterOptions Adapters { get; set; } = new();
 }

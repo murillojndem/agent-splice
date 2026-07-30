@@ -29,6 +29,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         ValidateCapture(options, failures);
         ValidateAdapters(options, failures);
         ValidateLimits(options, failures);
+        ValidateCompatibility(options, failures);
 
         var enabledRuntimeIds = ValidateRuntimes(options, failures);
         ValidateAliases(options, enabledRuntimeIds.All, failures);
@@ -228,6 +229,15 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
             failures.Add(
                 FormattableString.Invariant(
                     $"agentsplice:defaultRuntimeId '{defaultRuntimeId.Value}' names a runtime that is not enabled; pass-through routing would never reach it."));
+        }
+    }
+
+    private static void ValidateCompatibility(AgentSpliceOptions options, List<string> failures)
+    {
+        if (!Enum.IsDefined(options.Compatibility.UnsupportedFields))
+        {
+            failures.Add(
+                "agentsplice:compatibility:unsupportedFields is not a recognised mode. 'Adapted' is a Stage 4 capability and is not implemented.");
         }
     }
 

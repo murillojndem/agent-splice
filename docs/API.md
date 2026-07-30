@@ -200,10 +200,10 @@ Error messages are compile-time constants. None is derived from an upstream mess
 
 AgentSplice should preserve unknown request fields when safe and practical. Any dropped or changed field must appear in a routing or adapter event.
 
-Modes:
+The mode is set by `agentsplice:compatibility:unsupportedFields` and is explicit rather than implied, because both behaviours are defensible and what matters is being able to tell which one a deployment has (FR-CHAT-005).
 
-- `transparent`: forward supported and unknown provider-neutral fields where possible;
-- `strict`: reject unsupported fields;
-- `adapted`: apply only explicitly selected, versioned adapters and produce a manifest.
+- `transparent` *(default)*: forward supported and unknown provider-neutral fields where possible. The runtime is the authority on its own protocol, so refusing a field it would have accepted would make AgentSplice the source of a failure that does not exist downstream.
+- `strict`: reject a request carrying any top-level field AgentSplice does not model, naming that field as `param`. For deployments that would rather fail loudly than discover later that a field was passed through untouched. It constrains only top-level names, because nested shapes are ones the gateway never claimed to understand.
+- `adapted`: apply only explicitly selected, versioned adapters and produce a manifest. **Not implemented** — adapters are a Stage 4 capability, and the value is not accepted by configuration, because a mode that cannot be applied would be a policy in name only.
 
 A conformance report, not endpoint availability alone, determines a support claim.

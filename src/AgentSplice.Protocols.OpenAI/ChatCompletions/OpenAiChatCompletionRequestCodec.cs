@@ -1,9 +1,10 @@
-using System.Text;
 using System.Text.Json;
+using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Identifiers;
+using Microsoft.Extensions.Options;
 
 namespace AgentSplice.Protocols.OpenAI.ChatCompletions;
 
@@ -21,6 +22,15 @@ public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCod
     /// stage, and a client cannot act on "Stage 1B" anyway.
     /// </remarks>
     public const string StreamingUnsupportedMessage = "Streaming is not supported by this build.";
+
+    private readonly IOptions<AgentSpliceOptions> options;
+
+    /// <summary>Creates the codec.</summary>
+    public OpenAiChatCompletionRequestCodec(IOptions<AgentSpliceOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        this.options = options;
+    }
 
     /// <inheritdoc />
     public ChatCompletionReadResult Read(ReadOnlySpan<byte> body)
@@ -44,6 +54,17 @@ public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCod
             return ChatCompletionReadResult.Invalid(InvalidRequest(
                 StreamingUnsupportedMessage,
                 KnownChatCompletionFields.Stream));
+        }
+
+        // FR-CHAT-005: the policy is explicit, so a deployment that would rather fail loudly than
+        // forward the unfamiliar can say so. Only top-level names are considered, because those are
+        // the only ones AgentSplice claims to understand.
+        if (options.Value.Compatibility.UnsupportedFields == CompatibilityMode.Strict
+            && scan.UnknownFieldNames.Count > 0)
+        {
+            return ChatCompletionReadResult.Invalid(InvalidRequest(
+                "The request carries a field this gateway does not model, and the compatibility policy is strict.",
+                scan.UnknownFieldNames[0]));
         }
 
         var summary = StructuralRequestSummary.Create(

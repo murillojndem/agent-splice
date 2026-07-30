@@ -1,7 +1,9 @@
 using System.Text;
+using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Protocols.OpenAI.ChatCompletions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AgentSplice.UnitTests.Protocols;
@@ -14,7 +16,8 @@ public sealed class ChatCompletionRequestCodecTests
 {
     private const string Minimal = """{"model":"m","messages":[{"role":"user","content":"hi"}]}""";
 
-    private readonly OpenAiChatCompletionRequestCodec codec = new();
+    private readonly OpenAiChatCompletionRequestCodec codec =
+        new(Options.Create(new AgentSpliceOptions()));
 
     [Fact]
     public void A_minimal_request_is_accepted()

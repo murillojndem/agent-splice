@@ -1,7 +1,9 @@
 using System.Text;
+using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Identifiers;
 using AgentSplice.Protocols.OpenAI.ChatCompletions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace AgentSplice.UnitTests.Protocols;
@@ -17,7 +19,8 @@ namespace AgentSplice.UnitTests.Protocols;
 /// </remarks>
 public sealed class ModelValueSpliceTests
 {
-    private readonly OpenAiChatCompletionRequestCodec codec = new();
+    private readonly OpenAiChatCompletionRequestCodec codec =
+        new(Options.Create(new AgentSpliceOptions()));
 
     [Fact]
     public void Substitution_changes_only_the_model_value()

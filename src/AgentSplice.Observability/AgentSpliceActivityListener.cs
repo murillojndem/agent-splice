@@ -32,7 +32,7 @@ public sealed class AgentSpliceActivityListener : IDisposable
 
         listener = new ActivityListener
         {
-            ShouldListenTo = static source => TelemetryNames.Stage1ActivitySources.Contains(source.Name),
+            ShouldListenTo = static source => TelemetryNames.Stage1AActivitySources.Contains(source.Name),
 
             // Every exchange is sampled. Sampling is a volume control for a hosted service; a
             // local-first gateway whose product is evidence must not silently discard some of it.

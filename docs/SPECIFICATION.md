@@ -939,6 +939,10 @@ agentsplice:
   diagnostics:
     storeBodies: false
     storeHeaders: allowlist
+  compatibility:
+    # transparent (default) forwards fields AgentSplice does not model and records their names;
+    # strict rejects them. 'adapted' is a Stage 4 capability and is not accepted here.
+    unsupportedFields: transparent
   limits:
     # The non-streaming path buffers whole bodies so they can be forwarded verbatim, so both
     # directions are bounded. Reading stops at the limit plus one byte.

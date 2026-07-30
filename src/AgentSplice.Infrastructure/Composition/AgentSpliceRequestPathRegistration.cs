@@ -1,6 +1,7 @@
 using AgentSplice.Application.Exchanges;
 using AgentSplice.Application.Models;
 using AgentSplice.Application.Runtimes;
+using AgentSplice.Infrastructure.Persistence;
 using AgentSplice.Infrastructure.Runtimes;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,6 +33,10 @@ public static class AgentSpliceRequestPathRegistration
         // Stage 1A stores nothing, so evidence is handed to a sink that discards it. Stage 1C
         // replaces this registration with the metadata store; nothing else has to change.
         services.AddSingleton<IExchangeRecordSink, NullExchangeRecordSink>();
+
+        // Says at startup that a configured persistence mode is not implemented, so an operator
+        // reading their own settings is not left expecting a database that never appears.
+        services.AddHostedService<UnimplementedPersistenceNotice>();
 
         // These resolve the protocol ports, so an ingress protocol module must also be registered.
         services.AddSingleton<ModelListGateway>();

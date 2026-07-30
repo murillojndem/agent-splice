@@ -35,4 +35,7 @@ public static class GatewayEventIds
 
     /// <summary>A fault escaped the request pipeline entirely.</summary>
     public static EventId UnhandledPipelineFault { get; } = new(1201, nameof(UnhandledPipelineFault));
+
+    /// <summary>A persistence mode is configured that this build does not implement.</summary>
+    public static EventId PersistenceNotImplemented { get; } = new(1202, nameof(PersistenceNotImplemented));
 }

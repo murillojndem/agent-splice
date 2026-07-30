@@ -9,6 +9,22 @@ All notable changes will be documented here.
 A pass over the four Stage 1A slices against `CLAUDE.md`, `docs/ARCHITECTURE.md`,
 `docs/SPECIFICATION.md`, `docs/OBSERVABILITY.md`, and `docs/THREAT_MODEL.md`.
 
+- Made the unsupported-field policy explicit, which FR-CHAT-005 requires and Stage 1A only implied.
+  `agentsplice:compatibility:unsupportedFields` selects `transparent` (the default, and the reason a
+  runtime extension reaches the runtime) or `strict` (reject any top-level field AgentSplice does not
+  model, naming it). `adapted` stays undeclared: adapters are Stage 4, and a mode that cannot be
+  applied is a policy in name only.
+- Added a startup notice when a persistence mode is configured that this build does not implement.
+  The shipped settings select SQLite because FR-DATA-002 makes it the local default when persistence
+  is enabled, so without a notice an operator reading their own configuration would expect a database
+  file and accumulating exchanges and get neither, with nothing to explain it. Running with
+  `mode: None` is a supported configuration and stays silent.
+- Narrowed the activity-source subscription to the two sources this stage starts spans on.
+  `agentsplice.stream` and `agentsplice.persistence` belong to the Stage 1 list the specification
+  declares, but nothing writes to them yet, and subscribing to a source that produces nothing is the
+  same defect the existing `Later_stage_activity_sources_are_not_declared_yet` test already guards
+  against for later stages.
+
 - Removed `upstream_status_error`. It was published in the client contract with nothing able to emit
   it: an upstream non-2xx is relayed verbatim with the runtime's own body, so AgentSplice writes no
   envelope and there was nothing for the type to describe.
