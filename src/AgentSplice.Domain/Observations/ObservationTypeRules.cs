@@ -18,6 +18,11 @@ public static class ObservationTypeRules
         ObservationType.ModelResolved,
         ObservationType.StructuralSummaryCreated,
         ObservationType.UpstreamRequestOpened,
+
+        // One exchange opens at most one connection. A second would mean the request was retried,
+        // which Stage 1 never does.
+        ObservationType.UpstreamConnectionStarted,
+        ObservationType.UpstreamConnectionEstablished,
         ObservationType.UpstreamHeadersReceived,
         ObservationType.FirstUpstreamByte,
         ObservationType.FirstDecodedEvent,

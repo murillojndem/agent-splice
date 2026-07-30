@@ -18,12 +18,19 @@ namespace AgentSplice.Application.Exchanges;
 /// It also enforces the rule that a request reaches exactly one terminal state. Recording two would
 /// either throw from the domain or silently overwrite the first, and both are worse than a guard
 /// here.
+///
+/// One recorder belongs to one request and is used from a single logical asynchronous flow, so the
+/// awaits that carry it between thread-pool threads carry its visibility with them. The terminal and
+/// recording guards are interlocked regardless, because those are the two decisions where a duplicate
+/// corrupts evidence rather than merely repeating work. Nothing here may be called from a cancellation
+/// callback: that runs concurrently with the flow and would break the invariant.
 /// </remarks>
 public sealed class ExchangeRecorder
 {
     private readonly ExchangeTimeline timeline;
     private readonly TimeProvider timeProvider;
-    private bool terminated;
+    private int terminated;
+    private int recorded;
 
     /// <summary>Opens a recorder for a request.</summary>
     public ExchangeRecorder(
@@ -71,9 +78,19 @@ public sealed class ExchangeRecorder
     /// <summary>The provider serving the resolved runtime, once routing has chosen one.</summary>
     public string? ProviderKey { get; private set; }
 
-    /// <summary>Appends a timeline boundary.</summary>
+    /// <summary>Appends a timeline boundary at the current time.</summary>
     public void Observe(ObservationType type, SafeDetails? details = null) =>
-        timeline.Append(type, Now, ObservationSource.Gateway, details: details);
+        Observe(type, Now, details);
+
+    /// <summary>Appends a timeline boundary at a moment already observed elsewhere.</summary>
+    /// <remarks>
+    /// The source stays <see cref="ObservationSource.Gateway"/>: whoever supplied the timestamp read
+    /// AgentSplice's own clock, just closer to the event than the orchestrator can. Without this
+    /// overload every boundary is stamped when control returns rather than when the thing happened,
+    /// which turns "time to response headers" into "time until the whole body had been read".
+    /// </remarks>
+    public void Observe(ObservationType type, DateTimeOffset timestamp, SafeDetails? details = null) =>
+        timeline.Append(type, timestamp, ObservationSource.Gateway, details: details);
 
     /// <summary>
     /// Elapsed time between two boundaries, or <c>null</c> when either was never observed.
@@ -118,12 +135,23 @@ public sealed class ExchangeRecorder
         }
     }
 
-    /// <summary>Records normal completion of the transport cycle.</summary>
+    /// <summary>Records that a streamed response has been committed to the client.</summary>
+    /// <remarks>
+    /// Appends no boundary. Committing a status line is not an event on the exchange timeline; it is
+    /// a state change that decides which terminations are afterwards expressible, and
+    /// <see cref="ObservationType.FirstClientEventFlushed"/> is the boundary that records when the
+    /// client first saw something.
+    /// </remarks>
+    public void BeginStreaming() => Update(exchange => exchange.BeginStreaming());
+
+    /// <summary>Records normal completion of the transport cycle and how the stream ended.</summary>
     /// <remarks>
     /// "Completed" says the cycle finished, not that the runtime succeeded. A relayed 429 or 500
     /// completes here with no failure class, because AgentSplice did not fail.
     /// </remarks>
-    public void Complete(SafeDetails? details = null)
+    public void Complete(
+        StreamTermination termination = StreamTermination.NotApplicable,
+        SafeDetails? details = null)
     {
         if (!TryTerminate())
         {
@@ -131,7 +159,7 @@ public sealed class ExchangeRecorder
         }
 
         Observe(ObservationType.ClientCompleted, details);
-        Update(exchange => exchange.Complete(Now));
+        Update(exchange => exchange.Complete(Now, termination));
     }
 
     /// <summary>
@@ -142,7 +170,7 @@ public sealed class ExchangeRecorder
     /// inventing one here would say less than the specific boundary the caller already recorded —
     /// a fired timeout phase, or an upstream response whose body could not be read.
     /// </remarks>
-    public void Fail(GatewayError gatewayError)
+    public void Fail(GatewayError gatewayError, StreamTermination? termination = null)
     {
         ArgumentNullException.ThrowIfNull(gatewayError);
 
@@ -150,7 +178,7 @@ public sealed class ExchangeRecorder
 
         if (TryTerminate() && gatewayError.FailureClass is { } failureClass)
         {
-            Update(exchange => exchange.Fail(failureClass, Now));
+            Update(exchange => exchange.Fail(failureClass, Now, termination));
         }
     }
 
@@ -165,6 +193,16 @@ public sealed class ExchangeRecorder
         Observe(ObservationType.ClientCancelled, details);
         Update(exchange => exchange.Cancel(Now));
     }
+
+    /// <summary>
+    /// The measurement of a given name, or <c>null</c> when the evidence did not support one.
+    /// </summary>
+    /// <remarks>
+    /// Metrics read the derived measurement rather than recomputing it, so a value can never reach a
+    /// histogram under conditions the measurement layer already refused to derive it under.
+    /// </remarks>
+    public Measurement? FindMeasurement(string name) =>
+        BuildMeasurements().Find(measurement => string.Equals(measurement.Name, name, StringComparison.Ordinal));
 
     /// <summary>Produces the evidence record for this request.</summary>
     public ExchangeRecord ToRecord() =>
@@ -183,10 +221,13 @@ public sealed class ExchangeRecorder
     /// runtime-reported usage object is <see cref="MeasurementProvenance.UpstreamReported"/> — never
     /// silently upgraded to measured.
     ///
-    /// Throughput is deliberately absent. A non-streamed exchange offers no boundary separating
-    /// prompt processing from generation, so <c>ThroughputCalculator</c> would have to borrow one
-    /// interval for the other, and labelling prompt throughput as generation throughput is the exact
-    /// reporting error CLAUDE.md calls out (FR-OBS-005).
+    /// Generation throughput is derived only for an exchange that actually streamed, over the window
+    /// from the first semantic output event to upstream completion — the interval during which the
+    /// runtime was demonstrably generating. Prompt throughput is derived nowhere. A non-streamed
+    /// exchange offers no boundary separating prompt processing from generation at all, and even a
+    /// streamed one exposes no prefill-completion signal, so deriving it would mean borrowing the
+    /// time-to-first-token interval and calling it prompt processing — the exact reporting error
+    /// CLAUDE.md calls out (FR-OBS-005).
     /// </remarks>
     private List<Measurement> BuildMeasurements()
     {
@@ -194,8 +235,11 @@ public sealed class ExchangeRecorder
 
         Add(measurements, MeasurementNames.ValidationDuration, ObservationType.RequestBodyRead, ObservationType.ValidationCompleted);
         Add(measurements, MeasurementNames.RoutingDuration, ObservationType.StructuralSummaryCreated, ObservationType.ModelResolved);
+        Add(measurements, MeasurementNames.UpstreamConnectDuration, ObservationType.UpstreamConnectionStarted, ObservationType.UpstreamConnectionEstablished);
         Add(measurements, MeasurementNames.UpstreamHeadersDuration, ObservationType.UpstreamRequestOpened, ObservationType.UpstreamHeadersReceived);
         Add(measurements, MeasurementNames.TimeToFirstUpstreamByte, ObservationType.UpstreamRequestOpened, ObservationType.FirstUpstreamByte);
+        Add(measurements, MeasurementNames.TimeToFirstSemanticEvent, ObservationType.RequestAccepted, ObservationType.FirstSemanticEvent);
+        Add(measurements, MeasurementNames.TimeToFirstClientEvent, ObservationType.RequestAccepted, ObservationType.FirstClientEventFlushed);
         Add(measurements, MeasurementNames.TotalDuration, ObservationType.RequestAccepted, ObservationType.ClientCompleted);
 
         if (Exchange is not { } exchange)
@@ -206,6 +250,22 @@ public sealed class ExchangeRecorder
         if (exchange.ResponseSummary is { } response)
         {
             measurements.Add(Measurement.Bytes(MeasurementNames.ClientResponseBytes, response.ResponseBodyBytes, ExchangeId));
+
+            // Only for an exchange that streamed. A buffered response has no events, and a count of
+            // zero would read as "it streamed, and produced nothing".
+            if (exchange.StreamedResponse)
+            {
+                measurements.Add(Measurement.Count(MeasurementNames.ClientStreamEvents, response.StreamEventCount, ExchangeId));
+            }
+        }
+
+        if (exchange.StreamedResponse
+            && ThroughputCalculator.TryCalculateGenerationThroughput(
+                exchange.Usage.CompletionTokens,
+                timeline.DurationBetween(ObservationType.FirstSemanticEvent, ObservationType.UpstreamCompleted),
+                ExchangeId) is { } generation)
+        {
+            measurements.Add(generation);
         }
 
         if (exchange.Usage.PromptTokens is { } prompt)
@@ -229,14 +289,14 @@ public sealed class ExchangeRecorder
         }
     }
 
-    private bool TryTerminate()
-    {
-        if (terminated)
-        {
-            return false;
-        }
+    /// <summary>True the first time only: this exchange may be handed to the sink now.</summary>
+    /// <remarks>
+    /// Lives on the recorder rather than the gateway because the gateway is a singleton and holds no
+    /// per-request state. Without the guard, a fault raised after the response was already written
+    /// reaches the orchestrator's catch-all, which produces a second outcome and a second sink call
+    /// for one exchange — two records of one request, disagreeing about how it ended.
+    /// </remarks>
+    public bool TryBeginRecording() => Interlocked.Exchange(ref recorded, 1) == 0;
 
-        terminated = true;
-        return true;
-    }
+    private bool TryTerminate() => Interlocked.Exchange(ref terminated, 1) == 0;
 }

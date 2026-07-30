@@ -44,9 +44,38 @@ public sealed class CompletionExchangeTests
     }
 
     [Fact]
-    public void A_streamed_exchange_starts_with_an_unknown_termination()
+    public void A_request_to_stream_records_no_termination_until_something_streams()
     {
-        Assert.Equal(StreamTermination.Unknown, Accept(streaming: true).StreamTermination);
+        // Asking to stream is not streaming. Starting at Unknown would claim there was a stream
+        // whose ending we failed to observe, which is a different and worse statement than the
+        // truth: nothing has streamed yet, and it may never.
+        var exchange = Accept(streaming: true);
+
+        Assert.True(exchange.Streaming);
+        Assert.False(exchange.StreamedResponse);
+        Assert.Equal(StreamTermination.NotApplicable, exchange.StreamTermination);
+    }
+
+    [Fact]
+    public void An_exchange_that_asked_to_stream_and_never_did_completes_without_a_termination()
+    {
+        // The case this distinction exists for: stream: true answered by a buffered JSON error.
+        // Requiring a termination here would force the caller to invent one.
+        var exchange = Accept(streaming: true)
+            .Resolve(AliasResolution())
+            .Complete(Origin.AddSeconds(1));
+
+        Assert.Equal(ExchangeStatus.Completed, exchange.Status);
+        Assert.Equal(StreamTermination.NotApplicable, exchange.StreamTermination);
+    }
+
+    [Fact]
+    public void Beginning_to_stream_records_that_a_stream_was_served()
+    {
+        var exchange = Accept(streaming: true).Resolve(AliasResolution()).BeginStreaming();
+
+        Assert.True(exchange.StreamedResponse);
+        Assert.Equal(ExchangeStatus.Streaming, exchange.Status);
     }
 
     [Fact]
@@ -113,7 +142,7 @@ public sealed class CompletionExchangeTests
     [Fact]
     public void Complete_requires_a_streamed_exchange_to_state_how_its_stream_ended()
     {
-        var exchange = Accept(streaming: true).Resolve(AliasResolution());
+        var exchange = Accept(streaming: true).Resolve(AliasResolution()).BeginStreaming();
 
         Assert.Throws<ArgumentException>(() => exchange.Complete(Origin.AddSeconds(3)));
     }
@@ -172,6 +201,7 @@ public sealed class CompletionExchangeTests
     {
         var exchange = Accept(streaming: true)
             .Resolve(AliasResolution())
+            .BeginStreaming()
             .Fail(FailureClass.UpstreamTimeout, Origin.AddSeconds(30), StreamTermination.Timeout);
 
         Assert.Equal(ExchangeStatus.Failed, exchange.Status);

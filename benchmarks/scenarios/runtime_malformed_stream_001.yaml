@@ -1,0 +1,29 @@
+id: runtime_malformed_stream_001
+version: 1.0.0
+category: runtime-behaviour
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Reply with exactly the word OK.
+  stream: true
+upstream:
+  script: sse
+  events:
+    - data: '{not json'
+    - data: '{"choices":[{"delta":{"content":"OK"}}]}'
+    - done: true
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  # Relayed verbatim and recorded, not repaired: the client's own parser is the authority on the
+  # runtime's protocol, and substituting a gateway error would discard the most actionable
+  # diagnostic a user has (FR-STR-007).
+  clientBytesEqualUpstreamBytes: true
+  streamTermination: MalformedEvent
+  exchangeStatus: Completed
+  failureClass: null
+warmup: 0
+repetitions: 3
+timeoutSeconds: 120

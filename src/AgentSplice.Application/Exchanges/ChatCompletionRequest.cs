@@ -23,14 +23,35 @@ public sealed record ChatCompletionRequest
     /// <summary>The correlation token, resolved from the client's header or minted.</summary>
     public PublicRequestId RequestId { get; private init; }
 
+    /// <summary>When the transport accepted the request, before the body was read.</summary>
+    /// <remarks>
+    /// Taken by the transport rather than by the gateway, because the gateway first sees the request
+    /// only after the body has been read. Stamping acceptance then would fold the read into whatever
+    /// phase follows and make a slow upload look like slow validation.
+    /// </remarks>
+    public DateTimeOffset AcceptedAt { get; private init; }
+
+    /// <summary>When the request body finished being read.</summary>
+    public DateTimeOffset BodyReadAt { get; private init; }
+
     /// <summary>Creates an ingress request.</summary>
-    public static ChatCompletionRequest Create(ReadOnlyMemory<byte> body, PublicRequestId requestId)
+    public static ChatCompletionRequest Create(
+        ReadOnlyMemory<byte> body,
+        PublicRequestId requestId,
+        DateTimeOffset acceptedAt,
+        DateTimeOffset bodyReadAt)
     {
         if (requestId.IsEmpty)
         {
             throw new ArgumentException("A request requires a correlation token.", nameof(requestId));
         }
 
-        return new ChatCompletionRequest { Body = body, RequestId = requestId };
+        return new ChatCompletionRequest
+        {
+            Body = body,
+            RequestId = requestId,
+            AcceptedAt = acceptedAt,
+            BodyReadAt = bodyReadAt,
+        };
     }
 }

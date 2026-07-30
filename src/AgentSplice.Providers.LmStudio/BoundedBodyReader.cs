@@ -84,7 +84,9 @@ internal static class BoundedBodyReader
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(rented);
+            // Cleared: this held model output, and a pooled array outlives the exchange that filled
+            // it (docs/SECURITY.md).
+            ArrayPool<byte>.Shared.Return(rented, clearArray: true);
         }
 
         // A body that stopped short of its declared length is a truncated response, not a small one:

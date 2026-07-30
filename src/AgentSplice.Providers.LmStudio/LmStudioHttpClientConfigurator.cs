@@ -38,11 +38,15 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly RuntimeRegistry runtimes;
+    private readonly TimeProvider timeProvider;
 
-    public LmStudioHttpClientConfigurator(RuntimeRegistry runtimes)
+    public LmStudioHttpClientConfigurator(RuntimeRegistry runtimes, TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+
         this.runtimes = runtimes;
+        this.timeProvider = timeProvider;
     }
 
     public void Configure(HttpClientFactoryOptions options)
@@ -90,6 +94,12 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
 
                 // A local runtime has no business being reached through a system proxy.
                 UseProxy = false,
+
+                // Taken over solely to time connection establishment, which is otherwise invisible
+                // to the request path. The handler still applies ConnectTimeout to this callback, so
+                // phase attribution is unaffected.
+                ConnectCallback = (context, cancellationToken) =>
+                    UpstreamConnectTiming.ConnectAsync(context, timeProvider, cancellationToken),
             });
     }
 }

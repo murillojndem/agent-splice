@@ -51,6 +51,15 @@ public sealed record CompletionExchange
     /// <summary>True when the client requested a streamed response.</summary>
     public bool Streaming { get; private init; }
 
+    /// <summary>True once AgentSplice committed a streamed response to the client.</summary>
+    /// <remarks>
+    /// Distinct from <see cref="Streaming"/>, which records only what the client asked for. A request
+    /// that asked to stream and received a buffered JSON error never streamed anything, and requiring
+    /// it to record how its stream ended would fabricate evidence. This is also the moment the status
+    /// line becomes unchangeable, which is the fact every later termination decision turns on.
+    /// </remarks>
+    public bool StreamedResponse { get; private init; }
+
     /// <summary>Lifecycle state.</summary>
     public ExchangeStatus Status { get; private init; }
 
@@ -148,7 +157,10 @@ public sealed record CompletionExchange
             ClientModelId = clientModelId,
             Streaming = streaming,
             Status = ExchangeStatus.Accepted,
-            StreamTermination = streaming ? StreamTermination.Unknown : StreamTermination.NotApplicable,
+
+            // Not "Unknown": at acceptance nothing has streamed, so there is no stream whose ending
+            // is unknown. The value becomes meaningful only once BeginStreaming has been called.
+            StreamTermination = StreamTermination.NotApplicable,
             ContentRetentionState = contentRetentionState,
         };
     }
@@ -215,7 +227,12 @@ public sealed record CompletionExchange
         return this with { Resolution = resolution, Status = ExchangeStatus.Forwarding };
     }
 
-    /// <summary>Records that bytes have begun flowing to the client.</summary>
+    /// <summary>Records that a streamed response has been committed to the client.</summary>
+    /// <remarks>
+    /// Called when the status line and headers carrying the stream media type have been sent, not
+    /// when the first byte of a body arrives. After this point the status can no longer be changed,
+    /// so every failure has to be expressed inside the stream or by abandoning it.
+    /// </remarks>
     public CompletionExchange BeginStreaming()
     {
         EnsureNotTerminal(nameof(BeginStreaming));
@@ -226,14 +243,14 @@ public sealed record CompletionExchange
                 "A non-streamed exchange cannot enter the streaming state.");
         }
 
-        return this with { Status = ExchangeStatus.Streaming };
+        return this with { Status = ExchangeStatus.Streaming, StreamedResponse = true };
     }
 
     /// <summary>Completes the exchange normally.</summary>
     /// <param name="completedAt">Completion timestamp, taken from <see cref="TimeProvider"/>.</param>
     /// <param name="streamTermination">
-    /// How the stream ended. Must be <see cref="StreamTermination.NotApplicable"/> for a
-    /// non-streamed exchange.
+    /// How the stream ended. Must be <see cref="StreamTermination.NotApplicable"/> for an exchange
+    /// that never reached <see cref="BeginStreaming"/>.
     /// </param>
     public CompletionExchange Complete(
         DateTimeOffset completedAt,
@@ -260,7 +277,9 @@ public sealed record CompletionExchange
             Status = ExchangeStatus.Cancelled,
             FailureClass = Exchanges.FailureClass.RequestCancelled,
             CompletedAt = cancelledAt,
-            StreamTermination = Streaming ? StreamTermination.ClientCancelled : StreamTermination.NotApplicable,
+            StreamTermination = StreamedResponse
+                ? StreamTermination.ClientCancelled
+                : StreamTermination.NotApplicable,
         };
     }
 
@@ -278,7 +297,7 @@ public sealed record CompletionExchange
         }
 
         var termination = streamTermination
-            ?? (Streaming ? StreamTermination.Unknown : StreamTermination.NotApplicable);
+            ?? (StreamedResponse ? StreamTermination.Unknown : StreamTermination.NotApplicable);
 
         EnsureTerminationMatchesMode(termination);
 
@@ -311,17 +330,19 @@ public sealed record CompletionExchange
                 "Unknown stream termination.");
         }
 
-        if (Streaming && streamTermination == StreamTermination.NotApplicable)
+        // Keyed on StreamedResponse rather than Streaming: what matters is whether a stream was
+        // actually served, not whether one was requested.
+        if (StreamedResponse && streamTermination == StreamTermination.NotApplicable)
         {
             throw new ArgumentException(
                 "A streamed exchange must record how its stream ended.",
                 nameof(streamTermination));
         }
 
-        if (!Streaming && streamTermination != StreamTermination.NotApplicable)
+        if (!StreamedResponse && streamTermination != StreamTermination.NotApplicable)
         {
             throw new ArgumentException(
-                "A non-streamed exchange has no stream termination to record.",
+                "An exchange that never streamed has no stream termination to record.",
                 nameof(streamTermination));
         }
     }

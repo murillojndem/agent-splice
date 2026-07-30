@@ -17,6 +17,7 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
 {
     private readonly ActivitySource exchangeSource = new(TelemetryNames.ActivitySources.Exchange);
     private readonly ActivitySource providerSource = new(TelemetryNames.ActivitySources.ProviderRequest);
+    private readonly ActivitySource streamSource = new(TelemetryNames.ActivitySources.Stream);
     private readonly Meter meter = new(TelemetryNames.Meter);
 
     private readonly Counter<long> exchanges;
@@ -27,6 +28,12 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     private readonly Histogram<long> promptTokens;
     private readonly Histogram<long> completionTokens;
     private readonly Histogram<double> discoveryDuration;
+    private readonly Histogram<double> timeToFirstByte;
+    private readonly Histogram<double> timeToFirstSemanticEvent;
+    private readonly Histogram<double> timeToFirstClientEvent;
+    private readonly Histogram<long> streamEvents;
+    private readonly Histogram<long> streamBytes;
+    private readonly Histogram<double> generationThroughput;
 
     /// <summary>Creates the instruments.</summary>
     /// <param name="listener">
@@ -77,6 +84,36 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
             TelemetryNames.Instruments.ModelDiscoveryDuration,
             unit: "ms",
             description: "Duration of a model discovery refresh.");
+
+        timeToFirstByte = meter.CreateHistogram<double>(
+            TelemetryNames.Instruments.TimeToFirstByte,
+            unit: "ms",
+            description: "Time from opening the upstream request to its first body byte.");
+
+        timeToFirstSemanticEvent = meter.CreateHistogram<double>(
+            TelemetryNames.Instruments.TimeToFirstSemanticEvent,
+            unit: "ms",
+            description: "Time from accepting the request to the first event carrying model output.");
+
+        timeToFirstClientEvent = meter.CreateHistogram<double>(
+            TelemetryNames.Instruments.TimeToFirstClientEvent,
+            unit: "ms",
+            description: "Time from accepting the request to the first whole event flushed to the client.");
+
+        streamEvents = meter.CreateHistogram<long>(
+            TelemetryNames.Instruments.StreamEvents,
+            unit: "{event}",
+            description: "Events delivered to the client.");
+
+        streamBytes = meter.CreateHistogram<long>(
+            TelemetryNames.Instruments.StreamBytes,
+            unit: "By",
+            description: "Bytes forwarded to the client.");
+
+        generationThroughput = meter.CreateHistogram<double>(
+            TelemetryNames.Instruments.GenerationThroughput,
+            unit: "{token}/s",
+            description: "Generation throughput over the observed decode window, from the first semantic event to upstream completion.");
     }
 
     /// <inheritdoc />
@@ -95,6 +132,19 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
         var activity = providerSource.StartActivity(
             TelemetryNames.ActivitySources.ProviderRequest,
             ActivityKind.Client);
+
+        activity?.SetTag(TelemetryNames.Attributes.RuntimeId, runtime.Value);
+        activity?.SetTag(TelemetryNames.Attributes.ProviderType, providerKey);
+
+        return activity;
+    }
+
+    /// <inheritdoc />
+    public IDisposable? StartStream(RuntimeEndpointId runtime, string providerKey)
+    {
+        var activity = streamSource.StartActivity(
+            TelemetryNames.ActivitySources.Stream,
+            ActivityKind.Internal);
 
         activity?.SetTag(TelemetryNames.Attributes.RuntimeId, runtime.Value);
         activity?.SetTag(TelemetryNames.Attributes.ProviderType, providerKey);
@@ -133,6 +183,57 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
         {
             completionTokens.Record(completion.Value, tags);
         }
+
+        if (snapshot.TimeToFirstByte is { } firstByte)
+        {
+            timeToFirstByte.Record(firstByte.TotalMilliseconds, tags);
+        }
+
+        RecordStream(snapshot, tags);
+    }
+
+    /// <summary>
+    /// Records what only a streamed exchange can contribute.
+    /// </summary>
+    /// <remarks>
+    /// Every one of these is absent rather than zero for a buffered exchange. A zero event count
+    /// would state that a stream delivered nothing, which is a claim about a stream that never
+    /// existed (FR-OBS-004).
+    /// </remarks>
+    private void RecordStream(ExchangeTelemetrySnapshot snapshot, TagList tags)
+    {
+        if (snapshot.StreamTermination is not { } termination)
+        {
+            return;
+        }
+
+        // Attached only here, so a buffered exchange's series keep exactly the cardinality they had.
+        tags.Add(TelemetryNames.Attributes.StreamTermination, termination.ToString());
+
+        if (snapshot.StreamEvents is { } events)
+        {
+            streamEvents.Record(events, tags);
+        }
+
+        if (snapshot.StreamBytes is { } bytes)
+        {
+            streamBytes.Record(bytes, tags);
+        }
+
+        if (snapshot.TimeToFirstSemanticEvent is { } semantic)
+        {
+            timeToFirstSemanticEvent.Record(semantic.TotalMilliseconds, tags);
+        }
+
+        if (snapshot.TimeToFirstClientEvent is { } clientEvent)
+        {
+            timeToFirstClientEvent.Record(clientEvent.TotalMilliseconds, tags);
+        }
+
+        if (snapshot.GenerationThroughput is { } throughput)
+        {
+            generationThroughput.Record(throughput.Value, tags);
+        }
     }
 
     /// <inheritdoc />
@@ -146,6 +247,7 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     {
         exchangeSource.Dispose();
         providerSource.Dispose();
+        streamSource.Dispose();
         meter.Dispose();
     }
 

@@ -130,6 +130,11 @@ public sealed class FakeUpstreamExchangeRepresentationTests
         response.EnsureSuccessStatusCode();
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
 
+        // The runtime answered with an event stream, so a stream is what the client will be served.
+        // Recorded here rather than at acceptance: the request asked to stream, but only this
+        // answer makes it so, and only from here on does "how did the stream end" have a subject.
+        exchange = exchange.BeginStreaming();
+
         var (payload, eventCount) = await ReadStreamAsync(response, timeline, clock, timeout.Token);
 
         clock.Advance(Step);

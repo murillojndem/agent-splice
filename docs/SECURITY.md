@@ -8,9 +8,22 @@
 - Do not log authorization headers, prompts, source code, tool arguments, or model output.
 - Do not execute tools in the core gateway or replay subsystem.
 - Do not permit clients to supply arbitrary upstream URLs.
-- Apply request-body, header, event, stream-duration, and concurrency limits. Stage 1A bounds the
-  request body (4 MiB), the upstream completion body (64 MiB), and the upstream model catalogue
-  (4 MiB); reading stops at the bound plus one byte. A concurrency limit is owed by Stage 1B.
+- Apply request-body, header, event, stream-duration, and concurrency limits. The request body
+  (4 MiB), the upstream completion body (64 MiB), and the upstream model catalogue (4 MiB) are all
+  bounded, and reading stops at the bound plus one byte. A single streamed event is bounded by
+  `limits:maxStreamEventBytes` (1 MiB), stream duration by the runtime's `timeouts:total` and
+  `timeouts:idleStream`, and concurrency by `limits:maxConcurrentCompletions` (64), which refuses
+  with `429` rather than queueing — a queue converts an overload into unbounded latency, which an
+  agent loop cannot act on.
+
+  A streamed exchange retains a 16 KiB read buffer plus the event it is currently assembling, and
+  nothing else: bytes reach the client and are released. The streaming path's memory ceiling is
+  therefore `(16 KiB + maxStreamEventBytes) × maxConcurrentCompletions`, or roughly 66 MiB at the
+  defaults, and does not grow with the length of a response.
+- Clear pooled buffers that held prompt or response content before returning them. A pooled array
+  outlives the exchange that filled it, and the classic way content escapes is a later renter that
+  trusts the array's length instead of its read count. The buffers are rented once per exchange
+  rather than once per read, so clearing costs a single memset against a stream that ran for seconds.
 - Never forward the client's `Authorization` header upstream, and never relay an upstream
   `WWW-Authenticate` or `Set-Cookie` to the client. Both directions use an allowlist, because a
   denylist admits every header invented after it was written.

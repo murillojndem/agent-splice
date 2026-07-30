@@ -111,9 +111,23 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
+    public void The_application_never_touches_a_transport_type()
+    {
+        // The streaming relay is orchestration that runs between two sockets, which makes it the
+        // most likely place for a transport type to leak inward. It reaches the client through a
+        // port and the runtime through a classified byte source precisely so that neither end's
+        // types cross this line.
+        AssertNoReferenceTo(
+            Application,
+            "System.Net.Http.HttpResponseMessage",
+            "Microsoft.AspNetCore.Http",
+            "Microsoft.AspNetCore");
+    }
+
+    [Fact]
     public void No_assembly_references_an_opentelemetry_package()
     {
-        // Stage 1A instruments with System.Diagnostics alone (ADR 0008). Stage 1B replaces the
+        // Stage 1 instruments with System.Diagnostics alone (ADR 0008). Stage 1C replaces the
         // self-registered ActivityListener with the SDK, and must not run both.
         foreach (var assembly in AllProductionAssemblies())
         {

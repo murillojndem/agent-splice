@@ -17,7 +17,14 @@ public static class MeasurementNames
     /// <summary>Time spent resolving the model alias and runtime.</summary>
     public const string RoutingDuration = "gateway.routing.duration";
 
-    /// <summary>Time to establish the upstream connection.</summary>
+    /// <summary>
+    /// Time spent establishing a new upstream connection.
+    /// </summary>
+    /// <remarks>
+    /// Produced only when a connection was actually opened. A request served by a pooled connection
+    /// establishes nothing, so no measurement exists for it — which is a different statement from a
+    /// connection that took no time.
+    /// </remarks>
     public const string UpstreamConnectDuration = "upstream.connect.duration";
 
     /// <summary>Time from opening the upstream request to receiving response headers.</summary>

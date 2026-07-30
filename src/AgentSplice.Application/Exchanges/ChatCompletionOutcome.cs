@@ -23,6 +23,15 @@ public sealed record ChatCompletionOutcome
     /// <summary>True when the client is gone and nothing should be written.</summary>
     public bool ClientDisconnected { get; private init; }
 
+    /// <summary>True when the relay already wrote the response and the transport must add nothing.</summary>
+    /// <remarks>
+    /// A streamed response is written as it arrives, so by the time an outcome exists the status,
+    /// the headers, and every byte are already on the wire. The transport still receives an outcome
+    /// because the correlation identifiers and the recorded error are what the rest of the pipeline
+    /// reports on.
+    /// </remarks>
+    public bool ResponseAlreadyWritten { get; private init; }
+
     /// <summary>The status to send.</summary>
     public int StatusCode { get; private init; }
 
@@ -93,6 +102,30 @@ public sealed record ChatCompletionOutcome
             StatusCode = gatewayError.StatusCode,
             MediaType = mediaType,
             Body = body,
+            RequestId = recorder.RequestId,
+            ExchangeId = recorder.ExchangeId,
+            TraceId = recorder.TraceId,
+            Runtime = runtime,
+            Error = gatewayError,
+        };
+    }
+
+    /// <summary>The relay wrote the response as it arrived; the transport writes nothing more.</summary>
+    public static ChatCompletionOutcome Streamed(
+        ExchangeRecorder recorder,
+        int statusCode,
+        string mediaType,
+        RuntimeEndpointId runtime,
+        GatewayError? gatewayError)
+    {
+        ArgumentNullException.ThrowIfNull(recorder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaType);
+
+        return new ChatCompletionOutcome
+        {
+            ResponseAlreadyWritten = true,
+            StatusCode = statusCode,
+            MediaType = mediaType,
             RequestId = recorder.RequestId,
             ExchangeId = recorder.ExchangeId,
             TraceId = recorder.TraceId,

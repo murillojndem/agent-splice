@@ -1,0 +1,28 @@
+id: long_prefill_001
+version: 1.0.0
+category: performance
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      contentFixture: fixtures/long_prompt_16k.txt
+    - role: user
+      content: Answer in one word.
+  stream: true
+  max_tokens: 16
+# Long prompt, short answer: time to first token is dominated by prompt processing. That is a
+# statement about what the number is influenced by, not a measurement of prompt processing — the
+# interval still contains the queue and the network, which is why no prompt-throughput value is
+# derived from it (FR-OBS-005).
+measurements:
+  - upstream.headers.duration
+  - upstream.first_byte.duration
+  - exchange.first_semantic_event.duration
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  streamTermination: ProtocolTerminatorReceived
+warmup: 1
+repetitions: 3
+timeoutSeconds: 600

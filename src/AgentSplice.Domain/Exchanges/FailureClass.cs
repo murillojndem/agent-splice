@@ -43,4 +43,11 @@ public enum FailureClass
 
     /// <summary>An unexpected gateway fault.</summary>
     InternalError = 11,
+
+    /// <summary>The gateway is already serving as many completions as it will serve at once.</summary>
+    /// <remarks>
+    /// Distinct from every other member in one respect that matters to a client: it describes a
+    /// condition the caller can act on by slowing down, rather than a failure it can only report.
+    /// </remarks>
+    GatewayOverloaded = 12,
 }

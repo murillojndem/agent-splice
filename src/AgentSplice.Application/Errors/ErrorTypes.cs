@@ -48,6 +48,16 @@ public static class ErrorTypes
     /// <summary>The client disconnected before the exchange completed.</summary>
     public const string Cancellation = "cancellation_error";
 
+    /// <summary>
+    /// The gateway is at its concurrency limit.
+    /// </summary>
+    /// <remarks>
+    /// OpenAI's own vocabulary, so an SDK that already backs off on a rate-limit error keeps working
+    /// unchanged. It is also the one gateway-side condition a client can genuinely act on, which is
+    /// what separates it from the categories that describe a failure the caller cannot influence.
+    /// </remarks>
+    public const string RateLimit = "rate_limit_error";
+
     /// <summary>An unexpected gateway fault.</summary>
     public const string Internal = "internal_error";
 
@@ -61,6 +71,7 @@ public static class ErrorTypes
         UpstreamTimeout,
         UpstreamProtocol,
         Cancellation,
+        RateLimit,
         Internal,
     }.ToFrozenSet(StringComparer.Ordinal);
 }

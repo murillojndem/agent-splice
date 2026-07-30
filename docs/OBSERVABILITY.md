@@ -29,8 +29,7 @@ agentsplice.ingress.validate
 agentsplice.route.resolve
 agentsplice.provider.connect
 agentsplice.provider.headers
-agentsplice.stream.receive
-agentsplice.stream.forward
+agentsplice.stream
 agentsplice.persistence
 agentsplice.replay
 agentsplice.conformance.case
@@ -67,7 +66,7 @@ A completion timeline may contain:
 - runtime/model resolved;
 - structural request summary created;
 - upstream connection started;
-- upstream request headers sent;
+- upstream connection established;
 - upstream response headers received;
 - first upstream byte received;
 - first SSE event decoded;
@@ -103,6 +102,10 @@ Always distinguish:
 - persistence delay;
 - total wall-clock time.
 
+Upstream connection time is measured by taking over connection establishment in the provider's handler, because it happens below the request path and is invisible otherwise. It is recorded as two boundaries and derived like every other phase, and it is **absent for a request served by a pooled connection** — no connection was established, which is not the same as one that took no time. Without this phase, a runtime slow to accept connections and a runtime slow to think produce the same number and send an operator to different places.
+
+Three phases have no measurement name at all, because nothing in Stage 1 can produce one and a name nothing produces is worse than an absence. Gateway queue time needs a host timing feature Kestrel does not portably expose, and request acceptance is the earliest instant AgentSplice can read. Adapter buffering delay has no adapters to delay anything. Prompt-processing duration has no observable end: nothing in an OpenAI-compatible stream marks the moment prefill finished, so the only available interval is time to first token — which contains the prompt, the queue, and the network together, and must never be published under a prompt-processing name. It becomes derivable with runtime-log evidence in Stage 2E. Persistence delay arrives with Stage 1C.
+
 The dashboard must not label prompt-processing throughput as generation throughput. A high prompt-token rate does not imply low end-to-end latency.
 
 ## Metrics
@@ -137,9 +140,9 @@ agentsplice.evaluation.runs
 
 Dimensions must be bounded to normalized runtime ID, provider type, protocol, adapter ID, streaming boolean, status class, error class, suite ID, and scenario ID. Raw request IDs and arbitrary model identifiers must not become metric labels.
 
-### Stage 1A instruments
+### Live instruments
 
-These are live. The rest of the list above is declared but not yet emitted.
+These are emitted today. The rest of the list above is declared but not yet emitted.
 
 - `agentsplice.exchanges`
 - `agentsplice.active_exchanges`
@@ -149,12 +152,22 @@ These are live. The rest of the list above is declared but not yet emitted.
 - `agentsplice.prompt.tokens`
 - `agentsplice.completion.tokens`
 - `agentsplice.model_discovery.duration`
+- `agentsplice.time_to_first_byte`
+- `agentsplice.time_to_first_semantic_event`
+- `agentsplice.time_to_first_client_event`
+- `agentsplice.stream.events`
+- `agentsplice.stream.bytes`
+- `agentsplice.generation.tokens_per_second`
 
-Every streaming instrument, the first-byte and first-event timings, and both throughput instruments are deliberately absent. A non-streamed exchange offers no boundary to measure them against, and emitting a zero would be worse than emitting nothing: in a metric stream where Stage 1B will mean something by the value, a zero reads as "this happened, and it was none".
+The streaming instruments record only what a streamed exchange observed. A buffered exchange contributes no data point rather than a zero: in a series where the value means something, a zero reads as "this happened, and it was none".
 
 Token instruments record only what a runtime actually reported. Absent usage produces no data point rather than a zero.
 
-### Stage 1A dimensions
+`agentsplice.generation.tokens_per_second` is measured over the **observed decode window** — from the first event carrying model output to upstream completion — and therefore excludes the first token's own decode latency while still counting that token. The bias is negligible over a long generation and material over a very short one. It is stated here rather than corrected, because dividing by one fewer token would invent a number the runtime never reported.
+
+`agentsplice.prompt.tokens_per_second` is **absent by design, not deferred**. Nothing AgentSplice can observe marks the end of prompt processing, so the only interval available is time to first token — which measures the prompt, the queue, and the network together. Publishing that under a prompt-throughput name is exactly the conflation this document forbids. It becomes derivable only with runtime-log evidence (Stage 2E).
+
+### Live dimensions
 
 - `agentsplice.ingress.protocol`
 - `agentsplice.runtime.id`
@@ -163,14 +176,19 @@ Token instruments record only what a runtime actually reported. Absent usage pro
 - `agentsplice.exchange.status`
 - `agentsplice.upstream.status_class`
 - `error.type`
+- `agentsplice.stream.termination`
 
 `agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx` — and is what success and failure are classified from. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
 
+`agentsplice.stream.termination` is attached only to exchanges that actually streamed, so adding it costs the existing series no cardinality at all. Its value set is closed: the ten members of `StreamTermination`.
+
 There is deliberately no model dimension. A model identifier is client-supplied and unbounded, so using it as a label would let one caller multiply the cardinality of every series without limit.
 
-### Stage 1A tracing
+### Tracing
 
-Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1B replaces that listener with the SDK and must not run both.
+Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1C replaces that listener with the SDK and must not run both.
+
+Three sources are live: `agentsplice.exchange`, `agentsplice.provider.request`, and `agentsplice.stream`. The provider span covers opening the upstream response alone; the stream span covers the transfer that follows. Keeping them apart is what separates "the runtime took a long time to answer" from "the runtime produced a long answer". `agentsplice.persistence` is declared but has no producer until Stage 1C, and the listener does not subscribe to it: a source nothing writes to is a permanently empty panel that reads as a capability which produced nothing.
 
 ## Structured logs
 

@@ -113,8 +113,7 @@ public sealed class FakeUpstreamServer : IAsyncDisposable
     /// <summary>Queues a response for the next request to any path.</summary>
     public FakeUpstreamServer Enqueue(UpstreamResponseScript script)
     {
-        ArgumentNullException.ThrowIfNull(script);
-        sharedQueue.Enqueue(script);
+        sharedQueue.Enqueue(Validate(script));
         return this;
     }
 
@@ -122,10 +121,9 @@ public sealed class FakeUpstreamServer : IAsyncDisposable
     public FakeUpstreamServer EnqueueFor(string path, UpstreamResponseScript script)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        ArgumentNullException.ThrowIfNull(script);
 
         pathQueues.GetOrAdd(Normalise(path), static _ => new ConcurrentQueue<UpstreamResponseScript>())
-            .Enqueue(script);
+            .Enqueue(Validate(script));
 
         return this;
     }
@@ -133,9 +131,31 @@ public sealed class FakeUpstreamServer : IAsyncDisposable
     /// <summary>Sets the response used when no queued script applies.</summary>
     public FakeUpstreamServer SetDefault(UpstreamResponseScript script)
     {
-        ArgumentNullException.ThrowIfNull(script);
-        defaultScript = script;
+        defaultScript = Validate(script);
         return this;
+    }
+
+    /// <summary>
+    /// Refuses a script whose payload is ambiguous.
+    /// </summary>
+    /// <remarks>
+    /// A script with both a body and chunks used to write both, so a test that took a whole-body
+    /// helper and added chunks received a payload it never intended and no assertion said so. A
+    /// fixture that quietly sends something other than what a test asked for can make a broken
+    /// gateway look correct.
+    /// </remarks>
+    private static UpstreamResponseScript Validate(UpstreamResponseScript script)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+
+        if (script.Body is not null && script.Chunks.Count > 0)
+        {
+            throw new ArgumentException(
+                "A scripted response carries either a whole body or a sequence of chunks, not both.",
+                nameof(script));
+        }
+
+        return script;
     }
 
     /// <summary>Waits for the next request the server has not yet handed to a waiter.</summary>
@@ -287,9 +307,21 @@ public sealed class FakeUpstreamServer : IAsyncDisposable
 
         foreach (var chunk in script.Chunks)
         {
+            if (chunk.Gate is { } gate)
+            {
+                // Everything before this point is already flushed, so a test waiting on the gate
+                // knows precisely what the client has been offered.
+                await gate.ArriveAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             if (chunk.Delay > TimeSpan.Zero)
             {
                 await Task.Delay(chunk.Delay, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (chunk.Bytes.IsEmpty)
+            {
+                continue;
             }
 
             await context.Response.Body.WriteAsync(chunk.Bytes, cancellationToken).ConfigureAwait(false);

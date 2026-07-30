@@ -1,4 +1,5 @@
 using AgentSplice.Api.Correlation;
+using AgentSplice.Api.Hosting;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Exchanges;
@@ -25,7 +26,12 @@ internal static class OpenAiCompatibilityEndpoints
     internal static WebApplication MapOpenAiCompatibilityEndpoints(this WebApplication app)
     {
         app.MapGet("/v1/models", ListModelsAsync);
-        app.MapPost("/v1/chat/completions", CreateChatCompletionAsync);
+
+        // The concurrency bound covers completions alone. Model discovery has to stay answerable
+        // exactly when the gateway is saturated, because that is when an operator most needs to ask
+        // what it is doing.
+        app.MapPost("/v1/chat/completions", CreateChatCompletionAsync)
+            .RequireRateLimiting(CompletionConcurrencyPolicy.Name);
 
         return app;
     }
@@ -43,14 +49,22 @@ internal static class OpenAiCompatibilityEndpoints
         HttpContext context,
         [FromServices] ChatCompletionGateway gateway,
         [FromServices] IErrorEnvelopeWriter errorWriter,
-        [FromServices] IOptions<AgentSpliceOptions> options)
+        [FromServices] IOptions<AgentSpliceOptions> options,
+        [FromServices] TimeProvider timeProvider)
     {
         var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
         var cancellationToken = context.RequestAborted;
 
+        // Read here rather than in the application: this is the first instant AgentSplice can
+        // observe, and the body read that follows is a phase of its own rather than part of
+        // whatever the application does first.
+        var acceptedAt = timeProvider.GetUtcNow();
+
         var body = await RequestBodyReader
             .ReadAsync(context.Request, options.Value.Limits.MaxRequestBodyBytes, cancellationToken)
             .ConfigureAwait(false);
+
+        var bodyReadAt = timeProvider.GetUtcNow();
 
         if (body.ExceededLimit)
         {
@@ -69,7 +83,10 @@ internal static class OpenAiCompatibilityEndpoints
         }
 
         var outcome = await gateway
-            .CompleteAsync(ChatCompletionRequest.Create(body.Body, requestId), cancellationToken)
+            .CompleteAsync(
+                ChatCompletionRequest.Create(body.Body, requestId, acceptedAt, bodyReadAt),
+                new HttpClientResponseSink(context),
+                cancellationToken)
             .ConfigureAwait(false);
 
         await GatewayResponseWriter.WriteAsync(context, outcome, cancellationToken).ConfigureAwait(false);

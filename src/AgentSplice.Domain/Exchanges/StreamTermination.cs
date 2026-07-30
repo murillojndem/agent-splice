@@ -36,4 +36,13 @@ public enum StreamTermination
 
     /// <summary>The connection was lost before the stream ended.</summary>
     ConnectionLost = 9,
+
+    /// <summary>A configured AgentSplice bound was exceeded, so relaying stopped.</summary>
+    /// <remarks>
+    /// Deliberately distinct from <see cref="MalformedEvent"/>. That one describes what the runtime
+    /// did; this one describes what AgentSplice decided. Reporting a gateway policy stop as runtime
+    /// misbehaviour misattributes the cause, which is the class of misleading evidence this product
+    /// exists to remove.
+    /// </remarks>
+    LimitExceeded = 10,
 }

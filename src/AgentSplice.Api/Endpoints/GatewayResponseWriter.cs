@@ -41,6 +41,13 @@ internal static class GatewayResponseWriter
             return;
         }
 
+        if (outcome.ResponseAlreadyWritten)
+        {
+            // A streamed answer was written as it arrived, headers included. Touching the response
+            // now would either throw or append bytes the client would read as another event.
+            return;
+        }
+
         SetCorrelation(context, outcome.RequestId, outcome.ExchangeId, outcome.TraceId, outcome.Runtime);
 
         foreach (var (name, value) in outcome.RelayedHeaders)

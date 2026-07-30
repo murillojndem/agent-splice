@@ -132,6 +132,136 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         }
     }
 
+    /// <inheritdoc />
+    public async Task<ProviderStreamResult> StreamAsync(
+        ProviderCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var target = request.Target;
+
+        // Not disposed here. On success the budgets outlive this method along with the response, and
+        // the returned stream owns all four; disposing them at the end of the call would cancel the
+        // stream the caller is about to read.
+        var total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        total.CancelAfter(target.Timeouts.Total);
+
+        var responseHeaders = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
+        responseHeaders.CancelAfter(target.Timeouts.ResponseHeaders);
+
+        var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
+
+        try
+        {
+            var result = await StreamCoreAsync(request, total, responseHeaders, idle, cancellationToken)
+                .ConfigureAwait(false);
+
+            // Only an opened stream takes ownership of the budgets; anything else leaves them here
+            // to be released, or they outlive the request with a live timer attached.
+            return result.Opened ? result : Abandon(result);
+        }
+        catch (OperationCanceledException)
+        {
+            return Abandon(
+                ProviderStreamResult.Failed(UpstreamFailureClassifier.ClassifyCancellation(
+                    cancellationToken,
+                    total.Token,
+                    responseHeaders.Token,
+                    idle.Token)));
+        }
+        catch (HttpRequestException exception)
+        {
+            return Abandon(
+                ProviderStreamResult.Failed(UpstreamFailureClassifier.ClassifyRequestFailure(exception)));
+        }
+        catch (IOException)
+        {
+            return Abandon(ProviderStreamResult.Failed(UpstreamFailure.Create(
+                UpstreamFailureReason.InvalidResponse,
+                details: SafeDetails.Create("upstream.stream", "connection.lost"))));
+        }
+
+        ProviderStreamResult Abandon(ProviderStreamResult failure)
+        {
+            idle.Dispose();
+            responseHeaders.Dispose();
+            total.Dispose();
+
+            return failure;
+        }
+    }
+
+    private async Task<ProviderStreamResult> StreamCoreAsync(
+        ProviderCompletionRequest request,
+        CancellationTokenSource total,
+        CancellationTokenSource responseHeaders,
+        CancellationTokenSource idle,
+        CancellationToken clientToken)
+    {
+        var target = request.Target;
+        var client = clientFactory.CreateClient(LmStudioProviderRegistration.ClientNameFor(target.Id));
+
+        using var message = new HttpRequestMessage(HttpMethod.Post, target.ResolvePath("chat/completions"))
+        {
+            Content = new ReadOnlyMemoryContent(request.Body),
+        };
+
+        message.Content.Headers.ContentType = new MediaTypeHeaderValue(request.MediaType);
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(request.AcceptMediaType));
+
+        // A runtime may still answer with an ordinary body — an error, or a build that ignores the
+        // streaming flag — and that answer is relayed rather than refused.
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(OpenAiJsonMediaType));
+
+        message.Headers.TryAddWithoutValidation(ForwardedRequestIdHeader, request.RequestId.Value);
+        Authorise(message, target);
+
+        var response = await client
+            .SendAsync(message, HttpCompletionOption.ResponseHeadersRead, responseHeaders.Token)
+            .ConfigureAwait(false);
+
+        // Disarmed the moment headers arrive. Left armed it would fire during any stream that
+        // outlives the header budget, and the classifier would then report every mid-stream stall as
+        // a runtime that was slow to respond.
+        responseHeaders.CancelAfter(Timeout.InfiniteTimeSpan);
+
+        var metadata = UpstreamResponseMetadata.Create(
+            (int)response.StatusCode,
+            timeProvider.GetUtcNow(),
+            response.Content.Headers.ContentType?.ToString(),
+            ReadUpstreamRequestId(response));
+
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            // Withheld for the same reason as on the buffered path: an authentication error page can
+            // echo the gateway's key or hint at its shape, and it is the gateway's key, not the
+            // client's.
+            response.Dispose();
+
+            return ProviderStreamResult.Failed(
+                UpstreamFailure.Create(
+                    UpstreamFailureReason.AuthenticationRejected,
+                    statusCode: (int)response.StatusCode),
+                metadata);
+        }
+
+        var body = await response.Content.ReadAsStreamAsync(total.Token).ConfigureAwait(false);
+
+        return ProviderStreamResult.FromResponse(
+            metadata,
+            new LmStudioUpstreamResponseBody(
+                response,
+                body,
+                total,
+                responseHeaders,
+                idle,
+                target.Timeouts.IdleStream,
+                clientToken),
+            RelayableHeaders(response))
+            .WithConnection(ReadConnectTiming(message));
+    }
+
     private async Task<ProviderCompletionResult> CompleteCoreAsync(
         ProviderCompletionRequest request,
         CancellationTokenSource total,
@@ -214,8 +344,21 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
             body.Body!,
             firstByteAt,
             timeProvider.GetUtcNow(),
-            RelayableHeaders(response));
+            RelayableHeaders(response))
+            .WithConnection(ReadConnectTiming(message));
     }
+
+    /// <summary>
+    /// Reads back what the connect callback recorded, if this request opened a connection.
+    /// </summary>
+    /// <remarks>
+    /// Absent for a request served by a pooled connection, which is the ordinary case after the
+    /// first. Absence means no connection was established, not that establishing one was free.
+    /// </remarks>
+    private static UpstreamConnectObservation? ReadConnectTiming(HttpRequestMessage message) =>
+        message.Options.TryGetValue(UpstreamConnectTiming.OptionsKey, out var timing)
+            ? UpstreamConnectObservation.Create(timing.StartedAt, timing.CompletedAt)
+            : null;
 
     /// <summary>Selects the response headers the policy permits relaying to the client.</summary>
     private static Dictionary<string, string> RelayableHeaders(HttpResponseMessage response)

@@ -40,6 +40,7 @@ public static class AgentSpliceRequestPathRegistration
 
         // These resolve the protocol ports, so an ingress protocol module must also be registered.
         services.AddSingleton<ModelListGateway>();
+        services.AddSingleton<ChatCompletionStreamRelay>();
         services.AddSingleton<ChatCompletionGateway>();
 
         return services;

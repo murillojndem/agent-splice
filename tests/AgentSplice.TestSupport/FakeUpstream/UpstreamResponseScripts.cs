@@ -83,6 +83,17 @@ public static class UpstreamResponseScripts
         Body = Encoding.UTF8.GetBytes("{\"id\": \"chatcmpl-1\", \"choices\": [ {\"index\": 0, "),
     };
 
+    /// <summary>
+    /// An event stream that carries a status other than 200, for the "a runtime can refuse a
+    /// streaming request in its own words" fixtures.
+    /// </summary>
+    public static UpstreamResponseScript EventStreamStatus(int statusCode, string body = "") => new()
+    {
+        StatusCode = statusCode,
+        ContentType = "text/event-stream",
+        Body = Encoding.UTF8.GetBytes(body),
+    };
+
     /// <summary>Writes part of a body and then resets the connection, producing a premature EOF.</summary>
     public static UpstreamResponseScript TruncatedJson() => new()
     {

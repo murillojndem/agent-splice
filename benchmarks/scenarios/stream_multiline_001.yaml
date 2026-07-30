@@ -1,0 +1,31 @@
+id: stream_multiline_001
+version: 1.0.0
+category: protocol
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Reply with a two-line answer.
+  stream: true
+# Multi-line data, comments, and CRLF endings are each a shape a naive line-based relay corrupts
+# silently, and each is permitted by the SSE grammar.
+upstream:
+  script: sse
+  lineEnding: crlf
+  events:
+    - comment: keepalive
+    - dataLines:
+        - '{"choices":[{"delta":{"content":"one'
+        - 'two"}}]}'
+    - done: true
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  clientBytesEqualUpstreamBytes: true
+  streamTermination: ProtocolTerminatorReceived
+  # The comment is framing, not delivery: a conforming client raises no event for it.
+  clientStreamEvents: 2
+warmup: 1
+repetitions: 5
+timeoutSeconds: 120

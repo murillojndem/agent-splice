@@ -103,6 +103,17 @@ public static class GatewayErrorCatalogue
                 ClientClosedRequestStatus,
                 "The client disconnected before the exchange completed."),
 
+            [FailureClass.GatewayOverloaded] = Create(
+                FailureClass.GatewayOverloaded,
+                ErrorCodes.GatewayOverloaded,
+                ErrorTypes.RateLimit,
+
+                // 429 rather than 503, because this is a rate the caller can lower. It is also the
+                // status every OpenAI SDK already backs off on, so an existing client handles it
+                // without being taught anything new.
+                429,
+                "The gateway is serving as many completions as it will serve at once."),
+
             [FailureClass.PersistenceUnavailable] = Create(
                 FailureClass.PersistenceUnavailable,
                 ErrorCodes.PersistenceUnavailable,

@@ -43,6 +43,9 @@ public static class ErrorCodes
     /// <summary>The client cancelled or disconnected.</summary>
     public const string RequestCancelled = "agentsplice_request_cancelled";
 
+    /// <summary>The gateway is already serving as many completions as it will serve at once.</summary>
+    public const string GatewayOverloaded = "agentsplice_gateway_overloaded";
+
     /// <summary>Metadata persistence was unavailable.</summary>
     public const string PersistenceUnavailable = "agentsplice_persistence_unavailable";
 
@@ -61,6 +64,7 @@ public static class ErrorCodes
         InvalidUpstreamResponse,
         InvalidUpstreamStream,
         RequestCancelled,
+        GatewayOverloaded,
         PersistenceUnavailable,
         InternalError,
     }.ToFrozenSet(StringComparer.Ordinal);

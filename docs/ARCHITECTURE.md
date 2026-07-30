@@ -147,34 +147,40 @@ Every adapter invocation produces a manifest containing adapter ID/version, acti
 
 Use `HttpCompletionOption.ResponseHeadersRead`. Parse SSE incrementally and preserve semantic event order. Never assume network reads align with events or UTF-8 boundaries.
 
+Stage 1 relays raw bytes rather than decoded events. The provider opens the response and hands back a byte source; the application writes each chunk to the client and flushes it *before* anything decodes it, so no evidence-gathering work can become a flush delay. Valid SSE then holds by construction, because a conforming client buffers until the blank line and chunk boundaries are not event boundaries.
+
 ```csharp
-public interface ICompletionGateway
+public interface IModelRuntimeProvider
 {
-    Task<CompletionResult> CompleteAsync(
-        CanonicalCompletionRequest request,
+    Task<RuntimeModelListResult> ListModelsAsync(
+        RuntimeTarget target,
         CancellationToken cancellationToken);
 
-    IAsyncEnumerable<CompletionStreamEvent> StreamAsync(
-        CanonicalCompletionRequest request,
+    Task<ProviderCompletionResult> CompleteAsync(
+        ProviderCompletionRequest request,
+        CancellationToken cancellationToken);
+
+    // Hands back a resource whose lifetime outlives the call: response, connection, and timeout
+    // budgets are released when the returned body is disposed.
+    Task<ProviderStreamResult> StreamAsync(
+        ProviderCompletionRequest request,
         CancellationToken cancellationToken);
 }
 
-public interface IModelRuntimeProvider
+public interface IUpstreamResponseBody : IAsyncDisposable
 {
-    Task<IReadOnlyList<DiscoveredModel>> ListModelsAsync(
-        CancellationToken cancellationToken);
-
-    Task<ProviderCompletion> CompleteAsync(
-        ProviderCompletionRequest request,
-        CancellationToken cancellationToken);
-
-    IAsyncEnumerable<ProviderStreamEvent> StreamAsync(
-        ProviderCompletionRequest request,
-        CancellationToken cancellationToken);
+    // Classified rather than thrown: which cancellation token fired is what separates a client
+    // disconnect from an idle stall from an expired total budget, and those tokens exist only
+    // inside the provider.
+    ValueTask<UpstreamReadResult> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken);
 }
 ```
 
-Stage 1 forwarding should not require full-event JSON rewriting when raw passthrough is safe. The implementation may parse enough structure to validate framing and capture safe metadata, but must avoid hidden semantic transformation.
+An `IAsyncEnumerable<ProviderStreamEvent>` was rejected for this: it makes the provider decode, which fuses SSE framing to one protocol's meaning and puts a parse between an upstream byte arriving and it reaching the client.
+
+Framing and meaning are separated in the application. `SseFrameReader` knows where an event begins and ends and nothing else; an `IStreamEventInterpreter` implemented by the protocol module knows what `[DONE]` is, which chunk first carried output, and where usage lives. That split is the structural form of FR-STR-006 and FR-STR-009.
+
+Stage 1 forwarding never rewrites events. The implementation parses enough structure to capture safe metadata, and a payload it cannot parse costs a structural summary and nothing else.
 
 ## Canonical structural model
 

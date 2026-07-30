@@ -15,13 +15,14 @@ namespace AgentSplice.TestSupport.FakeUpstream;
 /// </remarks>
 public sealed class SseScript
 {
-    private readonly List<(string Text, TimeSpan Delay)> segments = [];
+    private readonly List<Segment> segments = [];
     private string lineEnding = "\n";
     private int? splitEveryBytes;
     private TimeSpan splitDelay;
     private TimeSpan headerDelay;
     private TimeSpan trailingDelay;
     private bool closePrematurely;
+    private bool gated;
 
     private SseScript()
     {
@@ -41,8 +42,7 @@ public sealed class SseScript
     public SseScript Data(string data, TimeSpan? delay = null)
     {
         ArgumentNullException.ThrowIfNull(data);
-        segments.Add(($"data: {data}{lineEnding}{lineEnding}", delay ?? TimeSpan.Zero));
-        return this;
+        return Append($"data: {data}{lineEnding}{lineEnding}", delay);
     }
 
     /// <summary>Appends a multi-line <c>data:</c> event, which the SSE grammar joins with newlines.</summary>
@@ -65,8 +65,7 @@ public sealed class SseScript
         }
 
         builder.Append(lineEnding);
-        segments.Add((builder.ToString(), delay ?? TimeSpan.Zero));
-        return this;
+        return Append(builder.ToString(), delay);
     }
 
     /// <summary>Appends a named event with a <c>data:</c> payload.</summary>
@@ -75,38 +74,63 @@ public sealed class SseScript
         ArgumentException.ThrowIfNullOrWhiteSpace(eventName);
         ArgumentNullException.ThrowIfNull(data);
 
-        segments.Add(($"event: {eventName}{lineEnding}data: {data}{lineEnding}{lineEnding}", delay ?? TimeSpan.Zero));
-        return this;
+        return Append($"event: {eventName}{lineEnding}data: {data}{lineEnding}{lineEnding}", delay);
     }
 
     /// <summary>Appends an SSE comment line, the conventional keepalive.</summary>
     public SseScript Comment(string text = "", TimeSpan? delay = null)
     {
         ArgumentNullException.ThrowIfNull(text);
-        segments.Add(($": {text}{lineEnding}{lineEnding}", delay ?? TimeSpan.Zero));
-        return this;
+        return Append($": {text}{lineEnding}{lineEnding}", delay);
     }
 
     /// <summary>Appends a retry directive.</summary>
-    public SseScript Retry(TimeSpan interval, TimeSpan? delay = null)
-    {
-        var milliseconds = (long)interval.TotalMilliseconds;
-        segments.Add((
-            string.Format(CultureInfo.InvariantCulture, "retry: {0}{1}{1}", milliseconds, lineEnding),
-            delay ?? TimeSpan.Zero));
-        return this;
-    }
+    public SseScript Retry(TimeSpan interval, TimeSpan? delay = null) =>
+        Append(
+            string.Format(CultureInfo.InvariantCulture, "retry: {0}{1}{1}", (long)interval.TotalMilliseconds, lineEnding),
+            delay);
 
     /// <summary>Appends verbatim text, for malformed-framing fixtures.</summary>
     public SseScript Raw(string text, TimeSpan? delay = null)
     {
         ArgumentNullException.ThrowIfNull(text);
-        segments.Add((text, delay ?? TimeSpan.Zero));
+        return Append(text, delay);
+    }
+
+    /// <summary>
+    /// Appends verbatim bytes.
+    /// </summary>
+    /// <remarks>
+    /// The only way to express a payload that is not valid UTF-8 — a lone continuation byte, say.
+    /// A relay that decodes text cannot forward those bytes unchanged, so a fixture that can only
+    /// express strings cannot test whether it does.
+    /// </remarks>
+    public SseScript RawBytes(ReadOnlyMemory<byte> bytes, TimeSpan? delay = null)
+    {
+        segments.Add(new Segment(bytes, delay ?? TimeSpan.Zero, Gate: null));
         return this;
     }
 
     /// <summary>Appends the OpenAI stream terminator sentinel.</summary>
     public SseScript Done(TimeSpan? delay = null) => Data("[DONE]", delay);
+
+    /// <summary>
+    /// Stops the response here until the gate is released.
+    /// </summary>
+    /// <remarks>
+    /// Everything appended before this point is written and flushed first, so a test that waits on
+    /// <see cref="UpstreamGate.WaitForReachedAsync"/> knows exactly what the client has been offered
+    /// and what it has not. That is a fact about the fixture rather than a bet on a timer.
+    /// </remarks>
+    public SseScript Gate(UpstreamGate gate)
+    {
+        ArgumentNullException.ThrowIfNull(gate);
+
+        gated = true;
+        segments.Add(new Segment(ReadOnlyMemory<byte>.Empty, TimeSpan.Zero, gate));
+
+        return this;
+    }
 
     /// <summary>
     /// Repackages the whole script into fixed-size byte chunks, splitting events and multi-byte
@@ -168,14 +192,20 @@ public sealed class SseScript
     /// <summary>The exact bytes this script will write, for assertions about forwarded payloads.</summary>
     public byte[] ToBytes()
     {
-        var builder = new StringBuilder();
+        var payload = new List<byte>();
 
-        foreach (var (text, _) in segments)
+        foreach (var segment in segments)
         {
-            builder.Append(text);
+            payload.AddRange(segment.Bytes.ToArray());
         }
 
-        return Encoding.UTF8.GetBytes(builder.ToString());
+        return [.. payload];
+    }
+
+    private SseScript Append(string text, TimeSpan? delay)
+    {
+        segments.Add(new Segment(Encoding.UTF8.GetBytes(text), delay ?? TimeSpan.Zero, Gate: null));
+        return this;
     }
 
     private ReadOnlyCollection<UpstreamChunk> BuildChunks()
@@ -184,12 +214,19 @@ public sealed class SseScript
         {
             var perSegment = new List<UpstreamChunk>(segments.Count);
 
-            foreach (var (text, delay) in segments)
+            foreach (var segment in segments)
             {
-                perSegment.Add(new UpstreamChunk(Encoding.UTF8.GetBytes(text), delay));
+                perSegment.Add(new UpstreamChunk(segment.Bytes, segment.Delay, segment.Gate));
             }
 
             return perSegment.AsReadOnly();
+        }
+
+        if (gated)
+        {
+            // Re-chunking destroys the boundaries a gate is placed at, so a script that asked for
+            // both would stop somewhere the test did not choose.
+            throw new InvalidOperationException("A gated script cannot also be re-chunked.");
         }
 
         var payload = ToBytes();
@@ -203,4 +240,6 @@ public sealed class SseScript
 
         return chunks.AsReadOnly();
     }
+
+    private readonly record struct Segment(ReadOnlyMemory<byte> Bytes, TimeSpan Delay, UpstreamGate? Gate);
 }

@@ -4,6 +4,100 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1B — Streaming correctness and timeline
+
+- Added streaming completions (FR-STR-001 to FR-STR-012). A `stream: true` request is forwarded with
+  `Accept: text/event-stream` and the runtime's answer is relayed byte for byte as it arrives.
+- Relayed raw bytes rather than decoded events. Each chunk is written and flushed to the client
+  before anything decodes it, so no evidence-gathering work can become a flush delay, and valid SSE
+  holds by construction: split events, split UTF-8 sequences, CRLF, multi-line `data`, comments, and
+  keepalives all reach the client unchanged because nothing rebuilt them. Decoding and re-emitting
+  would have normalised escape forms and number formatting, exactly as re-emitting a request document
+  would have.
+- Separated framing from meaning. The frame reader knows where an event begins and ends; the protocol
+  module knows what `[DONE]` is and which chunk first carried output. SSE is a grammar shared by more
+  than one protocol, and fusing the two would make the next protocol a rewrite rather than an
+  implementation.
+- Made the first-token boundary honest. A first chunk announcing `role: assistant` sets
+  `FirstDecodedEvent` and deliberately not `FirstSemanticEvent`, because time to first token is not
+  time to first chunk — the same class of error as labelling prompt throughput as generation
+  throughput.
+- Fixed a live Stage 1A defect: every timeline boundary was stamped when control returned to the
+  orchestrator, so `agentsplice.time_to_headers` was measuring time until the whole body had been
+  read. Boundaries are now stamped from the moment they were observed. A plausible, published, wrong
+  metric is worse than an absent one.
+- Distinguished what the client asked for from what it was served. A `stream: true` request answered
+  with a buffered JSON body never streamed, and requiring it to record how its stream ended would
+  have fabricated evidence. The exchange records `upstream.streamed = false` and is summarised
+  exactly as it would have been without the flag, so asking to stream never costs evidence.
+- Classified every way a stream can end: normal completion, the protocol terminator, client
+  cancellation, timeout with its phase, a malformed event, a lost connection, and a gateway bound.
+  `LimitExceeded` is deliberately distinct from `MalformedEvent` — one is the runtime's behaviour and
+  the other AgentSplice's own policy, and reporting the second as the first misattributes a gateway
+  decision to the runtime.
+- Made a malformed payload an observation rather than a failure. It is relayed verbatim and the
+  exchange completes with no failure class, because the client's own parser is the authority on the
+  runtime's protocol. A bound violation or a lost connection abandons the response instead: once the
+  status is committed, a stream that stops early but closes cleanly is indistinguishable from a
+  complete one.
+- Wired the idle-stream timeout, configured and validated since Stage 0 and unreachable until now.
+  The budget is re-armed per read rather than allocated per read, and the response-header budget is
+  disarmed once headers arrive — left armed, its token fires during every long stream, and every
+  mid-stream stall would have been reported as a runtime slow to answer.
+- Added `limits:maxStreamEventBytes` and `limits:maxConcurrentCompletions`, closing the concurrency
+  debt `docs/SECURITY.md` recorded. The streaming path retains a read buffer plus one event under
+  assembly and nothing else, which makes the memory ceiling a documented product of two settings
+  rather than a function of response length. Over the limit a request is refused with `429` rather
+  than queued: a queue turns an overload into unbounded latency, which an agent loop cannot act on.
+- Added six instruments and a `stream.termination` dimension attached only to exchanges that
+  streamed, so buffered series keep their cardinality. Generation throughput is derived over the
+  observed decode window and its bias is documented rather than corrected away. Prompt throughput is
+  absent by design, not deferred: nothing observable marks the end of prompt processing, so the only
+  available interval measures the prompt, the queue, and the network together.
+- Gave `agentsplice.stream` a real span and added a contract test that every activity source the
+  listener subscribes to has something writing to it. The OpenTelemetry SDK moves to Stage 1C, where
+  an exporter has a consumer; three source comments that said 1B were corrected rather than left to
+  drift.
+- Disabled Kestrel's minimum response data rate. A local model producing one token every few seconds
+  falls below the 240 bytes/s default, and Kestrel aborting the response would have been recorded as
+  a client disconnect — blaming the client for a limit the gateway imposed on itself.
+- Removed `upstream.connect.duration`. No pair of observable boundaries can derive it, and a declared
+  name nothing can produce is the defect the previous review slice existed to remove.
+- Proved "long streams pass without full buffering" behaviourally: eight megabytes stream successfully
+  with the buffered ceiling set to 64 KiB, which can only happen if the streaming path never routes
+  through it. `AgentSplice.PerformanceTests` was not created; ADR 0009 records why a wall-clock
+  benchmark on shared runners would not have earned a place in CI.
+- Added a test-releasable gate to the fake upstream. Chunk delays are real wall-clock waits, so a test
+  built on them is either slow or flaky and never both; the streaming, disconnect, and idle-timeout
+  suites are now deterministic and run in about a second. Client-side assertions use an independent
+  SSE parser, because a test whose parser is the gateway's own proves only self-consistency.
+- Added ADR 0009 recording all thirteen Stage 1B decisions, the alternatives rejected, and the two
+  stream terminations that remain unreachable and why.
+- Measured upstream connection time, which `docs/OBSERVABILITY.md` requires unconditionally and this
+  slice had first written off as underivable. It is not: `SocketsHttpHandler.ConnectCallback` exposes
+  it, so the provider's handler now opens the socket itself — reproducing the default behaviour
+  exactly, since the only reason to take it over is to time it — and stashes the timing on the
+  request that triggered the connection, so exactly the request that paid for one is charged for it.
+  Recorded as two boundaries and derived like every other phase, and **absent for a request served by
+  a pooled connection**: a zero there would claim a connection was opened instantaneously, which is a
+  measurement of an event that never happened. Without this phase, a runtime slow to accept
+  connections and a runtime slow to think are the same number.
+- Cleared pooled buffers that held prompt or model output before returning them. A pooled array
+  outlives the exchange that filled it, and content escapes through a later renter that trusts the
+  array's length rather than its read count. They are rented once per exchange rather than once per
+  read, so this costs a single memset against a stream that ran for seconds.
+- Closed three further gaps found by reviewing the slice against the architecture documents.
+  `docs/TESTING.md` claimed the duplicate terminal-event family was covered when no test produced
+  one. The threat model names excessive nesting among malicious-stream behaviours and nothing
+  asserted it, so a five-thousand-deep payload is now proven to be reported as malformed rather than
+  overflowing the stack — a failure no catch block could contain. And the error table described a
+  `502` for an exceeded stream bound that cannot occur, because the status is committed with the
+  response headers before any body byte exists.
+
+Measurements in this slice are taken against the deterministic fake upstream and are fixture
+measurements, not hardware claims. Stage 1B makes no compatibility claim; that requires a conformance
+report.
+
 ### Stage 1A — Review against the architecture documents
 
 A pass over the four Stage 1A slices against `CLAUDE.md`, `docs/ARCHITECTURE.md`,

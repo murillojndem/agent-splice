@@ -117,6 +117,16 @@ Record:
 - `cache_second_turn_001`: repeated stable prefix with short suffix;
 - `runtime_malformed_stream_001`: invalid upstream event.
 
+The scenarios under `benchmarks/scenarios/` are **declarative fixtures with no runner**. Nothing
+executes them, and no schema validates them; they exist so that the behaviour each names is written
+down in one place before a Stage 2 harness consumes them. A protocol scenario that targets the
+deterministic fake runtime carries an `upstream` section describing the scripted response, because a
+scenario named "SSE frames split across reads" that cannot say how to split them describes nothing.
+
+The streaming behaviour these scenarios describe is already asserted in
+`AgentSplice.IntegrationTests`, which is where the Stage 1B claims are actually proven. A scenario
+file is not evidence, and no compatibility claim rests on one.
+
 ## Initial coding-task suite
 
 Coding scenarios use synthetic or open-source repositories in disposable containers. Never use confidential employer code, incidents, credentials, customer data, or proprietary specifications.

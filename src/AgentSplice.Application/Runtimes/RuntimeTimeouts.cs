@@ -16,7 +16,13 @@ public sealed record RuntimeTimeouts
     /// <summary>Maximum time from sending the request to receiving upstream response headers.</summary>
     public TimeSpan ResponseHeaders { get; private init; }
 
-    /// <summary>Maximum gap between two upstream stream events. Unused until streaming exists.</summary>
+    /// <summary>
+    /// Maximum gap between two upstream reads while a stream is open.
+    /// </summary>
+    /// <remarks>
+    /// Measures the gap between bytes rather than the life of the stream, so a long generation is not
+    /// mistaken for a stalled one. The whole stream is bounded separately by <see cref="Total"/>.
+    /// </remarks>
     public TimeSpan IdleStream { get; private init; }
 
     /// <summary>Maximum total duration of one upstream request.</summary>

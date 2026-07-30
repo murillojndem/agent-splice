@@ -50,13 +50,13 @@ public static class TelemetryNames
     /// A subset of <see cref="Stage1ActivitySources"/>, which mirrors the specification's Stage 1
     /// list. Subscribing to a source nothing writes to would let a dashboard show a permanently
     /// empty panel and read as a capability that exists — the same reason later-stage sources are
-    /// not declared at all. <c>agentsplice.stream</c> arrives with Stage 1B and
-    /// <c>agentsplice.persistence</c> with Stage 1C.
+    /// not declared at all. <c>agentsplice.persistence</c> arrives with Stage 1C.
     /// </remarks>
-    public static FrozenSet<string> Stage1AActivitySources { get; } = new[]
+    public static FrozenSet<string> LiveActivitySources { get; } = new[]
     {
         ActivitySources.Exchange,
         ActivitySources.ProviderRequest,
+        ActivitySources.Stream,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>Instrument names from docs/OBSERVABILITY.md.</summary>
@@ -85,19 +85,41 @@ public static class TelemetryNames
 
         /// <summary>Duration of a model discovery refresh.</summary>
         public const string ModelDiscoveryDuration = "agentsplice.model_discovery.duration";
+
+        /// <summary>Time from opening the upstream request to its first body byte.</summary>
+        public const string TimeToFirstByte = "agentsplice.time_to_first_byte";
+
+        /// <summary>Time from accepting the request to the first event carrying model output.</summary>
+        public const string TimeToFirstSemanticEvent = "agentsplice.time_to_first_semantic_event";
+
+        /// <summary>Time from accepting the request to the first whole event flushed to the client.</summary>
+        public const string TimeToFirstClientEvent = "agentsplice.time_to_first_client_event";
+
+        /// <summary>Events delivered to the client.</summary>
+        public const string StreamEvents = "agentsplice.stream.events";
+
+        /// <summary>Bytes forwarded to the client.</summary>
+        public const string StreamBytes = "agentsplice.stream.bytes";
+
+        /// <summary>Generation throughput over the observed decode window.</summary>
+        public const string GenerationThroughput = "agentsplice.generation.tokens_per_second";
     }
 
     /// <summary>
     /// The instruments this stage can honestly emit.
     /// </summary>
     /// <remarks>
-    /// Every streaming instrument, the first-byte and first-event timings, and both throughput
-    /// instruments are absent, because a non-streamed exchange offers no boundary to measure them
-    /// against. Emitting a zero would be worse than emitting nothing: in a metric stream where a
-    /// later stage will mean something by the value, a zero reads as "this happened, and it was
-    /// none" (FR-OBS-004, FR-OBS-005).
+    /// The streaming instruments record only what a streamed exchange observed; a buffered one emits
+    /// no data point rather than a zero, because in a series where the value means something a zero
+    /// reads as "this happened, and it was none" (FR-OBS-004).
+    ///
+    /// <c>agentsplice.prompt.tokens_per_second</c> is deliberately absent and not merely deferred.
+    /// Nothing AgentSplice can observe marks the end of prompt processing, so the only interval
+    /// available is time to first token — which measures the prompt, the queue, and the network
+    /// together. Publishing that under a prompt-throughput name is precisely the conflation
+    /// FR-OBS-005 exists to prevent, and no later stage changes that without runtime-log evidence.
     /// </remarks>
-    public static FrozenSet<string> Stage1AInstruments { get; } = new[]
+    public static FrozenSet<string> LiveInstruments { get; } = new[]
     {
         Instruments.Exchanges,
         Instruments.ActiveExchanges,
@@ -107,6 +129,12 @@ public static class TelemetryNames
         Instruments.PromptTokens,
         Instruments.CompletionTokens,
         Instruments.ModelDiscoveryDuration,
+        Instruments.TimeToFirstByte,
+        Instruments.TimeToFirstSemanticEvent,
+        Instruments.TimeToFirstClientEvent,
+        Instruments.StreamEvents,
+        Instruments.StreamBytes,
+        Instruments.GenerationThroughput,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
@@ -139,10 +167,19 @@ public static class TelemetryNames
 
         /// <summary>The stable error type, when the exchange produced one.</summary>
         public const string ErrorType = "error.type";
+
+        /// <summary>
+        /// How a stream ended, attached only to exchanges that actually streamed.
+        /// </summary>
+        /// <remarks>
+        /// A closed set of ten values, and absent entirely from buffered exchanges so that adding it
+        /// costs the existing series no cardinality at all.
+        /// </remarks>
+        public const string StreamTermination = "agentsplice.stream.termination";
     }
 
     /// <summary>Every dimension name this stage may attach.</summary>
-    public static FrozenSet<string> Stage1AAttributes { get; } = new[]
+    public static FrozenSet<string> LiveAttributes { get; } = new[]
     {
         Attributes.IngressProtocol,
         Attributes.RuntimeId,
@@ -151,5 +188,6 @@ public static class TelemetryNames
         Attributes.ExchangeStatus,
         Attributes.UpstreamStatusClass,
         Attributes.ErrorType,
+        Attributes.StreamTermination,
     }.ToFrozenSet(StringComparer.Ordinal);
 }

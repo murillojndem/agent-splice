@@ -22,6 +22,8 @@ internal sealed class RecordingExchangeTelemetry : IExchangeTelemetry
 
     public IDisposable? StartProviderRequest(RuntimeEndpointId runtime, string providerKey) => null;
 
+    public IDisposable? StartStream(RuntimeEndpointId runtime, string providerKey) => null;
+
     public void RecordExchange(ExchangeTelemetrySnapshot snapshot) => Exchanges.Add(snapshot);
 
     public void RecordDiscovery(RuntimeEndpointId runtime, TimeSpan duration) =>

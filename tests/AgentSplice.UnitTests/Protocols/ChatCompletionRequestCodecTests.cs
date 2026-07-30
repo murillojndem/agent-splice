@@ -210,12 +210,15 @@ public sealed class ChatCompletionRequestCodecTests
     }
 
     [Fact]
-    public void A_streaming_request_is_rejected_with_a_stable_message()
+    public void An_explicitly_true_stream_is_accepted_and_recorded_as_requested()
     {
-        var error = AssertRejected("""{"model":"m","messages":[{"role":"user"}],"stream":true}""", "stream");
+        // What the client asked for has to survive into the summary. Everything downstream — which
+        // path forwards the request, which media type is asked of the runtime, whether a termination
+        // is required — is decided from this one flag.
+        var envelope = Read("""{"model":"m","messages":[{"role":"user"}],"stream":true}""");
 
-        Assert.Equal(OpenAiChatCompletionRequestCodec.StreamingUnsupportedMessage, error.Message);
-        Assert.DoesNotContain("Stage", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.True(envelope.StreamRequested);
+        Assert.True(envelope.Summary.StreamRequested);
     }
 
     [Fact]

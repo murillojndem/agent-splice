@@ -14,9 +14,11 @@ Test projects follow `docs/TESTING.md`.
 
 ## Not yet created
 
-`AgentSplice.PerformanceTests` arrives with Stage 1B, when gateway overhead and streaming allocation
-exist to measure. Conformance and evaluation projects arrive with Stages 2 and 3, although the Stage 1
-contract fixtures become their foundation.
+`AgentSplice.PerformanceTests` was deliberately not created (ADR 0009). The correctness claim behind
+it — that a long stream never routes through the buffered bound — is proven behaviourally in
+`AgentSplice.IntegrationTests`, and a wall-clock benchmark on shared CI runners would be either so
+loose it proves nothing or so tight it flakes. Conformance and evaluation projects arrive with
+Stages 2 and 3, although the Stage 1 contract fixtures become their foundation.
 
 ## Fixture families still to come
 

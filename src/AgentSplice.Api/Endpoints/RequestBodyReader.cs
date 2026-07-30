@@ -49,7 +49,9 @@ internal static class RequestBodyReader
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(rented);
+            // Cleared: this held the client's prompt, and a pooled array outlives the request that
+            // filled it (docs/SECURITY.md).
+            ArrayPool<byte>.Shared.Return(rented, clearArray: true);
         }
 
         return new Result(buffer.ToArray(), ExceededLimit: false);

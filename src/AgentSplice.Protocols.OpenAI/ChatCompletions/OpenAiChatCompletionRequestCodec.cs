@@ -14,15 +14,6 @@ namespace AgentSplice.Protocols.OpenAI.ChatCompletions;
 /// </summary>
 public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCodec
 {
-    /// <summary>
-    /// The message a streaming request is refused with.
-    /// </summary>
-    /// <remarks>
-    /// Deliberately names no roadmap stage. The message is a public contract that outlives the
-    /// stage, and a client cannot act on "Stage 1B" anyway.
-    /// </remarks>
-    public const string StreamingUnsupportedMessage = "Streaming is not supported by this build.";
-
     private readonly IOptions<AgentSpliceOptions> options;
 
     /// <summary>Creates the codec.</summary>
@@ -47,13 +38,6 @@ public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCod
             return ChatCompletionReadResult.Invalid(InvalidRequest(
                 "The 'model' field is not a usable model identifier.",
                 KnownChatCompletionFields.Model));
-        }
-
-        if (scan.StreamRequested)
-        {
-            return ChatCompletionReadResult.Invalid(InvalidRequest(
-                StreamingUnsupportedMessage,
-                KnownChatCompletionFields.Stream));
         }
 
         // FR-CHAT-005: the policy is explicit, so a deployment that would rather fail loudly than

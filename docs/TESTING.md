@@ -132,7 +132,36 @@ timeline event ordering, unknown timestamps remaining absent, measurement proven
 disabled by default, no prompt or response in default logs, headers sanitised, and trace/request ID
 correlation.
 
-Still owed: every SSE family (Stage 1B) and persistence-failure behaviour (Stage 1C).
+## Delivered by Stage 1B
+
+Every SSE family: one event per read, an event split byte by byte, a UTF-8 character split across
+reads, multiple events per read, multiline data, comments and keepalives, CRLF and LF, malformed
+JSON, premature EOF, `[DONE]`, the usage terminal chunk, a duplicate terminal event, and client
+disconnect. Each is asserted twice — once against the frame reader in isolation, and once end to end
+through the gateway with an independent client-side parser.
+
+Still owed: persistence-failure behaviour (Stage 1C).
+
+### Stage 1B fixture additions
+
+`SseScript.Gate(UpstreamGate)` stops a scripted response at a chosen point until the test releases
+it. Chunk delays are real wall-clock waits, so a test built on them is either slow or flaky and never
+both; a gate replaces the guess with a fact, which is what makes per-event delivery, mid-stream
+disconnect, and idle-timeout tests deterministic. It cannot be combined with re-chunking, because
+re-chunking destroys the boundary the gate was placed at.
+
+`SseScript.RawBytes` expresses a payload that is not valid UTF-8. A relay that decoded text cannot
+forward those bytes unchanged, and a fixture that can only express strings cannot test whether it
+does.
+
+`SseClientReader` parses the gateway's output from the client's side. It is deliberately an
+independent implementation rather than the gateway's own `SseFrameReader`: a test whose parser is the
+subject's parser proves only self-consistency and keeps passing through any framing bug the two
+share. It is the same principle that keeps the fake upstream free of production types.
+
+A scripted response carrying both a whole body and a sequence of chunks is now refused. Previously
+both were written, so a test that took a whole-body helper and added chunks received a payload it
+never intended, with nothing to say so.
 
 ## Testcontainers
 

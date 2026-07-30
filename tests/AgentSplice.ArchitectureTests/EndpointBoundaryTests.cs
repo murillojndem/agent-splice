@@ -45,6 +45,18 @@ public sealed class EndpointBoundaryTests
         AssertApiDoesNotDependOn("System.Net.Http.HttpClient", "System.Net.Sockets");
     }
 
+    [Fact]
+    public void The_api_does_not_frame_or_interpret_a_stream()
+    {
+        // The transport writes bytes and flushes them. Deciding where an event ends, what it means,
+        // or how a stream terminated is orchestration, and an endpoint is the one place none of it
+        // could be tested.
+        AssertApiDoesNotDependOn(
+            "AgentSplice.Application.Streaming.SseFrameReader",
+            "AgentSplice.Application.Protocols.IStreamEventInterpreter",
+            "AgentSplice.Application.Exchanges.ChatCompletionStreamRelay");
+    }
+
     private static void AssertApiDoesNotDependOn(params string[] forbidden)
     {
         var result = Types.InAssembly(Api)

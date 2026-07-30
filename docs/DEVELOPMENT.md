@@ -58,7 +58,9 @@ tests/
   AgentSplice.ArchitectureTests   module dependency and immutability rules
 ```
 
-`AgentSplice.PerformanceTests` arrives with Stage 1B, when there is gateway overhead to measure.
+`AgentSplice.PerformanceTests` was deliberately not created; ADR 0009 records why a wall-clock
+benchmark on shared runners would not have earned a place in CI, and how the no-full-buffering claim
+is proven instead.
 
 ## Running the host
 

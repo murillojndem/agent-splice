@@ -70,4 +70,19 @@ public enum ObservationType
 
     /// <summary>Metadata persistence failed (FR-DATA-009).</summary>
     PersistenceFailed = 20,
+
+    /// <summary>A new upstream connection began to be established.</summary>
+    /// <remarks>
+    /// Absent when the request reused a pooled connection, which is the ordinary case. Absence here
+    /// means no connection was established, not that establishing one was instantaneous.
+    /// </remarks>
+    UpstreamConnectionStarted = 21,
+
+    /// <summary>The new upstream connection was established.</summary>
+    /// <remarks>
+    /// Paired with <see cref="UpstreamConnectionStarted"/> so that connection time is derived from
+    /// two observed boundaries rather than reported as a bare number
+    /// (docs/OBSERVABILITY.md "Latency phases").
+    /// </remarks>
+    UpstreamConnectionEstablished = 22,
 }

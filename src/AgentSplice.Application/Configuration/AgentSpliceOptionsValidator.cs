@@ -250,6 +250,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
             ("maxRequestBodyBytes", limits.MaxRequestBodyBytes),
             ("maxUpstreamCompletionBodyBytes", limits.MaxUpstreamCompletionBodyBytes),
             ("maxCatalogueBodyBytes", limits.MaxCatalogueBodyBytes),
+            ("maxStreamEventBytes", limits.MaxStreamEventBytes),
         };
 
         foreach (var (name, value) in bounds)
@@ -260,6 +261,16 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
                     FormattableString.Invariant(
                         $"agentsplice:limits:{name} must be greater than zero; an unbounded body would let a single request exhaust process memory."));
             }
+        }
+
+        // Deliberately not checked against maxUpstreamCompletionBodyBytes. The two bound different
+        // things — one an entire buffered response, the other a single frame under assembly — and
+        // tying them together would make an operator who tightens one have to tighten the other for
+        // no reason the memory arithmetic supports.
+        if (limits.MaxConcurrentCompletions <= 0)
+        {
+            failures.Add(
+                "agentsplice:limits:maxConcurrentCompletions must be greater than zero; a gateway that serves no request concurrently serves none at all.");
         }
     }
 

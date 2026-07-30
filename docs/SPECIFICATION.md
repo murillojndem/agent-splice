@@ -949,6 +949,10 @@ agentsplice:
     maxRequestBodyBytes: 4194304
     maxUpstreamCompletionBodyBytes: 67108864
     maxCatalogueBodyBytes: 4194304
+    # The streaming path retains only the event it is assembling, so this bound times
+    # maxConcurrentCompletions is the whole memory ceiling of a streamed exchange.
+    maxStreamEventBytes: 1048576
+    maxConcurrentCompletions: 64
   runtimes:
     - id: lmstudio-local
       provider: lmstudio
@@ -1359,7 +1363,7 @@ Measure gateway-only overhead using a fake upstream and full-system latency usin
 - `long_generation_001`;
 - `stream_split_bytes_001`;
 - `stream_multiline_001`;
-- `cancel_midstream_001`;
+- `stream_cancel_001`;
 - `tool_native_single_001`;
 - `tool_native_multiple_001`;
 - `tool_stream_fragments_001`;

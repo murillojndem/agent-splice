@@ -1,0 +1,30 @@
+id: long_generation_001
+version: 1.0.0
+category: performance
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Write a long, uninterrupted description of a river.
+  stream: true
+  max_tokens: 2048
+# Short prompt, bounded long answer: the generation phase dominates, which is what makes the decode
+# window meaningful here and time to first token comparatively unimportant.
+measurements:
+  - upstream.first_byte.duration
+  - exchange.first_semantic_event.duration
+  - exchange.first_client_event.duration
+  - usage.generation.tokens_per_second
+  - stream.client.bytes
+  - stream.client.events
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  streamTermination: ProtocolTerminatorReceived
+# Reported per hardware profile. A number from one machine is not a claim about any other, and no
+# prompt-throughput value is reported at all: nothing observable marks the end of prompt processing,
+# so the only available interval measures the prompt, the queue, and the network together.
+warmup: 1
+repetitions: 3
+timeoutSeconds: 600

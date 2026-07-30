@@ -16,7 +16,7 @@ public sealed class ObservabilityInstrumentContractTests
     {
         var document = ObservabilityDocument();
 
-        foreach (var instrument in TelemetryNames.Stage1AInstruments)
+        foreach (var instrument in TelemetryNames.LiveInstruments)
         {
             Assert.Contains(instrument, document, StringComparison.Ordinal);
         }
@@ -27,7 +27,7 @@ public sealed class ObservabilityInstrumentContractTests
     {
         var document = ObservabilityDocument();
 
-        foreach (var attribute in TelemetryNames.Stage1AAttributes)
+        foreach (var attribute in TelemetryNames.LiveAttributes)
         {
             Assert.Contains(attribute, document, StringComparison.Ordinal);
         }
@@ -39,33 +39,58 @@ public sealed class ObservabilityInstrumentContractTests
         var documented = MarkdownLists
             .InlineCodeBullets(
                 ObservabilityDocument(),
-                "### Stage 1A instruments",
-                "### Stage 1A dimensions")
+                "### Live instruments",
+                "### Live dimensions")
             .ToHashSet(StringComparer.Ordinal);
 
-        Assert.Equal(documented, TelemetryNames.Stage1AInstruments.ToHashSet(StringComparer.Ordinal));
+        Assert.Equal(documented, TelemetryNames.LiveInstruments.ToHashSet(StringComparer.Ordinal));
     }
 
     [Fact]
-    public void No_streaming_instrument_is_declared_yet()
+    public void The_live_dimensions_are_exactly_those_the_document_marks_as_live()
     {
-        // A non-streamed exchange offers no boundary to measure these against, and emitting a zero
-        // would read as "this happened, and it was none" (FR-OBS-004, FR-OBS-005).
-        string[] deferred =
-        [
-            "agentsplice.stream.events",
-            "agentsplice.stream.bytes",
-            "agentsplice.time_to_first_byte",
-            "agentsplice.time_to_first_semantic_event",
-            "agentsplice.time_to_first_client_event",
-            "agentsplice.prompt.tokens_per_second",
-            "agentsplice.generation.tokens_per_second",
-        ];
+        var documented = MarkdownLists
+            .InlineCodeBullets(
+                ObservabilityDocument(),
+                "### Live dimensions",
+                "### Tracing")
+            .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var instrument in deferred)
-        {
-            Assert.DoesNotContain(instrument, TelemetryNames.Stage1AInstruments, StringComparer.Ordinal);
-        }
+        Assert.Equal(documented, TelemetryNames.LiveAttributes.ToHashSet(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void No_prompt_throughput_instrument_is_declared()
+    {
+        // Not deferred — absent by design. Nothing AgentSplice can observe marks the end of prompt
+        // processing, so the only interval available is time to first token, which measures the
+        // prompt, the queue, and the network together. Publishing that under a prompt-throughput
+        // name is the exact conflation FR-OBS-005 exists to prevent, and no stage fixes it without
+        // runtime-log evidence.
+        Assert.DoesNotContain(
+            "agentsplice.prompt.tokens_per_second",
+            TelemetryNames.LiveInstruments,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Every_activity_source_the_listener_subscribes_to_has_something_that_writes_to_it()
+    {
+        // A source nothing writes to is a permanently empty panel on a dashboard, which reads as a
+        // capability that exists and produced nothing. Persistence spans arrive with Stage 1C, so
+        // that source is not live yet.
+        Assert.Equal(
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                TelemetryNames.ActivitySources.Exchange,
+                TelemetryNames.ActivitySources.ProviderRequest,
+                TelemetryNames.ActivitySources.Stream,
+            },
+            TelemetryNames.LiveActivitySources.ToHashSet(StringComparer.Ordinal));
+
+        Assert.Subset(
+            TelemetryNames.Stage1ActivitySources.ToHashSet(StringComparer.Ordinal),
+            TelemetryNames.LiveActivitySources.ToHashSet(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -73,7 +98,7 @@ public sealed class ObservabilityInstrumentContractTests
     {
         // Both are unbounded and client-supplied, so either would let one caller multiply the
         // cardinality of every series without limit.
-        foreach (var attribute in TelemetryNames.Stage1AAttributes)
+        foreach (var attribute in TelemetryNames.LiveAttributes)
         {
             Assert.DoesNotContain("model", attribute, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("request.id", attribute, StringComparison.OrdinalIgnoreCase);
@@ -84,7 +109,7 @@ public sealed class ObservabilityInstrumentContractTests
     [Fact]
     public void Every_declared_instrument_name_uses_the_agentsplice_prefix()
     {
-        foreach (var instrument in TelemetryNames.Stage1AInstruments)
+        foreach (var instrument in TelemetryNames.LiveInstruments)
         {
             Assert.StartsWith("agentsplice.", instrument, StringComparison.Ordinal);
         }

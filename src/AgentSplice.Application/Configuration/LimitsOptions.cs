@@ -27,4 +27,26 @@ public sealed class LimitsOptions
     /// model discovery with a completion-sized payload is a defect worth failing on early.
     /// </summary>
     public long MaxCatalogueBodyBytes { get; set; } = 4L * 1024 * 1024;
+
+    /// <summary>
+    /// Largest single streamed event AgentSplice will hold while assembling it. Default 1 MiB.
+    /// </summary>
+    /// <remarks>
+    /// The one place the streaming path's memory is not already bounded. Bytes reach the client and
+    /// are released immediately, so retention per active stream is a read buffer plus the event
+    /// currently being assembled — which makes this bound, times the concurrency limit, the whole
+    /// memory ceiling of the streaming path.
+    ///
+    /// Exceeding it stops the relay. A bound that kept going after being crossed would not be one.
+    /// </remarks>
+    public int MaxStreamEventBytes { get; set; } = 1024 * 1024;
+
+    /// <summary>Completion requests served concurrently. Default 64.</summary>
+    /// <remarks>
+    /// The buffered path holds a whole request and a whole response in memory and the streaming path
+    /// holds a buffer per stream, so without this the gateway's peak memory is bounded only by how
+    /// many callers happen to arrive at once. Refusing is preferred to queueing: an agent loop can
+    /// act on a refusal and can only wait out a queue.
+    /// </remarks>
+    public int MaxConcurrentCompletions { get; set; } = 64;
 }

@@ -54,8 +54,9 @@ paths:
       responses:
         '200':
           description: >-
-            Completion response. Streaming is not implemented in the current stage; a request with
-            stream=true is refused with 400. text/event-stream returns with Stage 1B.
+            Completion response. A request with stream=true is answered with text/event-stream when
+            the runtime streams; a runtime that answers with an ordinary body is relayed unchanged,
+            so either content type can follow either request.
           headers:
             x-agentsplice-request-id:
               $ref: '#/components/headers/AgentSpliceRequestId'
@@ -69,11 +70,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChatCompletionResponse'
+            text/event-stream:
+              schema:
+                type: string
+                description: >-
+                  The runtime's event stream, relayed byte for byte. Each event carries a
+                  chat.completion.chunk object as its data value, and the stream ends with the
+                  literal sentinel [DONE] when the runtime sends one. AgentSplice never re-frames,
+                  re-encodes, or reorders an event.
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
           $ref: '#/components/responses/ErrorResponse'
         '413':
+          $ref: '#/components/responses/ErrorResponse'
+        '429':
           $ref: '#/components/responses/ErrorResponse'
         '500':
           $ref: '#/components/responses/ErrorResponse'
@@ -369,10 +380,10 @@ components:
         stream:
           type: boolean
           default: false
-          const: false
           description: >-
-            Streaming is not implemented in the current stage. A request with stream=true is refused
-            with 400 and param "stream"; the constraint is lifted in Stage 1B.
+            Request an event stream. The value must be a boolean; a truthy string or number is
+            refused with 400 and param "stream", because a value AgentSplice and the runtime could
+            read differently would let the two disagree about what was sent.
         stream_options: { type: object, additionalProperties: true }
         temperature: { type: number }
         top_p: { type: number }
@@ -555,6 +566,7 @@ components:
                 - upstream_timeout_error
                 - upstream_protocol_error
                 - cancellation_error
+                - rate_limit_error
                 - internal_error
             param: {}
             code: {}

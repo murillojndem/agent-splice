@@ -17,7 +17,7 @@ namespace AgentSplice.Observability;
 /// would not parse, and the header would silently disappear on exactly the deployments that had not
 /// configured tracing.
 ///
-/// Stage 1B replaces this with the OpenTelemetry SDK and must not run both: two listeners on the
+/// Stage 1C replaces this with the OpenTelemetry SDK and must not run both: two listeners on the
 /// same source would sample every activity twice.
 /// </remarks>
 public sealed class AgentSpliceActivityListener : IDisposable
@@ -32,7 +32,7 @@ public sealed class AgentSpliceActivityListener : IDisposable
 
         listener = new ActivityListener
         {
-            ShouldListenTo = static source => TelemetryNames.Stage1AActivitySources.Contains(source.Name),
+            ShouldListenTo = static source => TelemetryNames.LiveActivitySources.Contains(source.Name),
 
             // Every exchange is sampled. Sampling is a volume control for a hosted service; a
             // local-first gateway whose product is evidence must not silently discard some of it.

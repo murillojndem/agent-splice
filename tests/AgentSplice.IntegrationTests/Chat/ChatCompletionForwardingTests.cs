@@ -240,21 +240,25 @@ public sealed class ChatCompletionForwardingTests
     }
 
     [Fact]
-    public async Task A_streaming_request_is_refused_with_a_stable_message()
+    public async Task A_streaming_request_reaches_the_runtime_asking_for_an_event_stream()
     {
+        // The forwarded body is still the client's bytes, and the only thing streaming changes about
+        // the upstream request is what AgentSplice is willing to accept back.
+        const string Body = """{"model":"qwen3.6-27b-mtp","stream":true,"messages":[{"role":"user","content":"hi"}]}""";
+
         await using var fixture = await StartAsync();
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create().Data("""{"choices":[{"delta":{"content":"hi"}}]}""").Done().Build());
 
-        using var response = await PostAsync(
-            fixture,
-            """{"model":"qwen3.6-27b-mtp","stream":true,"messages":[{"role":"user","content":"hi"}]}""");
+        using var response = await PostAsync(fixture, Body);
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var error = document.RootElement.GetProperty("error");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("stream", error.GetProperty("param").GetString());
-        Assert.Equal("Streaming is not supported by this build.", error.GetProperty("message").GetString());
-        Assert.Empty(fixture.Upstream.ReceivedRequests);
+        var recorded = Assert.Single(fixture.Upstream.ReceivedRequests);
+
+        Assert.Equal(Body, recorded.BodyAsText());
+        Assert.Contains("text/event-stream", recorded.Header("accept"), StringComparison.Ordinal);
     }
 
     private static void WithAlias(Dictionary<string, string?> settings)

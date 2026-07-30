@@ -165,32 +165,4 @@ public sealed class ChatCompletionCancellationTests
             cancellationToken);
     }
 
-    /// <summary>Captures records and lets a test wait for one to arrive.</summary>
-    /// <remarks>
-    /// Recording happens after the client has already been released, so the test has to wait for it
-    /// rather than assume it has finished.
-    /// </remarks>
-    private sealed class CapturingExchangeSink : IExchangeRecordSink
-    {
-        private readonly TaskCompletionSource<ExchangeRecord> first =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        public ValueTask RecordAsync(ExchangeRecord record, CancellationToken cancellationToken)
-        {
-            first.TrySetResult(record);
-            return ValueTask.CompletedTask;
-        }
-
-        internal async Task<ExchangeRecord> WaitForRecordAsync(TimeSpan timeout)
-        {
-            var completed = await Task.WhenAny(first.Task, Task.Delay(timeout)).ConfigureAwait(false);
-
-            if (completed != first.Task)
-            {
-                throw new TimeoutException("No exchange record was handed to the sink in time.");
-            }
-
-            return await first.Task.ConfigureAwait(false);
-        }
-    }
 }

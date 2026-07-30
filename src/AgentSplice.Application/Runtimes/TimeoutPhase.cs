@@ -16,7 +16,7 @@ public enum TimeoutPhase
     /// <summary>The runtime accepted the request but did not send response headers in time.</summary>
     ResponseHeaders = 2,
 
-    /// <summary>The gap between two stream events exceeded its budget. Unreachable until streaming exists.</summary>
+    /// <summary>The gap between two upstream reads exceeded its budget while a stream was open.</summary>
     IdleStream = 3,
 
     /// <summary>The total budget for the upstream request elapsed.</summary>

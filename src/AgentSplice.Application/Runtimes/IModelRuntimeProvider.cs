@@ -5,10 +5,9 @@ namespace AgentSplice.Application.Runtimes;
 /// Application ports").
 /// </summary>
 /// <remarks>
-/// Declares only what the current slice can implement. Completion and streaming arrive with the
-/// stages that build them, because a member no caller invokes and no provider implements is a
-/// capability the interface claims and the product does not have (CLAUDE.md: no speculative
-/// frameworks).
+/// Declares only what the current slice can implement, because a member no caller invokes and no
+/// provider implements is a capability the interface claims and the product does not have
+/// (CLAUDE.md: no speculative frameworks).
 ///
 /// Implementations never throw a transport exception across this boundary. They classify it into an
 /// <see cref="UpstreamFailure"/>, which is what keeps <c>AgentSplice.Application</c> free of
@@ -31,6 +30,22 @@ public interface IModelRuntimeProvider
     /// disconnect aborts the upstream request rather than merely abandoning the read.
     /// </param>
     Task<ProviderCompletionResult> CompleteAsync(
+        ProviderCompletionRequest request,
+        CancellationToken cancellationToken);
+
+    /// <summary>Opens a completion for incremental relay and hands back the open body.</summary>
+    /// <param name="request">The bytes to send and the runtime to send them to.</param>
+    /// <param name="cancellationToken">
+    /// Cancels the call and, through the returned stream, the whole relay. The client's token is the
+    /// root of the provider's budget chain for the stream's entire life.
+    /// </param>
+    /// <remarks>
+    /// Separate from <see cref="CompleteAsync"/> because the two differ in what they own. The
+    /// buffered call ends when it returns; this one hands back a resource whose lifetime — response,
+    /// connection, and timeout budgets — outlives the call and ends when
+    /// <see cref="ProviderStreamResult.Body"/> is disposed.
+    /// </remarks>
+    Task<ProviderStreamResult> StreamAsync(
         ProviderCompletionRequest request,
         CancellationToken cancellationToken);
 }

@@ -102,7 +102,38 @@ public sealed class LogRedactionTests : IDisposable
             record => Assert.DoesNotContain("{", record.Message, StringComparison.Ordinal));
     }
 
-    private static async Task<CapturingLoggerProvider> ProxyAsync(UpstreamResponseScript? script = null)
+    [Theory]
+    [InlineData(PromptSentinel)]
+    [InlineData(CompletionSentinel)]
+    [InlineData(ToolArgumentSentinel)]
+    [InlineData(ApiKeySentinel)]
+    public async Task No_sensitive_value_escapes_while_a_response_is_being_streamed(string sentinel)
+    {
+        // The streaming path decodes every event to gather evidence, which is exactly the kind of
+        // work that ends up logging what it just parsed. It also handles many small payloads rather
+        // than one body, so a leak here would repeat per token.
+        var logs = await ProxyAsync(
+            script: SseScript.Create()
+                .Data("""{"choices":[{"delta":{"content":"COMPLETION"}}]}"""
+                    .Replace("COMPLETION", CompletionSentinel, StringComparison.Ordinal))
+                .Data("""{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"read_file","arguments":"TOOLARG"}}]}}]}"""
+                    .Replace("TOOLARG", ToolArgumentSentinel, StringComparison.Ordinal))
+                .Done()
+                .Build(),
+            streaming: true);
+
+        var offending = logs.AllText
+            .Where(text => text.Contains(sentinel, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(
+            offending.Length == 0,
+            $"'{sentinel}' reached a log while streaming: {string.Join(" | ", offending)}");
+    }
+
+    private static async Task<CapturingLoggerProvider> ProxyAsync(
+        UpstreamResponseScript? script = null,
+        bool streaming = false)
     {
         var logs = new CapturingLoggerProvider();
 
@@ -120,9 +151,12 @@ public sealed class LogRedactionTests : IDisposable
             "/v1/chat/completions",
             script ?? UpstreamResponseScripts.Json(Completion));
 
+        var body = streaming
+            ? """{"model":"m","stream":true,"messages":[{"role":"user","content":"PROMPT"}]}"""
+            : """{"model":"m","messages":[{"role":"user","content":"PROMPT"}]}""";
+
         using var content = new StringContent(
-            """{"model":"m","messages":[{"role":"user","content":"PROMPT"}]}"""
-                .Replace("PROMPT", PromptSentinel, StringComparison.Ordinal),
+            body.Replace("PROMPT", PromptSentinel, StringComparison.Ordinal),
             Encoding.UTF8,
             "application/json");
 

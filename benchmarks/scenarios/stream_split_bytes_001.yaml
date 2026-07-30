@@ -1,0 +1,24 @@
+id: stream_split_bytes_001
+version: 1.0.0
+category: protocol
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Reply with exactly the word OK.
+  stream: true
+# The fixture writes the scripted stream one byte at a time, so every possible chunk boundary
+# occurs, including inside an event terminator and inside a multi-byte character.
+upstream:
+  script: sse
+  splitEveryBytes: 1
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  # The claim is not "an equivalent stream" but the runtime's own bytes.
+  clientBytesEqualUpstreamBytes: true
+  streamTermination: ProtocolTerminatorReceived
+warmup: 1
+repetitions: 5
+timeoutSeconds: 120

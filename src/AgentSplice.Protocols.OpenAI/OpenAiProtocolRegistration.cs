@@ -18,6 +18,7 @@ public static class OpenAiProtocolRegistration
         services.AddSingleton<IErrorEnvelopeWriter, OpenAiErrorEnvelopeWriter>();
         services.AddSingleton<IChatCompletionRequestCodec, OpenAiChatCompletionRequestCodec>();
         services.AddSingleton<IChatCompletionResponseCodec, OpenAiChatCompletionResponseCodec>();
+        services.AddSingleton<IStreamEventInterpreter, OpenAiStreamEventInterpreter>();
 
         return services;
     }

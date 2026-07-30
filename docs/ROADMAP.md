@@ -4,8 +4,8 @@ The roadmap is outcome-based. Dates are intentionally omitted until implementati
 
 ## Stage 0 — Repository foundation
 
-Status: complete. See `CHANGELOG.md` and ADR 0007. `AgentSplice.PerformanceTests` is deferred to
-Stage 1B, where gateway overhead first exists to measure.
+Status: complete. See `CHANGELOG.md` and ADR 0007. `AgentSplice.PerformanceTests` remains deferred;
+ADR 0009 records why a wall-clock benchmark project would not have earned its place in CI.
 
 Deliverables:
 
@@ -50,6 +50,11 @@ Exit criteria:
 - no vendor-specific response rewrite is required.
 
 ### Stage 1B — Streaming correctness and timeline
+
+Status: complete. See `CHANGELOG.md` and ADR 0009. The relay forwards upstream bytes verbatim and
+observes them as they pass; `AgentSplice.PerformanceTests` remains deferred, because the
+no-full-buffering claim is proven behaviourally by an integration test and gateway-overhead numbers
+are hardware-dependent and must not gate CI.
 
 - incremental SSE parser and writer;
 - `ResponseHeadersRead` upstream client;

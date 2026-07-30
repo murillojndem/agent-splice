@@ -1,0 +1,24 @@
+id: stream_cancel_001
+version: 1.0.0
+category: protocol
+protocol: openai-chat-completions
+request:
+  model: local-coder
+  messages:
+    - role: user
+      content: Count slowly to one hundred.
+  stream: true
+# Cancellation is asserted from the runtime's side. A client that stops reading looks identical to
+# one whose cancellation reached the runtime, while the runtime keeps generating and burning the
+# compute cancellation exists to reclaim (FR-CHAT-006).
+client:
+  disconnectAfterEvents: 1
+assertions:
+  httpStatus: 200
+  contentType: text/event-stream
+  upstreamRequestAborted: true
+  streamTermination: ClientCancelled
+  exchangeStatus: Cancelled
+warmup: 0
+repetitions: 3
+timeoutSeconds: 120

@@ -39,6 +39,13 @@ public sealed record ProviderCompletionResult
     public IReadOnlyDictionary<string, string> RelayedHeaders { get; private init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>What establishing a connection cost, or <c>null</c> when a pooled one was reused.</summary>
+    public UpstreamConnectObservation? Connection { get; private init; }
+
+    /// <summary>Attaches connection timing to a result.</summary>
+    public ProviderCompletionResult WithConnection(UpstreamConnectObservation? connection) =>
+        connection is null ? this : this with { Connection = connection };
+
     /// <summary>True when the runtime answered, whatever status it chose.</summary>
     public bool Answered => Response is not null && Failure is null;
 

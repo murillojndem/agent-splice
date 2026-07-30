@@ -19,16 +19,20 @@ internal static class UpstreamFailureClassifier
     /// Classifies a cancellation by asking which budget actually elapsed.
     /// </summary>
     /// <remarks>
-    /// Order matters. The client token is checked first, because a disconnect is not a runtime
-    /// defect and must never be reported as one. The total budget is checked before the
-    /// response-header budget because the header source is linked to the total source, so both are
-    /// signalled together when the total elapses; checking headers first would misreport every
-    /// total-budget expiry as a header timeout.
+    /// Order matters and is now four deep. The client token is checked first, because a disconnect is
+    /// not a runtime defect and must never be reported as one. The total budget comes next because
+    /// every other source is linked to it and is therefore signalled together with it; checking any
+    /// of them first would misreport every total-budget expiry as something narrower.
+    ///
+    /// The idle budget is checked before the response-header budget because a stream that outlives
+    /// its header budget is entirely normal — headers arrived long ago — and checking headers first
+    /// would report every mid-stream stall as a runtime that was slow to answer.
     /// </remarks>
     internal static UpstreamFailure ClassifyCancellation(
         CancellationToken clientToken,
         CancellationToken totalToken,
-        CancellationToken responseHeadersToken)
+        CancellationToken responseHeadersToken,
+        CancellationToken idleStreamToken = default)
     {
         if (clientToken.IsCancellationRequested)
         {
@@ -38,6 +42,11 @@ internal static class UpstreamFailureClassifier
         if (totalToken.IsCancellationRequested)
         {
             return UpstreamFailure.Timeout(TimeoutPhase.Total);
+        }
+
+        if (idleStreamToken.IsCancellationRequested)
+        {
+            return UpstreamFailure.Timeout(TimeoutPhase.IdleStream);
         }
 
         return responseHeadersToken.IsCancellationRequested

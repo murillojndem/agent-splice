@@ -62,6 +62,22 @@ internal sealed class RecordingModelRuntimeProvider : IModelRuntimeProvider
     /// <summary>What the next completion call answers with.</summary>
     public Func<ProviderCompletionRequest, ProviderCompletionResult>? CompletionAnswer { get; set; }
 
+    /// <summary>What the next streaming call answers with.</summary>
+    public Func<ProviderCompletionRequest, ProviderStreamResult>? StreamAnswer { get; set; }
+
+    public Task<ProviderStreamResult> StreamAsync(
+        ProviderCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ForwardedCompletions.Add(request);
+
+        var answer = StreamAnswer
+            ?? throw new InvalidOperationException(
+                "No stream answer was scripted; a test that forgot to script one should fail loudly.");
+
+        return Task.FromResult(answer(request));
+    }
+
     public Task<ProviderCompletionResult> CompleteAsync(
         ProviderCompletionRequest request,
         CancellationToken cancellationToken)

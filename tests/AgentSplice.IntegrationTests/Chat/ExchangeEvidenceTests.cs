@@ -41,6 +41,11 @@ public sealed class ExchangeEvidenceTests
                 ObservationType.ModelResolved,
                 ObservationType.RoutingApplied,
                 ObservationType.UpstreamRequestOpened,
+
+                // This exchange is the first to use its runtime's client, so it pays for the
+                // connection. A later request served by the pool records neither boundary.
+                ObservationType.UpstreamConnectionStarted,
+                ObservationType.UpstreamConnectionEstablished,
                 ObservationType.UpstreamHeadersReceived,
                 ObservationType.FirstUpstreamByte,
                 ObservationType.UpstreamCompleted,
@@ -253,6 +258,94 @@ public sealed class ExchangeEvidenceTests
     }
 
     [Fact]
+    public async Task Response_headers_are_stamped_when_they_arrived_not_when_the_body_finished()
+    {
+        // The runtime flushes its headers immediately and then stalls before the body. If the
+        // boundary were stamped when the provider returned, both durations would be the stall, and
+        // "time to response headers" would silently be reporting time to the whole response — the
+        // single number an operator uses to tell "the runtime is slow to start" from "the runtime is
+        // slow to generate".
+        var stall = TimeSpan.FromMilliseconds(400);
+
+        var record = await ProxyAsync(script: new UpstreamResponseScript
+        {
+            StatusCode = 200,
+            ContentType = "application/json",
+            Chunks = [new UpstreamChunk(Encoding.UTF8.GetBytes(Completion), stall)],
+        });
+
+        var opened = TimestampOf(record, ObservationType.UpstreamRequestOpened);
+        var headers = TimestampOf(record, ObservationType.UpstreamHeadersReceived);
+        var completed = TimestampOf(record, ObservationType.UpstreamCompleted);
+
+        Assert.True(
+            headers - opened < stall,
+            FormattableString.Invariant($"Headers took {headers - opened}, which is not less than the {stall} body stall."));
+
+        Assert.True(
+            completed - opened >= stall,
+            FormattableString.Invariant($"The upstream call took {completed - opened}, which is less than the {stall} body stall."));
+    }
+
+    [Fact]
+    public async Task Establishing_a_connection_is_measured_separately_from_waiting_for_headers()
+    {
+        // Without this phase, a runtime slow to accept connections and a runtime slow to think are
+        // the same number, and they send an operator to entirely different places
+        // (docs/OBSERVABILITY.md "Latency phases").
+        var record = await ProxyAsync();
+
+        var connect = Assert.Single(
+            record.Measurements,
+            m => m.Name == MeasurementNames.UpstreamConnectDuration);
+
+        Assert.Equal(MeasurementProvenance.Measured, connect.Provenance);
+        Assert.Equal(MeasurementUnit.Milliseconds, connect.Unit);
+
+        Assert.True(
+            TimestampOf(record, ObservationType.UpstreamConnectionStarted)
+            <= TimestampOf(record, ObservationType.UpstreamConnectionEstablished));
+
+        Assert.True(
+            TimestampOf(record, ObservationType.UpstreamConnectionEstablished)
+            <= TimestampOf(record, ObservationType.UpstreamHeadersReceived));
+    }
+
+    [Fact]
+    public async Task A_request_served_by_a_pooled_connection_records_no_connection_at_all()
+    {
+        // The honest half of the previous test. A reused connection establishes nothing, and a zero
+        // here would claim a connection was opened instantaneously — which is a measurement of an
+        // event that never happened (FR-TRACE-006).
+        var records = await ProxyTwiceAsync();
+
+        Assert.Contains(
+            records[0].Measurements,
+            m => m.Name == MeasurementNames.UpstreamConnectDuration);
+
+        AssertAbsent(
+            records[1],
+            ObservationType.UpstreamConnectionStarted,
+            ObservationType.UpstreamConnectionEstablished);
+
+        Assert.DoesNotContain(
+            records[1].Measurements,
+            m => m.Name == MeasurementNames.UpstreamConnectDuration);
+    }
+
+    [Fact]
+    public async Task Accepting_the_request_is_stamped_before_the_body_was_read()
+    {
+        // Both boundaries used to be taken in the application, after the read had already happened,
+        // which made the read invisible and folded it into validation.
+        var record = await ProxyAsync();
+
+        Assert.True(
+            TimestampOf(record, ObservationType.RequestAccepted)
+            <= TimestampOf(record, ObservationType.RequestBodyRead));
+    }
+
+    [Fact]
     public async Task Every_observation_detail_is_bounded()
     {
         var record = await ProxyAsync();
@@ -261,6 +354,45 @@ public sealed class ExchangeEvidenceTests
             record.Observations,
             observation => Assert.True(observation.Details.Values.Count <= SafeDetails.MaxEntries));
     }
+
+    /// <summary>Proxies twice through one gateway, so the second request meets a warm pool.</summary>
+    private static async Task<IReadOnlyList<ExchangeRecord>> ProxyTwiceAsync()
+    {
+        var sink = new RecordingExchangeSink();
+
+        await using var fixture = await GatewayFixture.StartAsync(
+            settings =>
+            {
+                settings[GatewayFixture.RuntimeKey(0, "discovery:enabled")] = "false";
+                settings[GatewayFixture.AliasKey(0, "id")] = "local-coder";
+                settings[GatewayFixture.AliasKey(0, "runtimeId")] = GatewayFixture.RuntimeId;
+                settings[GatewayFixture.AliasKey(0, "upstreamModelId")] = "qwen3.6-27b-mtp";
+            },
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+
+            using var content = new StringContent(
+                """{"model":"local-coder","messages":[{"role":"user","content":"hi"}]}""",
+                Encoding.UTF8,
+                "application/json");
+
+            using var response = await fixture.Client.PostAsync(
+                new Uri("/v1/chat/completions", UriKind.Relative),
+                content);
+
+            response.EnsureSuccessStatusCode();
+        }
+
+        Assert.Equal(2, sink.Records.Count);
+
+        return sink.Records;
+    }
+
+    private static DateTimeOffset TimestampOf(ExchangeRecord record, ObservationType type) =>
+        record.Observations.Single(observation => observation.Type == type).Timestamp;
 
     private static void AssertAbsent(ExchangeRecord record, params ObservationType[] types)
     {
@@ -273,7 +405,8 @@ public sealed class ExchangeEvidenceTests
     private static async Task<ExchangeRecord> ProxyAsync(
         Action<Dictionary<string, string?>>? configure = null,
         string model = "local-coder",
-        string? body = null)
+        string? body = null,
+        UpstreamResponseScript? script = null)
     {
         var sink = new RecordingExchangeSink();
 
@@ -288,7 +421,9 @@ public sealed class ExchangeEvidenceTests
             },
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
-        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            script ?? UpstreamResponseScripts.Json(Completion));
 
         using var content = new StringContent(
             body ?? $$"""{"model":"{{model}}","messages":[{"role":"user","content":"hi"}]}""",

@@ -39,8 +39,6 @@ The last row is deliberate: an empty catalogue caused by configuration is an ope
 
 Supports streaming and non-streaming operation. Stage 1 prioritizes transparent forwarding, valid SSE, cancellation, stable errors, and trace capture. Stage 1 does not reinterpret text as tool calls.
 
-**Streaming is not yet implemented.** A request with `stream: true` is refused with `400` and `param: "stream"`. Buffering an event stream into a single JSON body would be an invisible semantic transformation, and answering `200` would make an unimplemented capability look implemented.
-
 Forwarding is byte-preserving. When routing does not rename the model, the runtime receives the client's original bytes unchanged. When an alias renames it, only the bytes of the top-level `model` value are replaced; property order, escape forms, number formatting, and insignificant whitespace are all preserved, because the body is spliced rather than reparsed and re-emitted.
 
 Only `model` and `messages` are validated. Every other field, known or unknown, is forwarded verbatim, and unknown top-level names are recorded so transparent forwarding is verifiable. A field that determines handling — `model`, `messages`, or `stream` — supplied more than once is refused, because "last wins" can differ between AgentSplice and the runtime.
@@ -55,6 +53,20 @@ Headers crossing the gateway are allowlisted in both directions:
 | Runtime to client | `Content-Type`, `Retry-After`, `x-ratelimit-*` |
 
 The client's `Authorization` header is never forwarded upstream, and no hop-by-hop header is copied in either direction. A relayed `429` keeps its `Retry-After`, without which the status conveys nothing actionable.
+
+`Cache-Control: no-cache` is set by the gateway on a streamed response rather than relayed from the runtime. It is AgentSplice's own statement about a response it is producing incrementally; relaying it would present a gateway decision as something the runtime claimed.
+
+### Streaming
+
+A request with `stream: true` is forwarded with `Accept: text/event-stream` and the runtime's answer is relayed byte for byte as it arrives. AgentSplice never re-frames, re-encodes, or reorders an event: a chunk is written and flushed to the client before anything decodes it, so no evidence-gathering work can delay delivery, and a client receives precisely the bytes the runtime produced.
+
+Because the bytes are forwarded rather than rebuilt, an event split across network reads, a multi-byte character split mid-sequence, CRLF or LF line endings, multi-line `data` fields, comments, and keepalives all reach the client unchanged.
+
+`[DONE]` is recognised only as an entire `data` value, and only as evidence that the stream ended: a chunk whose content happens to be that text is model output and is relayed like any other.
+
+The runtime decides whether a response is a stream. A `stream: true` request answered with an ordinary JSON body — an error, or a runtime that ignores the flag — is relayed unchanged with the runtime's own content type, and the exchange records that it was not streamed.
+
+Once the first byte has been sent, the status can no longer be changed. From that point a failure is expressed by abandoning the response rather than by an error envelope, because an event stream that stops early but closes cleanly is indistinguishable from a complete one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
 
 ## Gateway headers
 
@@ -145,6 +157,7 @@ Core:
 - `agentsplice_invalid_upstream_response`
 - `agentsplice_invalid_upstream_stream`
 - `agentsplice_request_cancelled`
+- `agentsplice_gateway_overloaded`
 - `agentsplice_persistence_unavailable`
 - `agentsplice_internal_error`
 
@@ -170,6 +183,7 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 - `upstream_timeout_error`
 - `upstream_protocol_error`
 - `cancellation_error`
+- `rate_limit_error`
 - `internal_error`
 
 ## Error status mapping
@@ -184,6 +198,8 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 | Runtime rejected the gateway's credentials | `agentsplice_runtime_authentication_failed` | 502 | `upstream_authentication_error` |
 | A configured timeout phase elapsed | `agentsplice_upstream_timeout` | 504 | `upstream_timeout_error` |
 | Upstream **2xx** body unreadable, truncated, or oversized | `agentsplice_invalid_upstream_response` | 502 | `upstream_protocol_error` |
+| Upstream event stream exceeded a configured bound | `agentsplice_invalid_upstream_stream` | *(the connection is abandoned; the status was committed with the response headers)* | `upstream_protocol_error` |
+| Gateway already serving `limits:maxConcurrentCompletions` completions | `agentsplice_gateway_overloaded` | 429 with `Retry-After` | `rate_limit_error` |
 | Client disconnected | `agentsplice_request_cancelled` | *(nothing written)* | `cancellation_error` |
 | Unhandled gateway fault | `agentsplice_internal_error` | 500 | `internal_error` |
 | **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
