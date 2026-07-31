@@ -207,24 +207,138 @@ public sealed class ChatCompletionStreamingTests
     }
 
     [Fact]
-    public async Task A_repeated_terminator_is_relayed_and_recorded_once()
+    public async Task A_second_terminator_from_a_later_read_is_never_consumed()
     {
-        // docs/TESTING.md's "duplicate terminal event" family. The boundaries the relay records are
-        // single-occurrence in the domain, so a second terminator that re-recorded one would throw
-        // from the timeline mid-stream — after bytes had already been flushed, where the failure
-        // could no longer be expressed as a status.
-        var script = SseScript.Create().Data(ContentChunk).Done().Done();
+        // docs/TESTING.md's "duplicate terminal event" family, restated. A second `[DONE]` is not a
+        // second completion: the first one ends the protocol response, and everything after it
+        // belongs to a stream that has already finished (ADR 0010). The gate puts the repeat in a
+        // later read, so this is a claim about what AgentSplice asked for rather than about how the
+        // runtime happened to chunk its output.
+        var gate = new UpstreamGate();
+        var delivered = SseScript.Create().Data(ContentChunk).Done();
+        var script = SseScript.Create().Data(ContentChunk).Done().Gate(gate).Done();
 
-        var record = await ProxyAsync(script.Build());
+        var sink = new CapturingExchangeSink();
 
-        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange!.StreamTermination);
+        await using var fixture = await StartAsync(
+            configure: null,
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", script.Build());
+
+        using var response = await SendAsync(fixture);
+
+        // Never released. The response has to complete on the strength of the terminator alone.
+        var body = await ReadWithinAsync(response);
+
+        Assert.Equal(delivered.ToBytes(), body);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(ExchangeStatus.Completed, record.Exchange!.Status);
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange.StreamTermination);
         Assert.Null(record.Exchange.FailureClass);
 
-        // Both terminators reached the client: the runtime sent them, so the client sees them.
-        Assert.Equal(3, record.Exchange.ResponseSummary?.StreamEventCount);
+        // Two events: the content chunk and the terminator that ended the response.
+        Assert.Equal(2, record.Exchange.ResponseSummary?.StreamEventCount);
 
         Assert.Single(record.Observations, o => o.Type == ObservationType.FirstDecodedEvent);
         Assert.Single(record.Observations, o => o.Type == ObservationType.FirstClientEventFlushed);
+        Assert.DoesNotContain(ObservationType.TimeoutFired, record.Observations.Select(o => o.Type));
+
+        await gate.WaitForReachedAsync(WaitBudget);
+    }
+
+    [Fact]
+    public async Task A_runtime_that_stalls_after_the_terminator_does_not_hold_the_client()
+    {
+        // The budgets are set far above the read budget on purpose: if completion needed a timeout,
+        // this test could only pass by waiting thirty seconds for one. It passes in milliseconds,
+        // which is the whole claim — the terminator ended the response, not the transport
+        // (ADR 0010, correcting ADR 0009's "costs latency rather than accuracy").
+        var gate = new UpstreamGate();
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            settings =>
+            {
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:30";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
+            },
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create().Data(ContentChunk).Done().Gate(gate).Build());
+
+        using var response = await SendAsync(fixture);
+
+        var body = await ReadWithinAsync(response);
+
+        Assert.Contains("[DONE]", Encoding.UTF8.GetString(body), StringComparison.Ordinal);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(ExchangeStatus.Completed, record.Exchange!.Status);
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange.StreamTermination);
+        Assert.DoesNotContain(ObservationType.TimeoutFired, record.Observations.Select(o => o.Type));
+
+        // Completion is dated from the terminator, so the stall cannot stretch the upstream duration
+        // or the generation window derived from it.
+        var completed = Timestamp(record, ObservationType.UpstreamCompleted);
+        var clientEvent = Timestamp(record, ObservationType.FirstClientEventFlushed);
+
+        Assert.True(
+            completed - clientEvent < TimeSpan.FromSeconds(10),
+            FormattableString.Invariant($"Upstream completion at {completed} trailed the first client event at {clientEvent}."));
+
+        await gate.WaitForReachedAsync(WaitBudget);
+    }
+
+    [Fact]
+    public async Task A_stream_whose_content_type_carries_a_charset_is_still_a_stream()
+    {
+        // `text/event-stream; charset=utf-8` is the same media type as `text/event-stream`. Read by
+        // whole-string equality it is not, and a conforming runtime's stream silently takes the
+        // buffered path: the bytes still arrive, and every SSE boundary is missing (ADR 0010).
+        var script = SseScript.Create()
+            .WithContentType("Text/Event-Stream; charset=utf-8")
+            .Data(ContentChunk)
+            .Done();
+
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            configure: null,
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", script.Build());
+
+        using var response = await SendAsync(fixture);
+
+        Assert.Equal(script.ToBytes(), await response.Content.ReadAsByteArrayAsync());
+
+        // Relayed exactly as the runtime wrote it. Rewriting the header would be a transformation of
+        // the answer AgentSplice claims to be forwarding unchanged.
+        Assert.Equal(
+            "Text/Event-Stream; charset=utf-8",
+            response.Content.Headers.ContentType?.ToString());
+
+        Assert.Contains("no-cache", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.Ordinal);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.True(record.Exchange!.StreamedResponse);
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange.StreamTermination);
+        Assert.Contains(ObservationType.FirstDecodedEvent, record.Observations.Select(o => o.Type));
+        Assert.Contains(ObservationType.FirstClientEventFlushed, record.Observations.Select(o => o.Type));
+
+        var headers = record.Observations.Single(o => o.Type == ObservationType.UpstreamHeadersReceived);
+
+        Assert.Equal("true", headers.Details.Values["upstream.streamed"]);
+
+        // The evidence keeps the bounded token, not the runtime's whole header.
+        Assert.Equal("text/event-stream", headers.Details.Values["upstream.content_type"]);
     }
 
     [Fact]
@@ -257,13 +371,19 @@ public sealed class ChatCompletionStreamingTests
                 ObservationType.UpstreamConnectionEstablished,
                 ObservationType.UpstreamHeadersReceived,
                 ObservationType.FirstUpstreamByte,
-                ObservationType.FirstDecodedEvent,
+
+                // Flush before decode, because that is the order the pump performs them: bytes reach
+                // the client and only then does anything look at them. The previous expectation had
+                // decode first, which contradicted the relay's own structure (ADR 0010).
                 ObservationType.FirstClientEventFlushed,
+                ObservationType.FirstDecodedEvent,
                 ObservationType.FirstSemanticEvent,
                 ObservationType.UpstreamCompleted,
                 ObservationType.ClientCompleted,
             ],
             record.Observations.Select(observation => observation.Type));
+
+        AssertNonDecreasing(record);
     }
 
     [Fact]
@@ -305,6 +425,13 @@ public sealed class ChatCompletionStreamingTests
 
         Assert.Contains(
             ObservationType.FirstDecodedEvent,
+            record.Observations.Select(observation => observation.Type));
+
+        // Nor a client event. A keepalive is framing a conforming client raises nothing for, so a
+        // boundary here would report a response as having reached the client before it carried
+        // anything at all.
+        Assert.DoesNotContain(
+            ObservationType.FirstClientEventFlushed,
             record.Observations.Select(observation => observation.Type));
     }
 
@@ -420,6 +547,42 @@ public sealed class ChatCompletionStreamingTests
 
     private static DateTimeOffset Timestamp(ExchangeRecord record, ObservationType type) =>
         record.Observations.Single(observation => observation.Type == type).Timestamp;
+
+    /// <summary>Asserts the timeline never runs backwards.</summary>
+    /// <remarks>
+    /// A boundary appended out of order is not a cosmetic problem: every duration in the record is
+    /// the difference between two of these, so one that predates the operation it describes produces
+    /// a negative interval that the measurement layer then drops, and the phase disappears.
+    /// </remarks>
+    private static void AssertNonDecreasing(ExchangeRecord record)
+    {
+        var previous = DateTimeOffset.MinValue;
+
+        foreach (var observation in record.Observations)
+        {
+            Assert.True(
+                observation.Timestamp >= previous,
+                FormattableString.Invariant(
+                    $"'{observation.Type}' at {observation.Timestamp} precedes the boundary before it at {previous}."));
+
+            previous = observation.Timestamp;
+        }
+    }
+
+    /// <summary>
+    /// Reads the whole response, failing rather than hanging if it never ends.
+    /// </summary>
+    /// <remarks>
+    /// The budget is a failure bound, not the assertion. A relay that stops at the protocol
+    /// terminator finishes in milliseconds; one that reads on waits for the runtime's idle budget,
+    /// which these tests deliberately configure far beyond this.
+    /// </remarks>
+    private static async Task<byte[]> ReadWithinAsync(HttpResponseMessage response)
+    {
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        return await response.Content.ReadAsByteArrayAsync(budget.Token);
+    }
 
     private static async Task<ExchangeRecord> ProxyAsync(
         UpstreamResponseScript script,

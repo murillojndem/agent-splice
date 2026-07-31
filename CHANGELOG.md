@@ -4,6 +4,54 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A/1B correctness review
+
+Five defects found by reviewing the finished Stage 1A and Stage 1B slices. None changed what a client
+received; every one changed what AgentSplice said it had observed, which for a diagnostic tool is the
+more serious of the two. Two existing tests had to be replaced rather than extended, because they
+asserted the defective behaviour as the contract. Recorded in
+[ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md), which supersedes
+parts of ADR 0009.
+
+- Stamped each streaming boundary at the operation that produced it. The relay took one clock reading
+  *before* awaiting the upstream read and reused it for the first upstream byte, the first decoded
+  event, the first semantic event, and the first client flush. Four distinct boundaries collapsed
+  onto one instant, and that instant preceded all four: a runtime that thought for twenty seconds had
+  its first byte dated twenty seconds early, and every interval between the four was exactly zero —
+  indistinguishable from a gateway that is infinitely fast and from one that is not measuring at all.
+- Separated the first client event from the first decoded frame. A comment or keepalive may set the
+  decoded boundary and never the client-event boundary, since a conforming client raises no event for
+  it and dating first delivery from a keepalive reports a response as having reached the client
+  before it carried anything.
+- Made the timeline append boundaries in the order they occurred rather than the order they were
+  learned. The relay writes before it decodes, so the flush timestamp is earlier than the decode that
+  revealed it; appending as learned left the timeline running backwards whenever a keepalive and a
+  data event arrived in one read. A negative interval is dropped rather than reported, so the symptom
+  was a whole latency phase disappearing.
+- Stamped the buffered path's first upstream byte inside the body reader's callback. It was read
+  after the whole body had been buffered, so the boundary really named "the body finished" — or, on
+  the failure branches, "the body failed". For a long generation the two are the entire length of the
+  response apart, which is exactly when the boundary is worth having.
+- Moved stream media-type classification into the protocol, matching RFC 9110 rather than comparing
+  the whole header for equality: `text/event-stream; charset=utf-8` is an event stream. The relay and
+  the orchestrator now ask the same implementation the same question instead of repeating a literal.
+- Stopped rewriting the runtime's `Content-Type` on its way to the client. The normalised token kept
+  for evidence was being forwarded, which silently dropped a `charset` a client decodes by and would
+  have discarded a `boundary` a body cannot be parsed without. The header now reaches the client
+  verbatim; the bounded token stays where the bounded token belongs.
+- Inspected `FlushResult` instead of discarding it. `PipeWriter` reports a completed or cancelled
+  pipe without throwing, so a client that stopped consuming could go unnoticed: the relay kept
+  reading the runtime and kept counting bytes as delivered to someone who was gone.
+- Made the first valid `[DONE]` the end of the response. The relay used to read on to EOF or an idle
+  timeout, which ADR 0009 accepted as costing latency but not accuracy. It cost both — completion was
+  dated from whatever ended the transport, so a runtime that lingered after finishing stretched the
+  upstream duration and the generation window derived from it across a stall that produced nothing.
+  No read is issued after the terminator, and a repeat terminator is neither read nor forwarded: a
+  second `[DONE]` is not a second completion. The price is one connection per lingering runtime,
+  which is the right trade.
+- Corrected the public status in `README.md` and `src/README.md`, which still described Stage 0 as
+  current and the host as exposing no HTTP endpoints.
+
 ### Stage 1B — Streaming correctness and timeline
 
 - Added streaming completions (FR-STR-001 to FR-STR-012). A `stream: true` request is forwarded with

@@ -338,8 +338,13 @@ public sealed class ChatCompletionGateway
             .ConfigureAwait(false);
     }
 
+    /// <summary>Whether the runtime answered with an event stream, as the protocol judges it.</summary>
+    /// <remarks>
+    /// Asked of the relay so that one response cannot be classified two ways: this decides what the
+    /// timeline says the runtime did, and the relay decides how the response is read (ADR 0010).
+    /// </remarks>
     private bool IsStream(UpstreamResponseMetadata metadata) =>
-        string.Equals(metadata.ContentType, relay.StreamMediaType, StringComparison.Ordinal);
+        relay.MatchesStreamMediaType(metadata.ContentTypeHeader);
 
     private async Task<ChatCompletionOutcome> ForwardAsync(
         ExchangeRecorder recorder,
@@ -439,7 +444,11 @@ public sealed class ChatCompletionGateway
         var outcome = ChatCompletionOutcome.Relayed(
             recorder,
             metadata.StatusCode,
-            metadata.ContentType ?? JsonMediaType,
+
+            // The runtime's own header, not the normalised token the evidence keeps: a client that
+            // was told `charset=iso-8859-1` decodes by it, and rewriting the value would be a
+            // transformation of the answer AgentSplice claims to be relaying unchanged.
+            metadata.ContentTypeHeader ?? JsonMediaType,
             result.Body,
             target.Id,
             result.RelayedHeaders);

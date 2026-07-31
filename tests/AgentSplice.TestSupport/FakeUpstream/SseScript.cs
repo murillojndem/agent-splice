@@ -16,6 +16,7 @@ namespace AgentSplice.TestSupport.FakeUpstream;
 public sealed class SseScript
 {
     private readonly List<Segment> segments = [];
+    private string contentType = "text/event-stream";
     private string lineEnding = "\n";
     private int? splitEveryBytes;
     private TimeSpan splitDelay;
@@ -30,6 +31,23 @@ public sealed class SseScript
 
     /// <summary>Starts an empty script that uses LF line endings.</summary>
     public static SseScript Create() => new();
+
+    /// <summary>
+    /// Overrides the content type the response is sent with.
+    /// </summary>
+    /// <remarks>
+    /// A runtime may name the same media type in more than one conforming way — a <c>charset</c>
+    /// parameter, a different case — and a gateway that reads the header by string equality treats
+    /// those as a different response entirely. A fixture that can only send the canonical spelling
+    /// cannot show the difference.
+    /// </remarks>
+    public SseScript WithContentType(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+
+        contentType = value;
+        return this;
+    }
 
     /// <summary>Switches to CRLF line endings, which the SSE grammar also permits (FR-STR-005).</summary>
     public SseScript UseCrLf()
@@ -178,7 +196,7 @@ public sealed class SseScript
     public UpstreamResponseScript Build() => new()
     {
         StatusCode = 200,
-        ContentType = "text/event-stream",
+        ContentType = contentType,
         Headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["cache-control"] = "no-cache",

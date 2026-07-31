@@ -74,15 +74,28 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The flush result is the point of the call, not a return value to discard. A pipe whose reader
+    /// has completed or whose flush was cancelled reports it here rather than throwing, so a sink
+    /// that only watched for exceptions kept reading the runtime and kept recording bytes as
+    /// delivered to a client that had stopped listening (ADR 0010).
+    /// </remarks>
     public async ValueTask<ClientWriteResult> WriteAsync(
         ReadOnlyMemory<byte> bytes,
         CancellationToken cancellationToken)
     {
         try
         {
-            await context.Response.BodyWriter.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            var flush = await context.Response.BodyWriter
+                .WriteAsync(bytes, cancellationToken)
+                .ConfigureAwait(false);
 
-            return ClientWriteResult.Written;
+            // IsCompleted: the reader is finished with this pipe, so nothing written after it can
+            // reach the client. IsCanceled: the flush was cut short and these bytes are not known to
+            // have been delivered. Neither is an error, and both mean the same thing to the relay.
+            return flush.IsCanceled || flush.IsCompleted
+                ? ClientWriteResult.ClientGone
+                : ClientWriteResult.Written;
         }
         catch (Exception exception) when (exception is OperationCanceledException or IOException)
         {

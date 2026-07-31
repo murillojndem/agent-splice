@@ -51,16 +51,22 @@ Exit criteria:
 
 ### Stage 1B — Streaming correctness and timeline
 
-Status: complete. See `CHANGELOG.md` and ADR 0009. The relay forwards upstream bytes verbatim and
-observes them as they pass; `AgentSplice.PerformanceTests` remains deferred, because the
+Status: complete. See `CHANGELOG.md`, ADR 0009, and ADR 0010. The relay forwards upstream bytes
+verbatim and observes them as they pass; `AgentSplice.PerformanceTests` remains deferred, because the
 no-full-buffering claim is proven behaviourally by an integration test and gateway-overhead numbers
 are hardware-dependent and must not gate CI.
+
+A review of the finished 1A and 1B slices found five correctness defects in the recorded evidence —
+collapsed boundary timestamps, a buffered first-byte boundary that named body completion,
+whole-string media-type matching, a discarded `FlushResult`, and reading on past the protocol
+terminator. All are corrected, and ADR 0010 supersedes the parts of ADR 0009 that got them wrong.
 
 - incremental SSE parser and writer;
 - `ResponseHeadersRead` upstream client;
 - cancellation and disconnect propagation;
 - separate connect, headers, idle, and total timeout phases;
-- first-byte, first-semantic-event, first-client-event, and completion timestamps;
+- first-byte, first-decoded-event, first-semantic-event, first-client-event, and completion
+  timestamps, each read from the clock at the operation it names;
 - malformed, truncated, split-byte, and multiline SSE fixtures;
 - bounded memory and gateway-overhead measurements.
 

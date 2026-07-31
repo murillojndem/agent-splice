@@ -38,11 +38,16 @@
 - `[DONE]`;
 - usage terminal chunk;
 - duplicate terminal event;
-- client disconnect.
+- a runtime that stalls after the terminator;
+- an event-stream content type carrying a `charset` parameter;
+- client disconnect;
+- a client write that reports the client gone without throwing.
 
 ### Trace and privacy
 
 - timeline event ordering;
+- each boundary stamped at the operation it names, not at a shared instant;
+- timestamps non-decreasing across the whole timeline;
 - unknown timestamps remain absent;
 - measured/reported/estimated provenance;
 - body retention disabled by default;
@@ -162,6 +167,35 @@ share. It is the same principle that keeps the fake upstream free of production 
 A scripted response carrying both a whole body and a sequence of chunks is now refused. Previously
 both were written, so a test that took a whole-body helper and added chunks received a payload it
 never intended, with nothing to say so.
+
+### Proving when a boundary was stamped
+
+A timing boundary is a claim about *which operation* read the clock, and no test that runs against a
+socket can pin that down: the fixture cannot make time pass between the first byte of a body and the
+last on demand, and a test that waited for a real delay would be racing the reader rather than
+asserting on it. Two of the five defects ADR 0010 corrects survived a green suite for exactly this
+reason.
+
+The boundary tests therefore drive the relay and the provider directly, with a controllable
+`TimeProvider` and fakes that advance it *inside* the operation they model — a scripted upstream body
+whose read costs twenty seconds, a client sink whose flush costs five. A boundary stamped before the
+await and one stamped after it are then a wall apart rather than microseconds apart, and no
+accidental pass can squeeze through. The clock also auto-advances on every reading, so two boundaries
+can never share a timestamp by coincidence.
+
+Where a boundary is asserted end to end, it is asserted as an ordering or an absence — never as an
+approximate duration.
+
+### Replaced Stage 1B contracts
+
+Two Stage 1B tests asserted the defective behaviour and were rewritten rather than extended:
+
+- the boundary-order test expected the decoded-event boundary before the client-flush boundary, which
+  contradicted the relay's own write-then-decode structure;
+- the duplicate-terminator test required both terminators to be relayed and three events recorded,
+  which consolidated a runtime anomaly as the contract.
+
+A test that encodes a defect is worse than a missing test: it makes the defect look deliberate.
 
 ## Testcontainers
 

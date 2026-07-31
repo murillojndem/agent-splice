@@ -22,6 +22,20 @@ public interface IStreamEventInterpreter
     /// <summary>The media type this protocol's streamed responses use.</summary>
     string StreamMediaType { get; }
 
+    /// <summary>
+    /// True when a runtime's <c>Content-Type</c> names this protocol's streamed media type.
+    /// </summary>
+    /// <remarks>
+    /// A question for the protocol rather than for the relay. A media type is case-insensitive and
+    /// may carry parameters, so the answer is not string equality, and the rules belong wherever the
+    /// media type itself is defined. One implementation means one answer: the relay and the
+    /// orchestrator cannot drift into classifying the same response two ways.
+    ///
+    /// Classification only. What reaches the client is the runtime's own header value, unchanged.
+    /// </remarks>
+    /// <param name="contentType">The header value as the runtime sent it, or <c>null</c>.</param>
+    bool MatchesStreamMediaType(string? contentType);
+
     /// <summary>Opens interpretation state for one response.</summary>
     /// <remarks>
     /// The interpreter is shared and must stay stateless; the state is per-response. An

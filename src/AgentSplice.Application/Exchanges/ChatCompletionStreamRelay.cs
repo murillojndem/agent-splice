@@ -11,10 +11,15 @@ namespace AgentSplice.Application.Exchanges;
 /// (docs/SPECIFICATION.md FR-STR-001 to FR-STR-012).
 /// </summary>
 /// <remarks>
-/// The order inside the pump is the design. Read, take the clock, write and flush, and only then
-/// decode: nothing AgentSplice does for its own evidence sits between an upstream byte arriving and
-/// that byte reaching the client. That makes bounded flush delay (FR-STR-003) a property of the
-/// structure rather than a promise about how fast the decoder is.
+/// The order inside the pump is the design. Read, write and flush, and only then decode: nothing
+/// AgentSplice does for its own evidence sits between an upstream byte arriving and that byte
+/// reaching the client. That makes bounded flush delay (FR-STR-003) a property of the structure
+/// rather than a promise about how fast the decoder is.
+///
+/// Each of those steps takes its own clock reading, and the boundary it produces is recorded from
+/// that reading alone. Sharing one timestamp across the read, the flush, the decode, and the
+/// semantic classification is cheaper and was how this began; it also made four distinct latencies
+/// indistinguishable from zero (ADR 0010).
 ///
 /// Relaying raw bytes also makes valid SSE free rather than earned. Chunk boundaries are not event
 /// boundaries, a conforming client buffers until the blank line, and no re-encoding can normalise an
@@ -48,6 +53,15 @@ public sealed class ChatCompletionStreamRelay
     /// <summary>The media type this gateway's streamed responses use.</summary>
     public string StreamMediaType => interpreter.StreamMediaType;
 
+    /// <summary>True when a runtime answered with this protocol's streamed media type.</summary>
+    /// <remarks>
+    /// Delegated to the protocol so the orchestrator and the relay cannot classify one response two
+    /// ways. Before this existed both compared the header for equality against a literal, which
+    /// reads a conforming <c>text/event-stream; charset=utf-8</c> as a buffered answer (ADR 0010).
+    /// </remarks>
+    public bool MatchesStreamMediaType(string? contentType) =>
+        interpreter.MatchesStreamMediaType(contentType);
+
     /// <summary>Relays an opened upstream response to the client.</summary>
     public async Task<StreamRelayOutcome> RelayAsync(
         ExchangeRecorder recorder,
@@ -64,12 +78,15 @@ public sealed class ChatCompletionStreamRelay
         var metadata = opened.Response!;
         var upstream = opened.Body!;
 
-        var mediaType = metadata.ContentType ?? StreamRelayPump.FallbackMediaType;
+        // The runtime's own header, parameters and all. Classification below reads the same value
+        // through the protocol's matcher; neither rewrites it, because what the client receives must
+        // be what the runtime said (ADR 0010).
+        var mediaType = metadata.ContentTypeHeader ?? StreamRelayPump.FallbackMediaType;
 
         // The runtime decides whether this is a stream, not the request. A runtime that answers a
         // streaming request with an ordinary body is answering, and relaying that verbatim is the
         // same rule the buffered path follows for a status it did not expect.
-        var streamed = string.Equals(metadata.ContentType, interpreter.StreamMediaType, StringComparison.Ordinal);
+        var streamed = interpreter.MatchesStreamMediaType(metadata.ContentTypeHeader);
 
         await using (upstream.ConfigureAwait(false))
         {

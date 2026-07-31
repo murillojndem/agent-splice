@@ -19,6 +19,9 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
     public string StreamMediaType => OpenAiMediaTypes.EventStream;
 
     /// <inheritdoc />
+    public bool MatchesStreamMediaType(string? contentType) => OpenAiMediaTypes.IsEventStream(contentType);
+
+    /// <inheritdoc />
     public IStreamEventInterpreterState Begin() => new State();
 
     private sealed class State : IStreamEventInterpreterState

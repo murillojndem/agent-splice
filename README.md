@@ -64,24 +64,38 @@ See [Product positioning](docs/PRODUCT_POSITIONING.md) and [ADR 0006](docs/adr/0
 This repository is specification-first. Implementation is intentionally staged.
 
 **Stage 0 — Repository foundation is complete.** The .NET 8 solution exists with enforced module
-boundaries, the Stage 0 domain model for exchanges and evidence, validated configuration, a
-deterministic fake upstream runtime, and CI on Windows and Ubuntu. The gateway host boots and
-validates its configuration but **exposes no HTTP endpoints yet** — a placeholder response would let a
-client mistake an unimplemented gateway for a working one.
+boundaries, the domain model for exchanges and evidence, validated configuration, a deterministic
+fake upstream runtime, and CI on Windows and Ubuntu.
 
-**Stage 1 — Transparent Trace Proxy is next.** It adds `GET /v1/models` and
-`POST /v1/chat/completions` for LM Studio with correct non-streaming and SSE behavior, request
-correlation, metadata capture, latency boundaries, OpenTelemetry, SQLite, and a minimal local
-dashboard. It does **not** require vendor-specific tool-call normalization.
+**Stage 1A — Transparent request path is complete.** `GET /v1/models` and non-streaming
+`POST /v1/chat/completions` are served against an LM Studio runtime. Requests are forwarded without
+semantic rewriting, request correlation is returned on every response, latency boundaries are
+recorded where they were observed, and OpenTelemetry spans and metrics are emitted through
+`System.Diagnostics`.
 
-Later milestones add replay, conformance suites, differential comparison, agentic evaluations, protocol adapters, compatibility adapters, model support packs, client integrations, backend comparisons, and upstream contributions.
+**Stage 1B — Streaming correctness and timeline is complete.** A `stream: true` request is relayed
+byte for byte as it arrives, with SSE framing observed rather than rebuilt, the first upstream byte,
+first decoded event, first semantic output event, and first client flush recorded as four separate
+boundaries, and every way a stream can end classified rather than collapsed. Five correctness defects
+found in reviewing 1A and 1B are corrected in
+[ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md).
 
-No compatibility claim is made for any client, model, or runtime. Support claims require a dated
-conformance report (`docs/CONFORMANCE.md`).
+**Stage 1C — Metadata persistence and minimal dashboard is next.** There is no database and no
+dashboard yet: evidence is built per request and handed to a sink that discards it, so nothing
+survives the process. There are no administrative APIs for traces or exchanges, and no OpenTelemetry
+SDK or exporter is referenced. Replay, conformance orchestration, evaluation, protocol translation,
+and compatibility adapters all belong to later milestones.
+
+No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
+compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
 
 See [Development guide](docs/DEVELOPMENT.md) to build and test.
 
-## Proposed stack
+## Stack
+
+In use today: ASP.NET Core 8 and C# 12, System.Text.Json, Server-Sent Events, `System.Diagnostics`
+spans and metrics, xUnit with architecture, contract, and integration suites. The rest is proposed
+and arrives with the stage that needs it.
 
 - ASP.NET Core 8 and C# 12
 - System.Text.Json
@@ -93,14 +107,16 @@ See [Development guide](docs/DEVELOPMENT.md) to build and test.
 - Docker and Docker Compose
 - React, TypeScript, and Vite for the optional local dashboard
 
-## Initial protocol endpoints
+## Protocol endpoints
+
+Served today:
 
 ```http
 GET  /v1/models
-POST /v1/chat/completions
+POST /v1/chat/completions      # non-streaming and SSE
 ```
 
-Initial administrative APIs expose health, traces/exchanges, timeline metadata, and runtime diagnostics under `/api/v1`. Content retention remains disabled by default.
+Planned administrative APIs expose health, traces/exchanges, timeline metadata, and runtime diagnostics under `/api/v1`. They arrive with Stage 1C, alongside the persistence they read from. Content retention is disabled by default and nothing is retained at all today.
 
 ## Documentation
 

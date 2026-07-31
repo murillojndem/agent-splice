@@ -516,13 +516,17 @@ Requirement identifiers are stable references for issues, commits, tests, and pu
 
 **FR-STR-008** Do not accumulate the complete response to calculate metrics.
 
-**FR-STR-009** Recognize `[DONE]` only according to the active protocol.
+**FR-STR-009** Recognize `[DONE]` only according to the active protocol. The first valid terminator is the logical end of the response: once its bytes have been delivered and the event recognized, no further upstream read shall be issued, upstream completion shall be timestamped at that recognition, and a later terminator shall be neither read nor forwarded (ADR 0010).
 
 **FR-STR-010** Preserve usage terminal chunks when requested and supported.
 
 **FR-STR-011** Distinguish normal completion, client cancellation, upstream cancellation, timeout, malformed event, and connection loss.
 
-**FR-STR-012** Record first upstream byte, first decoded event, first semantic event when observable, and first client flush separately.
+**FR-STR-012** Record first upstream byte, first decoded event, first semantic event when observable, and first client flush separately. Separately means four independent clock readings, each taken at the operation it names: the read that returned bytes, the frame reader returning a complete frame, the interpreter classifying output, and the completion of the write that delivered the first non-comment event. A shared timestamp satisfies the letter of this requirement and defeats its purpose (ADR 0010).
+
+**FR-STR-013** A comment or keepalive frame may set the first-decoded-event boundary and shall not set the first-client-event boundary: a conforming client raises no event for it.
+
+**FR-STR-014** Stream media-type classification shall follow RFC 9110: the media type is compared case-insensitively and parameters are ignored, so `text/event-stream; charset=utf-8` is an event stream. Classification shall not alter the content type forwarded to the client.
 
 ### 7.5 Measurements, provenance, and OpenTelemetry
 

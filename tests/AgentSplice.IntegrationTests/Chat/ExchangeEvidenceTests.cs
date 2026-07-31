@@ -288,6 +288,28 @@ public sealed class ExchangeEvidenceTests
     }
 
     [Fact]
+    public async Task A_body_that_ended_early_keeps_the_first_byte_it_did_produce()
+    {
+        // The failure branches carry the same boundary as the success branch. A truncated answer is
+        // exactly the case where knowing the runtime started replying is worth having.
+        var record = await ProxyFailureAsync(UpstreamResponseScripts.UnderDeliveredContentLength());
+
+        Assert.Contains(
+            ObservationType.FirstUpstreamByte,
+            record.Observations.Select(observation => observation.Type));
+    }
+
+    [Fact]
+    public async Task A_response_that_produced_no_body_records_no_first_byte()
+    {
+        // Absent rather than stamped with the moment the empty read returned: no byte arrived, and a
+        // boundary claiming one would be evidence of an event that never happened (FR-TRACE-006).
+        var record = await ProxyFailureAsync(UpstreamResponseScripts.Status(204));
+
+        AssertAbsent(record, ObservationType.FirstUpstreamByte);
+    }
+
+    [Fact]
     public async Task Establishing_a_connection_is_measured_separately_from_waiting_for_headers()
     {
         // Without this phase, a runtime slow to accept connections and a runtime slow to think are
@@ -389,6 +411,44 @@ public sealed class ExchangeEvidenceTests
         Assert.Equal(2, sink.Records.Count);
 
         return sink.Records;
+    }
+
+    /// <summary>Proxies a script whose outcome is not a success, and returns the evidence.</summary>
+    private static async Task<ExchangeRecord> ProxyFailureAsync(UpstreamResponseScript script)
+    {
+        var sink = new RecordingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", script);
+
+        using var response = await PostAsync(fixture);
+
+        await response.Content.ReadAsByteArrayAsync();
+
+        return Assert.Single(sink.Records);
+    }
+
+    private static Task<GatewayFixture> StartAsync(Action<IServiceCollection> configureServices) =>
+        GatewayFixture.StartAsync(
+            settings =>
+            {
+                settings[GatewayFixture.RuntimeKey(0, "discovery:enabled")] = "false";
+                settings[GatewayFixture.AliasKey(0, "id")] = "local-coder";
+                settings[GatewayFixture.AliasKey(0, "runtimeId")] = GatewayFixture.RuntimeId;
+                settings[GatewayFixture.AliasKey(0, "upstreamModelId")] = "qwen3.6-27b-mtp";
+            },
+            configureServices);
+
+    private static async Task<HttpResponseMessage> PostAsync(GatewayFixture fixture)
+    {
+        using var content = new StringContent(
+            """{"model":"local-coder","messages":[{"role":"user","content":"hi"}]}""",
+            Encoding.UTF8,
+            "application/json");
+
+        return await fixture.Client.PostAsync(new Uri("/v1/chat/completions", UriKind.Relative), content);
     }
 
     private static DateTimeOffset TimestampOf(ExchangeRecord record, ObservationType type) =>

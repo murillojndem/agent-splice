@@ -12,6 +12,12 @@
       directly rather than only through the transport.
     -->
     <ProjectReference Include="..\..\src\AgentSplice.Protocols.OpenAI\AgentSplice.Protocols.OpenAI.csproj" />
+    <!--
+      The provider's timing boundaries are decided inside one body read, so which operation stamped
+      them cannot be pinned down through a socket: a real transport cannot be asked to let time pass
+      between the first byte and the last on demand. A stubbed handler and a controllable clock can.
+    -->
+    <ProjectReference Include="..\..\src\AgentSplice.Providers.LmStudio\AgentSplice.Providers.LmStudio.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -84,6 +84,25 @@ A completion timeline may contain:
 
 Timeline events must be sequence-ordered and immutable. Unknown events must not be invented. Runtime prefill completion is recorded only when a reliable provider/runtime signal exists.
 
+### Where each streaming boundary is stamped
+
+Four boundaries describe the first moments of a streamed response, and they are four different instants. Sharing one clock reading between them — which the first Stage 1B implementation did — makes time to first byte, flush latency, decode cost, and time to first token all exactly zero, which is indistinguishable from not measuring at all (ADR 0010).
+
+| Boundary | The operation it names |
+| --- | --- |
+| first upstream byte | the upstream read returned a positive byte count. Never a reading taken before that read: it would date the moment AgentSplice began waiting. |
+| first client event flushed | the write carrying the bytes that completed the first **non-comment** event finished flushing. |
+| first SSE event decoded | the frame reader handed out its first complete frame. A comment or keepalive counts. |
+| first semantic output event | the protocol interpreter classified a frame as carrying model output. |
+
+A comment or keepalive may set the decoded boundary and must never set the client-event boundary: a conforming client raises no event for it, so dating first delivery from a keepalive would report a response as having reached the client before it carried anything.
+
+Because the relay writes before it decodes, the client-flush boundary is chronologically earlier than the decode boundary it was learned from. Boundaries are appended in the order they occurred, not the order they were learned, so the timeline never runs backwards. Every derived duration depends on that: a negative interval is dropped rather than reported, so an out-of-order boundary does not produce a wrong number — it makes a whole phase disappear.
+
+On the buffered path there is no decode or flush boundary, and the first upstream byte is stamped inside the body reader's first-read callback. Read afterwards, it would name the moment the body finished and file it as the moment it started.
+
+Upstream completion for a streamed response is dated from the protocol terminator when one is observed, not from the transport ending. A runtime that sends `[DONE]` and holds its connection open would otherwise stretch the upstream duration, and the generation window derived from it, across a stall that produced nothing.
+
 ## Latency phases
 
 Always distinguish:
@@ -164,6 +183,10 @@ The streaming instruments record only what a streamed exchange observed. A buffe
 Token instruments record only what a runtime actually reported. Absent usage produces no data point rather than a zero.
 
 `agentsplice.generation.tokens_per_second` is measured over the **observed decode window** — from the first event carrying model output to upstream completion — and therefore excludes the first token's own decode latency while still counting that token. The bias is negligible over a long generation and material over a very short one. It is stated here rather than corrected, because dividing by one fewer token would invent a number the runtime never reported.
+
+The window closes at the protocol terminator, not at transport end, so a runtime that stops generating and keeps its connection open cannot deflate this figure with idle time (ADR 0010).
+
+`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished.
 
 `agentsplice.prompt.tokens_per_second` is **absent by design, not deferred**. Nothing AgentSplice can observe marks the end of prompt processing, so the only interval available is time to first token — which measures the prompt, the queue, and the network together. Publishing that under a prompt-throughput name is exactly the conflation this document forbids. It becomes derivable only with runtime-log evidence (Stage 2E).
 

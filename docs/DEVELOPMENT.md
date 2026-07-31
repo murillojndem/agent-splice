@@ -45,8 +45,8 @@ src/
   AgentSplice.Domain              exchanges, timelines, observations, measurement provenance
   AgentSplice.Application         validated configuration, stable error codes
   AgentSplice.Infrastructure      configuration binding and hosting-adjacent composition
-  AgentSplice.Protocols.OpenAI    OpenAI ingress module (populated in Stage 1A/1B)
-  AgentSplice.Providers.LmStudio  LM Studio provider adapter (populated in Stage 1A)
+  AgentSplice.Protocols.OpenAI    OpenAI ingress module
+  AgentSplice.Providers.LmStudio  LM Studio provider adapter
   AgentSplice.Observability       OpenTelemetry names and instrumentation
   AgentSplice.Api                 composition root and host
 

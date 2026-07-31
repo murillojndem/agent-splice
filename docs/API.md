@@ -64,7 +64,11 @@ Because the bytes are forwarded rather than rebuilt, an event split across netwo
 
 `[DONE]` is recognised only as an entire `data` value, and only as evidence that the stream ended: a chunk whose content happens to be that text is model output and is relayed like any other.
 
-The runtime decides whether a response is a stream. A `stream: true` request answered with an ordinary JSON body — an error, or a runtime that ignores the flag — is relayed unchanged with the runtime's own content type, and the exchange records that it was not streamed.
+The first valid `[DONE]` ends the response. Once its bytes have been flushed and the event recognised, AgentSplice issues no further upstream read, completes the client response, and releases the upstream connection — so a runtime that sends its terminator and then holds the connection open does not make the client wait for an idle timeout, and does not stretch the recorded upstream duration across a stall that produced nothing. A second `[DONE]` is not a second completion: arriving in a later read, it is neither read nor forwarded. Bytes a runtime coalesced behind its own terminator inside a single network read have already been forwarded and are not retracted, but they are not interpreted (ADR 0010).
+
+The runtime decides whether a response is a stream. That decision follows RFC 9110 media-type rules — the type is matched case-insensitively and parameters are ignored, so `text/event-stream; charset=utf-8` is an event stream. A `stream: true` request answered with an ordinary JSON body — an error, or a runtime that ignores the flag — is relayed unchanged with the runtime's own content type, and the exchange records that it was not streamed.
+
+The `Content-Type` written back to the client is the runtime's header verbatim, parameters included. Classification reads it; nothing rewrites it. A normalised copy is kept for evidence and metric dimensions, where an unbounded runtime-chosen parameter does not belong.
 
 Once the first byte has been sent, the status can no longer be changed. From that point a failure is expressed by abandoning the response rather than by an error envelope, because an event stream that stops early but closes cleanly is indistinguishable from a complete one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
 

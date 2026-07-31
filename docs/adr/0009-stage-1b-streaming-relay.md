@@ -1,8 +1,13 @@
 # ADR 0009 — Stage 1B streaming relay and timeline
 
-- Status: Accepted
+- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md)
 - Date: 2026-07-30
 - Related: ADR 0006 (durable core), ADR 0007 (Stage 0 toolchain), ADR 0008 (Stage 1A transparent request path)
+
+> **Superseded in part.** Decision 6's rule for stamping `FirstDecodedEvent` and
+> `FirstClientEventFlushed`, and the second entry under "Known limitations", were reviewed and found
+> to be wrong. ADR 0010 replaces both and explains why. Every other decision here stands. This
+> document is kept as written: the reasoning that produced the error is part of the record.
 
 ## Context
 
@@ -101,8 +106,13 @@ This fixes a live Stage 1A defect: every boundary was stamped when control retur
 `agentsplice.time_to_headers` measured time until the whole body had been read. The metric was
 plausible, published, and wrong — which is worse than absent.
 
-`FirstDecodedEvent` and `FirstClientEventFlushed` are stamped with the *pre-write* timestamp of the
-read that completed the first event, because the write that carried those bytes preceded the decode.
+~~`FirstDecodedEvent` and `FirstClientEventFlushed` are stamped with the *pre-write* timestamp of the
+read that completed the first event, because the write that carried those bytes preceded the
+decode.~~ **Superseded by ADR 0010 decision 1.** The write does precede the decode, but a timestamp
+taken before the read that produced the bytes precedes the arrival of the bytes themselves, so it
+dates neither operation — and reusing it for four boundaries made four latencies indistinguishable
+from zero. Each boundary is now stamped at the operation that produced it.
+
 `FirstSemanticEvent` fires only on the first event carrying output: an OpenAI-compatible stream's
 first chunk usually announces a role, and counting it would make time to first token measure time to
 first chunk.
@@ -265,7 +275,7 @@ and a test:
 | malformed UTF-8 | never decoded, so it is a non-event by construction | — |
 | malformed JSON | classified, relayed, recorded; never thrown | — |
 | excessive nesting | the reader's own depth limit surfaces as a malformed event | `Utf8JsonReader` max depth |
-| duplicate terminals | terminator recognition is idempotent; boundaries fire once | — |
+| duplicate terminals | the first terminator ends the response; a later one is never read (ADR 0010) | — |
 | slowloris | per-read budget, re-armed between reads | `timeouts:idleStream` |
 
 Excessive nesting deserves its own note: an unbounded recursive parser is a stack overflow, and no
@@ -278,6 +288,10 @@ than the mechanism.
 - `WebApplicationFactory` uses `TestServer`, so `DisableBuffering` is a no-op in every integration
   test. The suite proves AgentSplice flushed, not that Kestrel did. End-to-end flush behaviour under
   Kestrel is exercised by the manual local check in the release notes, not by CI.
-- A runtime that sends `[DONE]` and then holds the connection open is read until EOF or the idle
+- ~~A runtime that sends `[DONE]` and then holds the connection open is read until EOF or the idle
   budget, because reading to EOF is what lets the connection be reused. The terminator takes
-  precedence when classifying, so this costs latency rather than accuracy.
+  precedence when classifying, so this costs latency rather than accuracy.~~ **Superseded by ADR 0010
+  decision 8.** It cost accuracy too: upstream completion was dated from whatever ended the
+  transport, so the stall was absorbed into the upstream duration and the generation window derived
+  from it. The first valid `[DONE]` now ends the relay, at the price of one connection per lingering
+  runtime.

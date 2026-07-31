@@ -15,6 +15,9 @@ public sealed record UpstreamResponseMetadata
     /// <summary>Maximum retained length of an upstream request identifier.</summary>
     public const int MaxRequestIdLength = 128;
 
+    /// <summary>Maximum retained length of the relayable content type header.</summary>
+    public const int MaxContentTypeHeaderLength = 256;
+
     private UpstreamResponseMetadata()
     {
     }
@@ -24,6 +27,23 @@ public sealed record UpstreamResponseMetadata
 
     /// <summary>The media type only, with parameters stripped, or <c>null</c> when none was sent.</summary>
     public string? ContentType { get; private init; }
+
+    /// <summary>
+    /// The content type as the runtime sent it, parameters included, or <c>null</c> when none was
+    /// sent.
+    /// </summary>
+    /// <remarks>
+    /// Kept alongside <see cref="ContentType"/> rather than instead of it, because the two answer
+    /// different questions. <see cref="ContentType"/> is the bounded token every decision and every
+    /// trace attribute turns on; this is what gets written back to the client, and rewriting it
+    /// would be a semantic transformation of the runtime's own answer — dropping a
+    /// <c>charset</c> a client decodes by, or a <c>boundary</c> without which a body cannot be
+    /// parsed at all.
+    ///
+    /// Bounded and stripped of control characters, because it reaches a response header verbatim
+    /// and a runtime-supplied value is untrusted text.
+    /// </remarks>
+    public string? ContentTypeHeader { get; private init; }
 
     /// <summary>The runtime's own request identifier, when it sent one (FR-CHAT-010).</summary>
     public string? UpstreamRequestId { get; private init; }
@@ -70,6 +90,7 @@ public sealed record UpstreamResponseMetadata
         {
             StatusCode = statusCode,
             ContentType = NormaliseMediaType(contentType),
+            ContentTypeHeader = Bound(contentType, MaxContentTypeHeaderLength),
             UpstreamRequestId = Bound(upstreamRequestId, MaxRequestIdLength),
             HeadersReceivedAt = headersReceivedAt,
         };

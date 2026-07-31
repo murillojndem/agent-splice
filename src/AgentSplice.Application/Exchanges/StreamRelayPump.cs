@@ -44,8 +44,23 @@ internal sealed class StreamRelayPump
     private int clientEvents;
     private int incompleteEventBytes;
 
+    /// <summary>When the write carrying the most recent bytes finished flushing to the client.</summary>
+    /// <remarks>
+    /// Carried forward rather than passed down, because the frame a flush completed may only be
+    /// recognised in a later drain — at end of stream, the bytes that finish the last event were
+    /// flushed by a write that has already returned.
+    /// </remarks>
+    private DateTimeOffset? lastFlushCompletedAt;
+
+    /// <summary>When the protocol's end-of-stream sentinel was recognised.</summary>
+    private DateTimeOffset terminatorAt;
+
+    // Four separate boundaries, so four separate flags. One shared "saw the first frame" made the
+    // first decode, the first client event, and the first semantic event a single fact recorded at a
+    // single instant, which is precisely what a timeline exists to keep apart (ADR 0010).
     private bool sawFirstByte;
-    private bool sawFirstFrame;
+    private bool sawDecodedFrame;
+    private bool sawClientEvent;
     private bool sawSemanticEvent;
     private bool sawTerminator;
     private bool sawMalformedEvent;
@@ -85,22 +100,41 @@ internal sealed class StreamRelayPump
         {
             while (true)
             {
-                var at = timeProvider.GetUtcNow();
                 var read = await upstream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
 
                 if (read.BytesRead > 0)
                 {
-                    if (await ForwardAsync(buffer.AsMemory(0, read.BytesRead), at, cancellationToken)
+                    // Taken after the read returns, never before it. A clock read before an await is
+                    // a claim about when AgentSplice began waiting, and a runtime that thinks for
+                    // twenty seconds would have its first byte dated twenty seconds early
+                    // (ADR 0010).
+                    var bytesReceivedAt = timeProvider.GetUtcNow();
+
+                    if (!sawFirstByte)
+                    {
+                        sawFirstByte = true;
+                        recorder.Observe(ObservationType.FirstUpstreamByte, bytesReceivedAt);
+                    }
+
+                    if (await ForwardAsync(buffer.AsMemory(0, read.BytesRead), cancellationToken)
                             .ConfigureAwait(false) is { } early)
                     {
                         return early;
+                    }
+
+                    if (sawTerminator)
+                    {
+                        // The protocol said the response was finished, so there is nothing left to
+                        // wait for. Reading on would hold the client open until EOF or an idle
+                        // budget, and would date completion at whichever arrived first.
+                        return ProtocolCompleted();
                     }
 
                     continue;
                 }
 
                 return read.EndOfStream
-                    ? EndOfStream(at)
+                    ? EndOfStream()
                     : Faulted(read.Failure!);
             }
         }
@@ -122,19 +156,17 @@ internal sealed class StreamRelayPump
     /// </summary>
     private async Task<StreamRelayOutcome?> ForwardAsync(
         ReadOnlyMemory<byte> chunk,
-        DateTimeOffset at,
         CancellationToken cancellationToken)
     {
-        if (!sawFirstByte)
-        {
-            sawFirstByte = true;
-            recorder.Observe(ObservationType.FirstUpstreamByte, at);
-        }
-
         if (await client.WriteAsync(chunk, cancellationToken).ConfigureAwait(false) is ClientWriteResult.ClientGone)
         {
             return ClientVanished();
         }
+
+        // The write has flushed, so these bytes are the client's as of now. Held rather than
+        // recorded: bytes are not an event, and the boundary this timestamp belongs to is the first
+        // complete non-comment event they made available.
+        lastFlushCompletedAt = timeProvider.GetUtcNow();
 
         clientBytes += chunk.Length;
         evidence?.Append(chunk.Span);
@@ -157,37 +189,61 @@ internal sealed class StreamRelayPump
                 aborted: true);
         }
 
-        DrainFrames(at);
+        DrainFrames();
 
         return null;
     }
 
-    private void DrainFrames(DateTimeOffset at)
+    /// <summary>
+    /// Reads out every event the arrived bytes completed, recording each boundary at the operation
+    /// that produced it.
+    /// </summary>
+    /// <remarks>
+    /// Three of the four streaming boundaries are decided here, and they are three different
+    /// instants: the client's flush finished before AgentSplice looked at the bytes, decoding
+    /// happened when a frame turned out to be complete, and semantic classification happened after
+    /// the protocol read the payload. Collapsing them onto one timestamp — which is what a single
+    /// pre-read clock reading did — makes time to first token, flush latency, and decode cost
+    /// indistinguishable from each other and from zero (ADR 0010).
+    ///
+    /// Boundaries are appended in the order they occurred rather than the order they were learned.
+    /// The client-event boundary is stamped with a flush that has already returned, so it precedes
+    /// everything else this drain observes and is appended first; a keepalive completing before the
+    /// first data event in the same read would otherwise put the timeline out of order.
+    /// </remarks>
+    private void DrainFrames()
     {
         if (reader is null || interpreter is null)
         {
             return;
         }
 
+        DateTimeOffset? clientEventAt = null;
+        List<(ObservationType Type, DateTimeOffset At)>? decoded = null;
+
         while (reader.TryReadFrame(out var frame))
         {
-            if (!sawFirstFrame)
-            {
-                sawFirstFrame = true;
+            var frameDecodedAt = timeProvider.GetUtcNow();
 
-                // Both at the same instant, deliberately. The bytes that completed this event were
-                // flushed by the write that preceded the decode, so the moment the client first saw
-                // a whole event is the moment those bytes were read — not the later moment
-                // AgentSplice finished recognising them.
-                recorder.Observe(ObservationType.FirstDecodedEvent, at);
-                recorder.Observe(ObservationType.FirstClientEventFlushed, at);
+            if (!sawDecodedFrame)
+            {
+                sawDecodedFrame = true;
+                Defer(ref decoded, ObservationType.FirstDecodedEvent, frameDecodedAt);
             }
 
             // A comment is framing, not delivery: a conforming client raises no event for it, so
-            // counting keepalives would overstate what the client received.
+            // counting keepalives would overstate what the client received — and dating the first
+            // client event from a keepalive would report a response as having reached the client
+            // before it carried anything.
             if (!frame.IsCommentOnly)
             {
                 clientEvents++;
+
+                if (!sawClientEvent && lastFlushCompletedAt is { } flushedAt)
+                {
+                    sawClientEvent = true;
+                    clientEventAt = flushedAt;
+                }
             }
 
             var facts = interpreter.Interpret(frame.EventName, frame.Data);
@@ -195,25 +251,78 @@ internal sealed class StreamRelayPump
             if (facts.IsFirstSemanticOutput && !sawSemanticEvent)
             {
                 sawSemanticEvent = true;
-                recorder.Observe(ObservationType.FirstSemanticEvent, at);
+                Defer(ref decoded, ObservationType.FirstSemanticEvent, timeProvider.GetUtcNow());
             }
 
             if (facts.NativeToolCallsStarted > 0)
             {
-                recorder.Observe(ObservationType.NativeToolCallObserved);
+                Defer(ref decoded, ObservationType.NativeToolCallObserved, timeProvider.GetUtcNow());
             }
 
             sawMalformedEvent |= facts.IsMalformed;
-            sawTerminator |= facts.IsProtocolTerminator;
+
+            if (facts.IsProtocolTerminator)
+            {
+                sawTerminator = true;
+                terminatorAt = timeProvider.GetUtcNow();
+
+                // Nothing after the protocol's own end-of-stream belongs to this response. Bytes the
+                // runtime coalesced behind its terminator have already been forwarded and cannot be
+                // recalled, but interpreting them would extend a response the protocol declared
+                // finished.
+                break;
+            }
+        }
+
+        if (clientEventAt is { } clientEvent)
+        {
+            recorder.Observe(ObservationType.FirstClientEventFlushed, clientEvent);
+        }
+
+        if (decoded is null)
+        {
+            return;
+        }
+
+        foreach (var (type, at) in decoded)
+        {
+            recorder.Observe(type, at);
         }
     }
 
-    private StreamRelayOutcome EndOfStream(DateTimeOffset at)
+    private static void Defer(
+        ref List<(ObservationType Type, DateTimeOffset At)>? observations,
+        ObservationType type,
+        DateTimeOffset at)
+    {
+        observations ??= [];
+        observations.Add((type, at));
+    }
+
+    /// <summary>The protocol declared the response complete, so the relay stops without reading on.</summary>
+    /// <remarks>
+    /// Completion is dated from recognising the terminator rather than from the transport ending.
+    /// A runtime that sends <c>[DONE]</c> and holds the connection open would otherwise stretch the
+    /// upstream duration, and the generation window derived from it, over a stall that produced
+    /// nothing (ADR 0010, superseding ADR 0009's claim that this costs latency but not accuracy).
+    /// </remarks>
+    private StreamRelayOutcome ProtocolCompleted()
+    {
+        recorder.Observe(ObservationType.UpstreamCompleted, terminatorAt);
+
+        // The anomaly still outranks the tidy ending: a stream that carried a malformed event and
+        // then terminated properly is more usefully described by the first fact.
+        return Finish(
+            sawMalformedEvent ? StreamTermination.MalformedEvent : StreamTermination.ProtocolTerminatorReceived,
+            error: null);
+    }
+
+    private StreamRelayOutcome EndOfStream()
     {
         if (reader is not null)
         {
             reader.EndOfStream();
-            DrainFrames(at);
+            DrainFrames();
 
             if (reader.TryTakeIncomplete(out var partial))
             {
@@ -225,7 +334,12 @@ internal sealed class StreamRelayPump
             }
         }
 
-        recorder.Observe(ObservationType.UpstreamCompleted, timeProvider.GetUtcNow());
+        // Dated from the terminator when the final drain found one, so the two ways a protocol-
+        // terminated stream can end — the sentinel mid-read, and the sentinel completed only by end
+        // of stream — agree about when the response finished.
+        recorder.Observe(
+            ObservationType.UpstreamCompleted,
+            sawTerminator ? terminatorAt : timeProvider.GetUtcNow());
 
         if (!streamed)
         {
@@ -244,21 +358,19 @@ internal sealed class StreamRelayPump
         return Finish(termination, error: null);
     }
 
+    /// <summary>
+    /// The stream ended for a reason that is not a clean close.
+    /// </summary>
+    /// <remarks>
+    /// Unreachable after the protocol terminator, because recognising it ends the loop before
+    /// another read is issued. That is the point: a timeout or a reset that arrives after the
+    /// runtime has already said it finished can no longer be reported against it (ADR 0010).
+    /// </remarks>
     private StreamRelayOutcome Faulted(UpstreamFailure failure)
     {
         if (failure.Reason == UpstreamFailureReason.Cancelled)
         {
             return ClientVanished();
-        }
-
-        if (sawTerminator)
-        {
-            // The runtime already declared the stream complete, so whatever happened to the
-            // connection afterwards cost the client nothing. Reporting a failure here would blame a
-            // runtime that had finished its work.
-            recorder.Observe(ObservationType.UpstreamCompleted, timeProvider.GetUtcNow());
-
-            return Finish(StreamTermination.ProtocolTerminatorReceived, error: null);
         }
 
         if (failure.Phase is { } phase)
@@ -287,17 +399,16 @@ internal sealed class StreamRelayPump
     /// The client stopped listening.
     /// </summary>
     /// <remarks>
-    /// Not a cancellation if the protocol terminator has already been delivered: a client that hangs
-    /// up on a conversation it was told had ended did not cancel anything, and recording it as a
-    /// disconnect would make every well-behaved client look like it aborted.
+    /// Reached only before the protocol terminator. A client that hangs up on a conversation it was
+    /// told had ended is not cancelling anything, and it can no longer reach here: recognising the
+    /// terminator ends the relay, so there is no later write for the client to be absent from
+    /// (ADR 0010).
     /// </remarks>
     private StreamRelayOutcome ClientVanished() =>
-        sawTerminator
-            ? Finish(StreamTermination.ProtocolTerminatorReceived, error: null)
-            : Finish(
-                streamed ? StreamTermination.ClientCancelled : StreamTermination.NotApplicable,
-                error: null,
-                clientGone: true);
+        Finish(
+            streamed ? StreamTermination.ClientCancelled : StreamTermination.NotApplicable,
+            error: null,
+            clientGone: true);
 
     private StreamRelayOutcome Finish(
         StreamTermination termination,

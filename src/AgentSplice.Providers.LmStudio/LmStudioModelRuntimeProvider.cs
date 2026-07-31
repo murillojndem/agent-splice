@@ -306,7 +306,13 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
                 metadata);
         }
 
-        var firstByteObserved = false;
+        // Stamped inside the callback rather than after the read returns. Reading the clock
+        // afterwards names the moment the body finished — or the moment it failed — and calls it the
+        // first byte, which for a slow generation is wrong by the whole length of the response
+        // (ADR 0010). Assigned once: a later read must not overwrite the boundary it is not.
+        DateTimeOffset? firstByteAt = null;
+
+        void ObserveFirstByte() => firstByteAt ??= timeProvider.GetUtcNow();
 
         BoundedBodyReader.Result body;
 
@@ -318,7 +324,7 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
                     stream,
                     options.Value.Limits.MaxUpstreamCompletionBodyBytes,
                     response.Content.Headers.ContentLength,
-                    () => firstByteObserved = true,
+                    ObserveFirstByte,
                     total.Token)
                 .ConfigureAwait(false);
         }
@@ -336,10 +342,8 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
                     UpstreamFailureReason.InvalidResponse,
                     details: SafeDetails.Create("upstream.completion", "body.truncated")),
                 metadata,
-                firstByteObserved ? timeProvider.GetUtcNow() : null);
+                firstByteAt);
         }
-
-        var firstByteAt = firstByteObserved ? timeProvider.GetUtcNow() : (DateTimeOffset?)null;
 
         if (body.ExceededLimit)
         {
