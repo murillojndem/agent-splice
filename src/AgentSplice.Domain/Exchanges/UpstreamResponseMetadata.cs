@@ -34,7 +34,32 @@ public sealed record UpstreamResponseMetadata
     public int StatusCode { get; private init; }
 
     /// <summary>The media type only, with parameters stripped, or <c>null</c> when none was sent.</summary>
+    /// <remarks>
+    /// Evidence, and only evidence. It is produced by taking the text before the first semicolon, so
+    /// it records what the runtime appeared to say even when the header as a whole was malformed —
+    /// which is exactly when an operator most wants to see it. It is <em>not</em> proof that the
+    /// header was valid, and nothing may classify a response from it:
+    /// <see cref="ParsedMediaType"/> exists for that.
+    /// </remarks>
     public string? ContentType { get; private init; }
+
+    /// <summary>
+    /// The media type a well-formed <c>Content-Type</c> named, or <c>null</c> when none was sent or
+    /// the header did not conform to RFC 9110.
+    /// </summary>
+    /// <remarks>
+    /// The value protocol classification asks about, and deliberately not
+    /// <see cref="RelayableContentType"/>. Relayability answers "may this header be written to the
+    /// client", which is a transport question with its own length and safety limits; whether the body
+    /// is an event stream is a protocol question and must not inherit those limits. Classifying from
+    /// the relayable value made a conforming stream whose header was merely too long to forward come
+    /// out as a buffered response — no SSE parsing, no terminator handling, and an exchange recording
+    /// "not streamed" while the client was reading events (ADR 0012).
+    ///
+    /// Parsed at construction, from the header as received, before either of the other two values has
+    /// discarded anything.
+    /// </remarks>
+    public string? ParsedMediaType { get; private init; }
 
     /// <summary>
     /// The content type as the runtime sent it, parameters included, or <c>null</c> when it sent
@@ -105,6 +130,7 @@ public sealed record UpstreamResponseMetadata
         {
             StatusCode = statusCode,
             ContentType = NormaliseMediaType(contentType),
+            ParsedMediaType = MediaTypeGrammar.Parse(contentType),
             RelayableContentType = Relayable(contentType),
             UpstreamRequestId = Bound(upstreamRequestId, MaxRequestIdLength),
             HeadersReceivedAt = headersReceivedAt,

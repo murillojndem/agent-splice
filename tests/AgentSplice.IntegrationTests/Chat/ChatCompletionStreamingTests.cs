@@ -570,6 +570,69 @@ public sealed class ChatCompletionStreamingTests
         Assert.Equal(contentType, response.Content.Headers.ContentType?.ToString());
     }
 
+    [Fact]
+    public async Task A_content_type_too_long_to_forward_is_still_an_event_stream()
+    {
+        // The whole point of the split. A header can be a perfectly good `text/event-stream` and
+        // still be too long to write back, and those are separate facts: classifying from the
+        // relayable value made this response take the buffered path while the client sat reading
+        // SSE — no frame parsing, no terminator handling, and an exchange saying it never streamed
+        // (ADR 0012).
+        var contentType = "text/event-stream; note=\"" + new string('a', 1100) + "\"";
+        var gate = new UpstreamGate();
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            settings =>
+            {
+                // Far above the read budget, so completion cannot come from a timeout.
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:30";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
+            },
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create()
+                .WithContentType(contentType)
+                .Data(ContentChunk)
+                .Done()
+                .Gate(gate)
+                .Build());
+
+        using var response = await SendAsync(fixture);
+
+        // Completes on the terminator alone, with the runtime still holding the connection open.
+        var body = await ReadWithinAsync(response);
+
+        Assert.Contains("[DONE]", Encoding.UTF8.GetString(body), StringComparison.Ordinal);
+
+        // Too long to forward, so the client is told the media type rather than the whole header —
+        // narrower than the runtime's answer, and never wrong.
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.ToString());
+        Assert.Contains("no-cache", response.Headers.CacheControl?.ToString() ?? string.Empty, StringComparison.Ordinal);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(ExchangeStatus.Completed, record.Exchange!.Status);
+        Assert.True(record.Exchange.StreamedResponse);
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange.StreamTermination);
+        Assert.Equal(2, record.Exchange.ResponseSummary?.StreamEventCount);
+
+        var types = record.Observations.Select(observation => observation.Type).ToList();
+
+        Assert.Contains(ObservationType.FirstDecodedEvent, types);
+        Assert.Contains(ObservationType.FirstClientEventFlushed, types);
+        Assert.Contains(ObservationType.FirstSemanticEvent, types);
+        Assert.DoesNotContain(ObservationType.TimeoutFired, types);
+
+        var headers = record.Observations.Single(o => o.Type == ObservationType.UpstreamHeadersReceived);
+
+        Assert.Equal("true", headers.Details.Values["upstream.streamed"]);
+
+        await gate.WaitForReachedAsync(WaitBudget);
+    }
+
     private static DateTimeOffset Timestamp(ExchangeRecord record, ObservationType type) =>
         record.Observations.Single(observation => observation.Type == type).Timestamp;
 

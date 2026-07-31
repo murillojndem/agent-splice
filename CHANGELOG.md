@@ -4,6 +4,25 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A/1B correctness review, third pass
+
+One defect, introduced by the previous pass. Recorded in
+[ADR 0012](docs/adr/0012-classification-independent-of-relayability.md), which refines ADR 0011.
+
+- Stopped protocol classification depending on whether the content type could be relayed. Splitting
+  the header into an evidence token and a relayable value was right; asking the relayable one whether
+  the body is an event stream was not. `RelayableContentType` is null when the header is too long to
+  write back, so a conforming `text/event-stream` carrying 1100 characters of parameters was
+  classified as buffered — the client got `text/event-stream` from the fallback and read a stream,
+  while the gateway ran no SSE framing, ignored `[DONE]` and waited for EOF or an idle timeout,
+  recorded no decoded or semantic boundaries, and wrote `upstream.streamed = false` into the evidence.
+  Metadata now carries a third value, `ParsedMediaType`, parsed from the header as received before
+  any bound has discarded anything, and classification uses only that. Relayability answers whether
+  the whole header may be written to the client; it never answered what the body is.
+- Moved the RFC 9110 media-type grammar into `AgentSplice.Domain` so the parse can happen at the
+  moment the header arrives. `OpenAiMediaTypes.IsEventStream` is now one comparison against the
+  parsed media type, which keeps one implementation of the grammar rather than two.
+
 ### Stage 1A/1B correctness review, second pass
 
 Four more defects, found by reviewing the previous pass. Two of them are the same shape as the first

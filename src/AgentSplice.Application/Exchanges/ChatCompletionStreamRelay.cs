@@ -89,7 +89,12 @@ public sealed class ChatCompletionStreamRelay
         // The runtime decides whether this is a stream, not the request. A runtime that answers a
         // streaming request with an ordinary body is answering, and relaying that verbatim is the
         // same rule the buffered path follows for a status it did not expect.
-        var streamed = interpreter.MatchesStreamMediaType(metadata.RelayableContentType);
+        //
+        // Asked of the parsed media type, never of the relayable header. Whether the body is an event
+        // stream is a protocol question; whether the header may be written back is a transport one
+        // with its own limits, and inheriting those made a conforming stream that was merely too long
+        // to forward come out as a buffered response (ADR 0012).
+        var streamed = interpreter.MatchesStreamMediaType(metadata.ParsedMediaType);
 
         await using (upstream.ConfigureAwait(false))
         {

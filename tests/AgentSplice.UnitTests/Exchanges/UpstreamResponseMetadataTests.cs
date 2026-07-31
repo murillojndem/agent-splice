@@ -55,6 +55,29 @@ public sealed class UpstreamResponseMetadataTests
 
         Assert.Null(metadata.RelayableContentType);
         Assert.Equal("text/event-stream", metadata.ContentType);
+
+        // And the response is still an event stream. Relayability answers "may this header be written
+        // back"; it says nothing about what the body is, and letting it decide made a conforming
+        // stream that was merely too long to forward come out as a buffered response (ADR 0012).
+        Assert.Equal("text/event-stream", metadata.ParsedMediaType);
+    }
+
+    [Fact]
+    public void The_parsed_media_type_requires_the_whole_header_to_conform()
+    {
+        // The difference between the two tokens. `ContentType` is the text before the first
+        // semicolon, kept as evidence of what the runtime appeared to say; `ParsedMediaType` is null
+        // unless the whole value parsed, so it cannot be mistaken for proof of validity.
+        var metadata = Create("text/event-stream; ===");
+
+        Assert.Equal("text/event-stream", metadata.ContentType);
+        Assert.Null(metadata.ParsedMediaType);
+    }
+
+    [Fact]
+    public void The_parsed_media_type_is_lowercased_like_the_evidence_token()
+    {
+        Assert.Equal("text/event-stream", Create("Text/Event-Stream; charset=utf-8").ParsedMediaType);
     }
 
     [Theory]

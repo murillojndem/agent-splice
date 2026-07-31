@@ -344,7 +344,7 @@ public sealed class ChatCompletionGateway
     /// timeline says the runtime did, and the relay decides how the response is read (ADR 0010).
     /// </remarks>
     private bool IsStream(UpstreamResponseMetadata metadata) =>
-        relay.MatchesStreamMediaType(metadata.RelayableContentType);
+        relay.MatchesStreamMediaType(metadata.ParsedMediaType);
 
     private async Task<ChatCompletionOutcome> ForwardAsync(
         ExchangeRecorder recorder,

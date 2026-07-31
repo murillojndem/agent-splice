@@ -70,6 +70,8 @@ The runtime decides whether a response is a stream. That decision follows the RF
 
 The `Content-Type` written back to the client is the runtime's header verbatim, parameters included. Classification reads it; nothing rewrites it. A normalised copy is kept for evidence and metric dimensions, where an unbounded runtime-chosen parameter does not belong.
 
+Those limits bound what may be **written back**, and nothing else. Whether the body is an event stream is decided from the media type the header parsed to, so a conforming `text/event-stream` that is too long to forward is still served as a stream — the client is simply told `text/event-stream` rather than the whole header (ADR 0012).
+
 Verbatim within limits, and the limits refuse rather than repair. A content type longer than 1024 characters, or carrying a control character, is not written back at all — the normalised media type is sent instead. Truncating would produce a header the runtime never sent while leaving it looking valid, and a `CR` or `LF` in a header value is a response-splitting attempt rather than a formatting quirk (ADR 0011).
 
 Once the first byte has been sent, the status can no longer be changed. From that point a failure is expressed by abandoning the response rather than by an error envelope, because an event stream that stops early but closes cleanly is indistinguishable from a complete one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.

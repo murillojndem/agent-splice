@@ -1,9 +1,14 @@
 # ADR 0011 — Per-event bounds, terminator precedence, and media-type parsing
 
-- Status: Accepted
+- Status: Accepted, refined by [ADR 0012](0012-classification-independent-of-relayability.md)
 - Date: 2026-07-30
 - Related: ADR 0009 (Stage 1B streaming relay), ADR 0010 (stream boundary and termination semantics)
 - Refines: ADR 0010 decision 8 (same-read post-terminator bytes), ADR 0010 decision 6 (relayed content type)
+
+> **Refined in part.** Decision 4 split the content type into an evidence token and a relayable
+> header, and protocol classification was then wired to the relayable one — so a conforming event
+> stream whose header was merely too long to forward was classified as a buffered response. ADR 0012
+> adds the third value that question actually needs. The split itself stands.
 
 ## Context
 

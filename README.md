@@ -76,10 +76,11 @@ recorded where they were observed, and OpenTelemetry spans and metrics are emitt
 **Stage 1B — Streaming correctness and timeline is complete.** A `stream: true` request is relayed
 byte for byte as it arrives, with SSE framing observed rather than rebuilt, the first upstream byte,
 first decoded event, first semantic output event, and first client flush recorded as four separate
-boundaries, and every way a stream can end classified rather than collapsed. Nine correctness defects
-found in two review passes over 1A and 1B are corrected in
-[ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md) and
-[ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md).
+boundaries, and every way a stream can end classified rather than collapsed. Ten correctness defects
+found in three review passes over 1A and 1B are corrected in
+[ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md),
+[ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md), and
+[ADR 0012](docs/adr/0012-classification-independent-of-relayability.md).
 
 **Stage 1C — Metadata persistence and minimal dashboard is next.** There is no database and no
 dashboard yet: evidence is built per request and handed to a sink that discards it, so nothing

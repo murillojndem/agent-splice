@@ -51,21 +51,23 @@ Exit criteria:
 
 ### Stage 1B — Streaming correctness and timeline
 
-Status: complete. See `CHANGELOG.md`, ADR 0009, ADR 0010, and ADR 0011. The relay forwards upstream
+Status: complete. See `CHANGELOG.md`, ADR 0009, ADR 0010, ADR 0011, and ADR 0012. The relay forwards upstream
 bytes verbatim and observes them as they pass; `AgentSplice.PerformanceTests` remains deferred,
 because the no-full-buffering claim is proven behaviourally by an integration test and
 gateway-overhead numbers are hardware-dependent and must not gate CI.
 
-Two review passes over the finished 1A and 1B slices found nine correctness defects. The first pass
+Three review passes over the finished 1A and 1B slices found ten correctness defects. The first pass
 found five in the recorded evidence — collapsed boundary timestamps, a buffered first-byte boundary
 that named body completion, whole-string media-type matching, a discarded `FlushResult`, and reading
 on past the protocol terminator (ADR 0010, superseding parts of ADR 0009). The second found four more
 in the framing and in the gap between the code and its own documentation — a per-event bound that a
 completed event could slip past, a bound violation that retracted an already-delivered completion,
 media-type parameters accepted unparsed, and a "verbatim" content type that was still being truncated
-(ADR 0011).
+(ADR 0011). The third found one more, introduced by the second: protocol classification had been
+wired to the relayable header, so a conforming event stream whose header was merely too long to
+forward was served as a buffered response (ADR 0012).
 
-Both passes turned up defects a green suite had been reporting as working code, twice because a test
+Every pass turned up defects a green suite had been reporting as working code, twice because a test
 asserted the defective behaviour as the contract. Every correction ships with a test verified to fail
 against a deliberately reintroduced copy of the defect it covers.
 
