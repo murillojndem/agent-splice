@@ -19,6 +19,11 @@ namespace AgentSplice.Application.Streaming;
 /// Only the event under assembly is retained. Complete events are handed out as spans over the same
 /// buffer and released as soon as the caller moves on, so a stream of any length costs the bound on
 /// one event rather than the size of the response (FR-STR-008).
+///
+/// The bound applies to a completed event as well as to one still arriving. Enforcing it on the
+/// unterminated tail alone would let an event that crossed the ceiling in the same append that ended
+/// it reset the tail to nothing and pass — so the limit would hold for every event except the ones
+/// that actually reached it (ADR 0011).
 /// </remarks>
 public sealed class SseFrameReader : IDisposable
 {
@@ -42,13 +47,15 @@ public sealed class SseFrameReader : IDisposable
     private int lastFrameEnd;
     private int frameCount;
     private bool ended;
+    private bool limitExceeded;
     private bool disposed;
 
     /// <summary>Creates a reader bounded to one event's worth of retention.</summary>
     /// <param name="maxEventBytes">
-    /// The bound on the event under assembly. This is the only condition under which the streaming
-    /// path's memory is not already bounded by the read buffer, so exceeding it stops the relay
-    /// rather than degrading it: a bound that kept going would not be a bound.
+    /// The bound on a single event, whether it is still being assembled or has just been completed.
+    /// This is the only condition under which the streaming path's memory is not already bounded by
+    /// the read buffer, so exceeding it stops the relay rather than degrading it: a bound that kept
+    /// going would not be a bound.
     /// </param>
     public SseFrameReader(int maxEventBytes)
     {
@@ -70,12 +77,23 @@ public sealed class SseFrameReader : IDisposable
     public int FrameCount => frameCount;
 
     /// <summary>
-    /// Appends received bytes, returning <c>false</c> when the event under assembly has outgrown its
-    /// bound and the stream must not continue.
+    /// Appends received bytes, returning <c>false</c> when an event has outgrown its bound and the
+    /// stream must not continue.
     /// </summary>
+    /// <remarks>
+    /// Events completed before the violation stay readable through <see cref="TryReadFrame"/>. That
+    /// matters: the bytes that made them were forwarded to the client before this was called, so
+    /// they are evidence whatever happens next — and one of them may be the protocol terminator, in
+    /// which case the response had already ended and nothing behind it can un-end it (ADR 0011).
+    /// </remarks>
     public bool Append(ReadOnlySpan<byte> bytes)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
+
+        if (limitExceeded)
+        {
+            return false;
+        }
 
         if (bytes.IsEmpty)
         {
@@ -88,10 +106,14 @@ public sealed class SseFrameReader : IDisposable
 
         Scan();
 
-        // Checked on the tail rather than before the copy, because the arriving bytes may be exactly
-        // the ones that terminate the event. Refusing beforehand would reject a legitimate event
-        // whose final chunk happens to be large.
-        return PendingBytes <= maxEventBytes;
+        // The tail is checked after the copy rather than before it, because the arriving bytes may be
+        // exactly the ones that terminate the event. Refusing beforehand would reject a legitimate
+        // event whose final chunk happens to be large.
+        //
+        // The tail alone is not the whole answer: a completed event resets it. `Scan` therefore
+        // refuses to advance past an event that is itself over the bound, which leaves those bytes
+        // counted here and reported as the violation they are.
+        return !limitExceeded && PendingBytes <= maxEventBytes;
     }
 
     /// <summary>
@@ -184,9 +206,19 @@ public sealed class SseFrameReader : IDisposable
     /// carriage return arriving as the last byte is left unexamined, because until the next byte
     /// arrives there is no way to tell a lone CR from the first half of a CRLF — and guessing would
     /// split one event into two at a chunk boundary the runtime never chose (FR-STR-004).
+    ///
+    /// Each completed event is measured before it is handed out. Checking only the unterminated tail
+    /// bounds assembly and not the event: an event that crossed the bound in the same append that
+    /// terminated it would reset the tail to nothing and be accepted, so the configured ceiling would
+    /// hold for every event except the ones that reached it (ADR 0011).
     /// </remarks>
     private void Scan()
     {
+        if (limitExceeded)
+        {
+            return;
+        }
+
         var index = scan;
 
         while (index < length)
@@ -223,6 +255,17 @@ public sealed class SseFrameReader : IDisposable
             if (index == lineStart)
             {
                 var end = index + terminatorLength;
+
+                // `lastFrameEnd` is where this event began, so this is its whole length including the
+                // blank line that closed it.
+                if (end - lastFrameEnd > maxEventBytes)
+                {
+                    // Neither enqueued nor stepped over. Leaving `lastFrameEnd` where it is keeps
+                    // these bytes inside `PendingBytes`, so the append that produced them reports the
+                    // violation instead of quietly accepting an event larger than the ceiling.
+                    limitExceeded = true;
+                    break;
+                }
 
                 frameEnds.Enqueue(end);
                 lastFrameEnd = end;

@@ -15,8 +15,16 @@ public sealed record UpstreamResponseMetadata
     /// <summary>Maximum retained length of an upstream request identifier.</summary>
     public const int MaxRequestIdLength = 128;
 
-    /// <summary>Maximum retained length of the relayable content type header.</summary>
-    public const int MaxContentTypeHeaderLength = 256;
+    /// <summary>
+    /// Longest content type that will be written back to a client.
+    /// </summary>
+    /// <remarks>
+    /// Far above the evidence bound and enforced by refusal rather than truncation, because the two
+    /// bounds protect different things. Evidence is trimmed to keep a trace attribute small; a
+    /// response header trimmed in the middle of a quoted parameter or a multipart boundary is not a
+    /// shorter header, it is a different and broken one (ADR 0011).
+    /// </remarks>
+    public const int MaxRelayableContentTypeLength = 1024;
 
     private UpstreamResponseMetadata()
     {
@@ -29,21 +37,28 @@ public sealed record UpstreamResponseMetadata
     public string? ContentType { get; private init; }
 
     /// <summary>
-    /// The content type as the runtime sent it, parameters included, or <c>null</c> when none was
-    /// sent.
+    /// The content type as the runtime sent it, parameters included, or <c>null</c> when it sent
+    /// none or sent one that must not be written back.
     /// </summary>
     /// <remarks>
     /// Kept alongside <see cref="ContentType"/> rather than instead of it, because the two answer
-    /// different questions. <see cref="ContentType"/> is the bounded token every decision and every
-    /// trace attribute turns on; this is what gets written back to the client, and rewriting it
-    /// would be a semantic transformation of the runtime's own answer — dropping a
-    /// <c>charset</c> a client decodes by, or a <c>boundary</c> without which a body cannot be
-    /// parsed at all.
+    /// different questions and are bounded for different reasons. <see cref="ContentType"/> is the
+    /// short token every decision and every trace attribute turns on; this is what gets written back
+    /// to the client, and rewriting it would be a semantic transformation of the runtime's own answer
+    /// — dropping a <c>charset</c> a client decodes by, or a <c>boundary</c> without which a body
+    /// cannot be parsed at all.
     ///
-    /// Bounded and stripped of control characters, because it reaches a response header verbatim
-    /// and a runtime-supplied value is untrusted text.
+    /// Validated, never repaired. A value carrying a control character or exceeding
+    /// <see cref="MaxRelayableContentTypeLength"/> is refused outright and this stays <c>null</c>, so
+    /// the relay falls back to the normalised token rather than forwarding a header that was
+    /// truncated mid-parameter. Running it through the evidence sanitiser instead — which trims,
+    /// substitutes, and truncates — produced a value the documentation called verbatim and was not.
+    ///
+    /// **This value must never reach a log, a span attribute, or <c>SafeDetails</c>.** It is
+    /// unbounded-by-evidence-standards runtime text whose only destination is the wire;
+    /// <see cref="ContentType"/> is what evidence records.
     /// </remarks>
-    public string? ContentTypeHeader { get; private init; }
+    public string? RelayableContentType { get; private init; }
 
     /// <summary>The runtime's own request identifier, when it sent one (FR-CHAT-010).</summary>
     public string? UpstreamRequestId { get; private init; }
@@ -90,7 +105,7 @@ public sealed record UpstreamResponseMetadata
         {
             StatusCode = statusCode,
             ContentType = NormaliseMediaType(contentType),
-            ContentTypeHeader = Bound(contentType, MaxContentTypeHeaderLength),
+            RelayableContentType = Relayable(contentType),
             UpstreamRequestId = Bound(upstreamRequestId, MaxRequestIdLength),
             HeadersReceivedAt = headersReceivedAt,
         };
@@ -115,6 +130,51 @@ public sealed record UpstreamResponseMetadata
         var mediaType = separator < 0 ? contentType : contentType[..separator];
 
         return Bound(mediaType.Trim().ToLowerInvariant(), 128);
+    }
+
+    /// <summary>
+    /// Accepts a content type for relaying to the client, or refuses it.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <see cref="Bound"/>. That method exists to make a runtime string safe to put
+    /// in a trace, and every one of its transformations is wrong here: truncating at 256 characters
+    /// can cut a quoted parameter or a multipart boundary in half, and substituting a control
+    /// character produces a header the runtime never sent while leaving it looking valid.
+    ///
+    /// Trimming is not one of those transformations. RFC 9110 section 5.5 excludes leading and
+    /// trailing whitespace from a field value, so removing it recovers the value rather than
+    /// altering it.
+    ///
+    /// A control character means refusal rather than repair: <c>CR</c> or <c>LF</c> in a header value
+    /// is a response-splitting attempt, and the honest answer to one is to relay the normalised media
+    /// type instead of whatever the runtime was trying to smuggle.
+    /// </remarks>
+    private static string? Relayable(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType))
+        {
+            return null;
+        }
+
+        var trimmed = contentType.Trim();
+
+        if (trimmed.Length > MaxRelayableContentTypeLength)
+        {
+            return null;
+        }
+
+        foreach (var character in trimmed)
+        {
+            // Horizontal tab excepted: RFC 9110 permits it inside a field value as optional
+            // whitespace, so `text/event-stream\t;\tcharset=utf-8` is legal and refusing it would
+            // cost fidelity for no security gain. Every other control character is refused.
+            if (char.IsControl(character) && character != '\t')
+            {
+                return null;
+            }
+        }
+
+        return trimmed;
     }
 
     /// <summary>

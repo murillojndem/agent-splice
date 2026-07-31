@@ -226,6 +226,58 @@ public sealed class ChatCompletionStreamFailureTests
     }
 
     [Fact]
+    public async Task A_complete_event_larger_than_its_bound_is_stopped_too()
+    {
+        // The bound applied only to an event still being assembled, so an oversized event that
+        // arrived whole — terminated by its own blank line in the same read — reset the pending count
+        // to nothing and sailed through. The ceiling held for every event except the ones that
+        // reached it (ADR 0011).
+        //
+        // Note the trailing blank line: the sibling test above deliberately sends an unterminated
+        // event, which is the case that always worked. Written as one segment and kept small enough
+        // to arrive in a single read, so the oversized event really does complete in the append that
+        // takes it over the ceiling — split across reads it would trip the pending-bytes check
+        // instead and prove nothing.
+        var record = await StreamAndRecordAsync(
+            SseScript.Create()
+                .Raw("data: " + new string('x', 300) + "\n\ndata: [DONE]\n\n")
+                .Build(),
+            settings => settings["agentsplice:limits:maxStreamEventBytes"] = "256");
+
+        Assert.Equal(StreamTermination.LimitExceeded, record.Exchange!.StreamTermination);
+        Assert.Equal(FailureClass.InvalidUpstreamStream, record.Exchange.FailureClass);
+
+        // Never handed to the interpreter, so it was never counted as delivered either.
+        Assert.Equal(0, record.Exchange.ResponseSummary?.StreamEventCount);
+    }
+
+    [Fact]
+    public async Task An_oversized_event_behind_the_terminator_does_not_undo_the_completion()
+    {
+        // The bound used to be enforced before the completed events of the same read were drained, so
+        // trailing garbage could retract a `[DONE]` the client had already received and report
+        // InvalidUpstreamStream for a stream that terminated correctly. The terminator's bytes were
+        // written before anything looked at them; nothing behind it can un-end the response
+        // (ADR 0010, ADR 0011).
+        // One segment, so the terminator and the offending tail genuinely share a read. Scripted as
+        // three writes they would usually arrive separately, the relay would stop at the terminator
+        // before ever seeing the tail, and the test would pass without exercising anything.
+        var record = await StreamAndRecordAsync(
+            SseScript.Create()
+                .Raw("data: " + ContentChunk + "\n\ndata: [DONE]\n\ndata: " + new string('x', 300))
+                .Build(),
+            settings => settings["agentsplice:limits:maxStreamEventBytes"] = "256");
+
+        Assert.Equal(ExchangeStatus.Completed, record.Exchange!.Status);
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, record.Exchange.StreamTermination);
+        Assert.Null(record.Exchange.FailureClass);
+
+        var completed = record.Observations.Single(o => o.Type == ObservationType.ClientCompleted);
+
+        Assert.Equal("observed", completed.Details.Values["stream.terminator"]);
+    }
+
+    [Fact]
     public async Task An_event_larger_than_its_bound_does_not_end_the_client_transfer_cleanly()
     {
         await using var fixture = await StartAsync(settings =>

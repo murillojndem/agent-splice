@@ -80,13 +80,16 @@ public sealed class ChatCompletionStreamRelay
 
         // The runtime's own header, parameters and all. Classification below reads the same value
         // through the protocol's matcher; neither rewrites it, because what the client receives must
-        // be what the runtime said (ADR 0010).
-        var mediaType = metadata.ContentTypeHeader ?? StreamRelayPump.FallbackMediaType;
+        // be what the runtime said (ADR 0010). The normalised token is the fallback for a header the
+        // domain refused to relay, which is a narrower answer rather than a wrong one.
+        var mediaType = metadata.RelayableContentType
+            ?? metadata.ContentType
+            ?? StreamRelayPump.FallbackMediaType;
 
         // The runtime decides whether this is a stream, not the request. A runtime that answers a
         // streaming request with an ordinary body is answering, and relaying that verbatim is the
         // same rule the buffered path follows for a status it did not expect.
-        var streamed = interpreter.MatchesStreamMediaType(metadata.ContentTypeHeader);
+        var streamed = interpreter.MatchesStreamMediaType(metadata.RelayableContentType);
 
         await using (upstream.ConfigureAwait(false))
         {

@@ -1,9 +1,14 @@
 # ADR 0010 — Correct stream boundary and termination semantics
 
-- Status: Accepted
+- Status: Accepted, refined by [ADR 0011](0011-per-event-bounds-and-media-type-parsing.md)
 - Date: 2026-07-30
 - Related: ADR 0008 (Stage 1A transparent request path), ADR 0009 (Stage 1B streaming relay)
 - Supersedes: ADR 0009 decision 6 in part, ADR 0009's second known limitation in full
+
+> **Refined in part.** Decision 5's media-type matcher skipped the parameters rather than parsing
+> them, and decision 6's relayed content type was still passing through the evidence sanitiser. ADR
+> 0011 corrects both, and extends decision 8's "nothing behind the terminator un-ends the response"
+> to a per-event bound violation in the same read. Every decision here stands as stated.
 
 ## Context
 

@@ -514,7 +514,7 @@ Requirement identifiers are stable references for issues, commits, tests, and pu
 
 **FR-STR-007** Stage 1 malformed-stream policy shall terminate with a stable error/observation; it shall not silently repair semantic content.
 
-**FR-STR-008** Do not accumulate the complete response to calculate metrics.
+**FR-STR-008** Do not accumulate the complete response to calculate metrics. The per-event ceiling shall bound a completed event as well as one still being assembled: a bound checked only against the unterminated tail is reset by the event that completes, so it holds for every event except the ones that reach it (ADR 0011).
 
 **FR-STR-009** Recognize `[DONE]` only according to the active protocol. The first valid terminator is the logical end of the response: once its bytes have been delivered and the event recognized, no further upstream read shall be issued, upstream completion shall be timestamped at that recognition, and a later terminator shall be neither read nor forwarded (ADR 0010).
 
@@ -524,9 +524,11 @@ Requirement identifiers are stable references for issues, commits, tests, and pu
 
 **FR-STR-012** Record first upstream byte, first decoded event, first semantic event when observable, and first client flush separately. Separately means four independent clock readings, each taken at the operation it names: the read that returned bytes, the frame reader returning a complete frame, the interpreter classifying output, and the completion of the write that delivered the first non-comment event. A shared timestamp satisfies the letter of this requirement and defeats its purpose (ADR 0010).
 
-**FR-STR-013** A comment or keepalive frame may set the first-decoded-event boundary and shall not set the first-client-event boundary: a conforming client raises no event for it.
+**FR-STR-013** A frame a conforming client dispatches no event for — a comment, a bare `id`, a `retry` directive, an `event` name with no payload — may set the first-decoded-event boundary and shall not set the first-client-event boundary, nor count as a delivered event. A `data` field with an empty value does dispatch, and does count.
 
-**FR-STR-014** Stream media-type classification shall follow RFC 9110: the media type is compared case-insensitively and parameters are ignored, so `text/event-stream; charset=utf-8` is an event stream. Classification shall not alter the content type forwarded to the client.
+**FR-STR-014** Stream media-type classification shall follow the RFC 9110 grammar. The media type is two tokens separated by a solidus and compared case-insensitively, and the parameters shall be parsed rather than skipped: `text/event-stream; charset=utf-8` is an event stream and `text/event-stream; ===` is not a media type at all. An empty parameter is conforming, because the grammar writes `parameters = *( OWS ";" OWS [ parameter ] )` with the parameter optional. Classification shall not alter the content type forwarded to the client (ADR 0011).
+
+**FR-STR-015** A bound violation shall not retract a completion the client already holds. Events completed earlier in the same read as the violation shall be interpreted before the bound is enforced, and where one of them is the protocol terminator the response shall be recorded as terminated rather than as an invalid stream. A violation that precedes the terminator still ends the stream (ADR 0011).
 
 ### 7.5 Measurements, provenance, and OpenTelemetry
 

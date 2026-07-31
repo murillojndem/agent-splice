@@ -35,6 +35,9 @@ public sealed class StreamRelayBoundaryTests
     private static readonly TimeSpan Stall = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan FlushCost = TimeSpan.FromSeconds(5);
 
+    /// <summary>A per-event ceiling small enough for one read to cross deliberately.</summary>
+    private const int StreamEventBound = 512;
+
     private const string RoleChunk = """{"choices":[{"index":0,"delta":{"role":"assistant"}}]}""";
     private const string ContentChunk = """{"choices":[{"index":0,"delta":{"content":"hello"}}]}""";
     private const string ToolChunk =
@@ -272,6 +275,52 @@ public sealed class StreamRelayBoundaryTests
     }
 
     [Fact]
+    public async Task A_terminator_survives_an_oversized_event_behind_it_in_the_same_read()
+    {
+        // The bytes of `[DONE]` were written to the client before anything looked at them, so by the
+        // time the tail crosses the ceiling the response has already ended. Enforcing the bound
+        // before draining let a runtime's trailing garbage retract a completion the client already
+        // held, and reported InvalidUpstreamStream for a stream that terminated correctly
+        // (ADR 0011).
+        var clock = Clock();
+        var sink = Sink(clock);
+
+        var body = new ScriptedUpstreamBody(
+            clock,
+            [Chunk(Event(ContentChunk) + Event("[DONE]") + "data: " + new string('x', StreamEventBound))]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, sink, StreamEventBound);
+
+        Assert.Equal(StreamTermination.ProtocolTerminatorReceived, outcome.Termination);
+        Assert.True(outcome.ProtocolTerminatorObserved);
+        Assert.Null(outcome.Error);
+        Assert.False(outcome.Aborted);
+        Assert.Equal(2, outcome.ClientEvents);
+        Assert.False(sink.Aborted);
+    }
+
+    [Fact]
+    public async Task An_oversized_event_ahead_of_the_terminator_still_ends_the_stream()
+    {
+        // The other side of the same rule. The violation came first, so there is no completion to
+        // protect and the bound wins — a client must not be handed a stream that stops early and
+        // closes as though it were whole.
+        var clock = Clock();
+        var sink = Sink(clock);
+
+        var body = new ScriptedUpstreamBody(
+            clock,
+            [Chunk("data: " + new string('x', StreamEventBound) + "\n\n" + Event("[DONE]"))]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, sink, StreamEventBound);
+
+        Assert.Equal(StreamTermination.LimitExceeded, outcome.Termination);
+        Assert.False(outcome.ProtocolTerminatorObserved);
+        Assert.NotNull(outcome.Error);
+        Assert.True(sink.Aborted);
+    }
+
+    [Fact]
     public async Task A_stream_that_ends_without_a_terminator_still_completes_normally()
     {
         // Preserved deliberately: not every OpenAI-compatible runtime sends the sentinel, and
@@ -376,19 +425,28 @@ public sealed class StreamRelayBoundaryTests
     private static Task<StreamRelayOutcome> RelayOutcomeAsync(
         FakeTimeProvider clock,
         ScriptedUpstreamBody body,
-        RecordingClientSink sink) =>
-        RelayAsync(clock, Recorder(clock), body, sink);
+        RecordingClientSink sink,
+        int? maxStreamEventBytes = null) =>
+        RelayAsync(clock, Recorder(clock), body, sink, maxStreamEventBytes);
 
     private static Task<StreamRelayOutcome> RelayAsync(
         FakeTimeProvider clock,
         ExchangeRecorder recorder,
         ScriptedUpstreamBody body,
-        RecordingClientSink sink)
+        RecordingClientSink sink,
+        int? maxStreamEventBytes = null)
     {
+        var options = new AgentSpliceOptions();
+
+        if (maxStreamEventBytes is { } bound)
+        {
+            options.Limits.MaxStreamEventBytes = bound;
+        }
+
         var relay = new ChatCompletionStreamRelay(
             new OpenAiStreamEventInterpreter(),
             new OpenAiChatCompletionResponseCodec(),
-            Options.Create(new AgentSpliceOptions()),
+            Options.Create(options),
             clock);
 
         var metadata = UpstreamResponseMetadata.Create(200, clock.GetUtcNow(), "text/event-stream");

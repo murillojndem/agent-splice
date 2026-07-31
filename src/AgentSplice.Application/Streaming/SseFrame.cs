@@ -56,6 +56,18 @@ public readonly ref struct SseFrame
     /// </remarks>
     public bool IsComplete { get; }
 
-    /// <summary>True when the event carried no <c>data</c> field at all: a comment or keepalive.</summary>
-    public bool IsCommentOnly => DataLineCount == 0;
+    /// <summary>
+    /// True when a conforming client dispatches an event for this frame.
+    /// </summary>
+    /// <remarks>
+    /// The SSE grammar dispatches nothing when the data buffer is empty, which is every frame
+    /// carrying no <c>data</c> field at all — a comment, a bare <c>id</c>, a <c>retry</c> directive,
+    /// or an <c>event</c> name with no payload. A frame with an empty <c>data</c> value <em>does</em>
+    /// dispatch, because its buffer holds a line feed rather than nothing.
+    ///
+    /// Named for dispatch rather than for comments because the set is wider than comments, and this
+    /// is what the first-client-event boundary and the delivered-event count are keyed on: calling it
+    /// "comment only" invited both to be read as covering keepalives alone (ADR 0011).
+    /// </remarks>
+    public bool DispatchesClientEvent => DataLineCount > 0;
 }

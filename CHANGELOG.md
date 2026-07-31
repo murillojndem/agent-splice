@@ -4,6 +4,43 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1A/1B correctness review, second pass
+
+Four more defects, found by reviewing the previous pass. Two of them are the same shape as the first
+round one layer down: a bound enforced in the ordinary case and skipped in the interesting one, and a
+claim in the documentation that the code did not quite honour. Recorded in
+[ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md), which refines ADR 0010.
+
+- Bounded a **completed** streamed event, not only one still being assembled. The frame reader checked
+  the bytes after the last complete frame, and completing a frame resets that count — so an event that
+  crossed `maxStreamEventBytes` in the same append that carried its terminating blank line was
+  accepted in full. The ceiling held for every event except the ones that reached it. Each frame is
+  now measured as it completes, and an oversized one is neither handed out nor stepped over.
+- Stopped a bound violation from retracting a completion the client already holds. The relay enforced
+  the bound before draining, so a `[DONE]` that completed earlier in the same read was discarded
+  unread and the exchange was recorded as `InvalidUpstreamStream` — for a stream that had terminated
+  correctly, whose terminator bytes the client had already received. Draining now precedes
+  enforcement, and the terminator wins. A violation *ahead* of the terminator still ends the stream:
+  there is no completion to protect, and a client must not be handed a truncated stream that closes
+  as though it were whole.
+- Parsed the content-type parameters instead of skipping them. The previous fix took everything before
+  the first semicolon and compared it, which accepted `text/event-stream; ===` — the mirror image of
+  the whole-string equality it replaced. Classification now validates the full RFC 9110 grammar, with
+  no `System.Net.Http` dependency, since an architecture test keeps transport types out of the
+  protocol modules. `text/event-stream;` stays valid: the grammar writes the parameter itself as
+  optional, and refusing it would reject a legal sender.
+- Made the relayed `Content-Type` actually verbatim. It was still passing through the evidence
+  sanitiser, which truncates at 256 characters — and a header cut there ends inside a quoted parameter
+  or halves a multipart `boundary`, producing a header the runtime never sent. The relayed value is
+  now validated rather than repaired: over 1024 characters or carrying a control character it is
+  refused outright and the normalised media type is sent instead, which says less than the runtime did
+  rather than something untrue. The two values are bounded for their own reasons and by their own
+  rules.
+- Renamed `SseFrame.IsCommentOnly` to `DispatchesClientEvent`. The logic was right — the SSE grammar
+  dispatches nothing when the data buffer is empty — but the name covered a bare `id`, a `retry`
+  directive, and an `event` name with no payload as well, and invited the delivered-event count to be
+  read as excluding keepalives alone.
+
 ### Stage 1A/1B correctness review
 
 Five defects found by reviewing the finished Stage 1A and Stage 1B slices. None changed what a client

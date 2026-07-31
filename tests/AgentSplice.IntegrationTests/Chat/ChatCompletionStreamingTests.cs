@@ -545,6 +545,31 @@ public sealed class ChatCompletionStreamingTests
         Assert.Equal(8 * 1024 + 1, record.Exchange.ResponseSummary?.StreamEventCount);
     }
 
+    [Fact]
+    public async Task A_long_content_type_reaches_the_client_whole()
+    {
+        // "Verbatim" was not verbatim: the relayed value went through the evidence sanitiser, which
+        // truncates at 256 characters. A header cut there is not a shorter header — it ends inside a
+        // quoted parameter, and a client parsing a halved `boundary` gets a body it cannot read
+        // (ADR 0011).
+        var contentType = "text/event-stream; charset=utf-8; note=\"" + new string('a', 400) + "\"";
+
+        Assert.True(contentType.Length > 256);
+
+        var script = SseScript.Create()
+            .WithContentType(contentType)
+            .Data(ContentChunk)
+            .Done();
+
+        await using var fixture = await StartAsync();
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", script.Build());
+
+        using var response = await SendAsync(fixture);
+
+        Assert.Equal(script.ToBytes(), await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(contentType, response.Content.Headers.ContentType?.ToString());
+    }
+
     private static DateTimeOffset Timestamp(ExchangeRecord record, ObservationType type) =>
         record.Observations.Single(observation => observation.Type == type).Timestamp;
 

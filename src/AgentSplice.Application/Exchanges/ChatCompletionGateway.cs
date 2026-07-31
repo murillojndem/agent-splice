@@ -344,7 +344,7 @@ public sealed class ChatCompletionGateway
     /// timeline says the runtime did, and the relay decides how the response is read (ADR 0010).
     /// </remarks>
     private bool IsStream(UpstreamResponseMetadata metadata) =>
-        relay.MatchesStreamMediaType(metadata.ContentTypeHeader);
+        relay.MatchesStreamMediaType(metadata.RelayableContentType);
 
     private async Task<ChatCompletionOutcome> ForwardAsync(
         ExchangeRecorder recorder,
@@ -447,8 +447,10 @@ public sealed class ChatCompletionGateway
 
             // The runtime's own header, not the normalised token the evidence keeps: a client that
             // was told `charset=iso-8859-1` decodes by it, and rewriting the value would be a
-            // transformation of the answer AgentSplice claims to be relaying unchanged.
-            metadata.ContentTypeHeader ?? JsonMediaType,
+            // transformation of the answer AgentSplice claims to be relaying unchanged. A header the
+            // domain refused to relay falls back to the token, which says less rather than something
+            // untrue.
+            metadata.RelayableContentType ?? metadata.ContentType ?? JsonMediaType,
             result.Body,
             target.Id,
             result.RelayedHeaders);

@@ -176,22 +176,29 @@ internal sealed class StreamRelayPump
             return null;
         }
 
-        if (!reader.Append(chunk.Span))
-        {
-            // AgentSplice's own bound, not the runtime's misbehaviour. The client is abandoned
-            // rather than closed politely, because an event stream that stops early but ends
-            // cleanly at the HTTP level is indistinguishable from a complete one.
-            client.Abort();
+        var withinBounds = reader.Append(chunk.Span);
 
-            return Finish(
-                StreamTermination.LimitExceeded,
-                GatewayErrorCatalogue.For(FailureClass.InvalidUpstreamStream),
-                aborted: true);
-        }
-
+        // Drained before the bound is enforced, never after. Events that completed earlier in this
+        // same read were already written to the client and are evidence whatever the rest of the read
+        // turned out to contain — and if one of them is the protocol terminator, the response had
+        // ended before the offending bytes arrived. Enforcing first would let a runtime's trailing
+        // garbage retract a completion the client had already been given (ADR 0011).
         DrainFrames();
 
-        return null;
+        if (sawTerminator || withinBounds)
+        {
+            return null;
+        }
+
+        // AgentSplice's own bound, not the runtime's misbehaviour. The client is abandoned rather
+        // than closed politely, because an event stream that stops early but ends cleanly at the HTTP
+        // level is indistinguishable from a complete one.
+        client.Abort();
+
+        return Finish(
+            StreamTermination.LimitExceeded,
+            GatewayErrorCatalogue.For(FailureClass.InvalidUpstreamStream),
+            aborted: true);
     }
 
     /// <summary>
@@ -231,11 +238,11 @@ internal sealed class StreamRelayPump
                 Defer(ref decoded, ObservationType.FirstDecodedEvent, frameDecodedAt);
             }
 
-            // A comment is framing, not delivery: a conforming client raises no event for it, so
-            // counting keepalives would overstate what the client received — and dating the first
-            // client event from a keepalive would report a response as having reached the client
-            // before it carried anything.
-            if (!frame.IsCommentOnly)
+            // A frame a conforming client dispatches nothing for is framing, not delivery — a
+            // comment, a bare `id`, a `retry` directive. Counting those would overstate what the
+            // client received, and dating the first client event from one would report a response as
+            // having reached the client before it carried anything.
+            if (frame.DispatchesClientEvent)
             {
                 clientEvents++;
 

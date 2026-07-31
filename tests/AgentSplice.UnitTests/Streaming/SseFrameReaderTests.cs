@@ -17,6 +17,9 @@ public sealed class SseFrameReaderTests
 {
     private const int Bound = 64 * 1024;
 
+    /// <summary>A ceiling small enough to cross deliberately, for the bound tests.</summary>
+    private const int SmallBound = 1024;
+
     [Fact]
     public void One_event_per_read_is_recognised()
     {
@@ -159,7 +162,7 @@ public sealed class SseFrameReaderTests
         Assert.True(reader.Append(": keepalive\n\n"u8));
 
         Assert.True(reader.TryReadFrame(out var frame));
-        Assert.True(frame.IsCommentOnly);
+        Assert.False(frame.DispatchesClientEvent);
         Assert.Equal(0, frame.DataLineCount);
     }
 
@@ -203,14 +206,34 @@ public sealed class SseFrameReaderTests
     }
 
     [Fact]
-    public void An_id_or_retry_field_frames_an_event_and_carries_no_data()
+    public void An_id_or_retry_field_frames_an_event_a_client_dispatches_nothing_for()
     {
+        // Not a comment, and still not a delivery. The SSE grammar dispatches nothing when the data
+        // buffer is empty, which is why this is keyed on dispatch rather than on the frame looking
+        // like a keepalive.
         using var reader = new SseFrameReader(Bound);
 
         Assert.True(reader.Append("id: 7\nretry: 3000\n\n"u8));
 
         Assert.True(reader.TryReadFrame(out var frame));
-        Assert.True(frame.IsCommentOnly);
+        Assert.False(frame.DispatchesClientEvent);
+    }
+
+    [Fact]
+    public void An_empty_data_value_still_dispatches_an_event()
+    {
+        // The awkward edge of the grammar: `data:` with no value leaves a line feed in the data
+        // buffer, not nothing, so a conforming client dispatches an event carrying an empty string.
+        // Keying delivery on "carries no data field" rather than "carries no bytes" is what gets this
+        // right.
+        using var reader = new SseFrameReader(Bound);
+
+        Assert.True(reader.Append("data:\n\n"u8));
+
+        Assert.True(reader.TryReadFrame(out var frame));
+        Assert.True(frame.DispatchesClientEvent);
+        Assert.Equal(1, frame.DataLineCount);
+        Assert.True(frame.Data.IsEmpty);
     }
 
     [Fact]
@@ -295,6 +318,119 @@ public sealed class SseFrameReaderTests
         Assert.Single(Drain(reader));
 
         Assert.False(reader.TryTakeIncomplete(out _));
+    }
+
+    [Fact]
+    public void An_event_that_crosses_the_bound_before_it_ends_is_refused()
+    {
+        // The straightforward half: the unterminated tail outgrows the ceiling and the reader says so
+        // at the append that took it over.
+        using var reader = new SseFrameReader(SmallBound);
+
+        Assert.False(reader.Append(Encoding.UTF8.GetBytes("data: " + new string('x', SmallBound))));
+    }
+
+    [Fact]
+    public void An_event_that_crosses_the_bound_in_the_append_that_ends_it_is_still_refused()
+    {
+        // The half that was missing. Completing an event resets the unterminated tail to nothing, so
+        // a reader that only measured the tail accepted any oversized event whose final chunk also
+        // carried its blank line — the ceiling held for every event except the ones that reached it
+        // (ADR 0011).
+        using var reader = new SseFrameReader(SmallBound);
+
+        // Ten bytes short of the ceiling, and still legitimately in progress.
+        Assert.True(reader.Append(Encoding.UTF8.GetBytes("data: " + new string('x', SmallBound - 16))));
+
+        // These bytes both cross the ceiling and terminate the event.
+        Assert.False(reader.Append(Encoding.UTF8.GetBytes(new string('x', 100) + "\n\n")));
+
+        // And the oversized event is never handed out.
+        Assert.Empty(Drain(reader));
+    }
+
+    [Fact]
+    public void An_event_exactly_at_the_bound_is_accepted()
+    {
+        // The boundary is inclusive, so a runtime that sizes its events to the configured ceiling is
+        // not punished for landing exactly on it.
+        var payload = "data: " + new string('x', SmallBound - 8) + "\n\n";
+
+        Assert.Equal(SmallBound, Encoding.UTF8.GetByteCount(payload));
+
+        using var reader = new SseFrameReader(SmallBound);
+
+        Assert.True(reader.Append(Encoding.UTF8.GetBytes(payload)));
+        Assert.Single(Drain(reader));
+    }
+
+    [Fact]
+    public void Many_small_events_totalling_more_than_the_bound_are_accepted()
+    {
+        // The bound is per event, not per stream. A reader that accumulated would stop a perfectly
+        // ordinary long response after the first megabyte of it.
+        using var reader = new SseFrameReader(SmallBound);
+
+        for (var appended = 0; appended < SmallBound * 4; appended += 64)
+        {
+            Assert.True(reader.Append(Encoding.UTF8.GetBytes("data: " + new string('x', 56) + "\n\n")));
+            Assert.Single(Drain(reader));
+        }
+    }
+
+    [Fact]
+    public void A_large_event_split_across_many_reads_is_refused_at_the_read_that_crosses_the_bound()
+    {
+        using var reader = new SseFrameReader(SmallBound);
+
+        var chunk = Encoding.UTF8.GetBytes(new string('x', 64));
+
+        Assert.True(reader.Append("data: "u8));
+
+        var eventBytes = "data: ".Length;
+
+        while (true)
+        {
+            eventBytes += chunk.Length;
+
+            if (!reader.Append(chunk))
+            {
+                break;
+            }
+
+            // Nothing over the ceiling is ever accepted, at any chunk boundary the sender chooses.
+            Assert.True(
+                eventBytes <= SmallBound,
+                FormattableString.Invariant($"{eventBytes} bytes were accepted for one event bounded at {SmallBound}."));
+        }
+
+        // And the refusal came from crossing the ceiling rather than from something else.
+        Assert.True(eventBytes > SmallBound);
+    }
+
+    [Fact]
+    public void Events_completed_before_a_violation_are_still_readable()
+    {
+        // Load-bearing for the relay: those bytes were already written to the client, and one of them
+        // may be the protocol terminator. Discarding them would let a runtime's trailing garbage
+        // retract a completion the client had already been given (ADR 0011).
+        using var reader = new SseFrameReader(SmallBound);
+
+        var payload = "data: first\n\ndata: " + new string('x', SmallBound);
+
+        Assert.False(reader.Append(Encoding.UTF8.GetBytes(payload)));
+        Assert.Equal(["first"], Drain(reader));
+    }
+
+    [Fact]
+    public void A_reader_that_refused_once_refuses_everything_after()
+    {
+        // A bound that resumed after being crossed would not be a bound.
+        using var reader = new SseFrameReader(SmallBound);
+
+        Assert.False(reader.Append(Encoding.UTF8.GetBytes("data: " + new string('x', SmallBound))));
+        Assert.False(reader.Append("\n\n"u8));
+        Assert.False(reader.Append("data: small\n\n"u8));
     }
 
     private static List<string> Drain(SseFrameReader reader)

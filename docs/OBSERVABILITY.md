@@ -91,11 +91,11 @@ Four boundaries describe the first moments of a streamed response, and they are 
 | Boundary | The operation it names |
 | --- | --- |
 | first upstream byte | the upstream read returned a positive byte count. Never a reading taken before that read: it would date the moment AgentSplice began waiting. |
-| first client event flushed | the write carrying the bytes that completed the first **non-comment** event finished flushing. |
+| first client event flushed | the write carrying the bytes that completed the first event a client **dispatches** finished flushing. |
 | first SSE event decoded | the frame reader handed out its first complete frame. A comment or keepalive counts. |
 | first semantic output event | the protocol interpreter classified a frame as carrying model output. |
 
-A comment or keepalive may set the decoded boundary and must never set the client-event boundary: a conforming client raises no event for it, so dating first delivery from a keepalive would report a response as having reached the client before it carried anything.
+A frame a conforming client dispatches no event for — a comment, a bare `id`, a `retry` directive, an `event` name with no payload — may set the decoded boundary and must never set the client-event boundary, because dating first delivery from one would report a response as having reached the client before it carried anything. A `data` field with an empty value does dispatch and does count: its buffer holds a line feed rather than nothing.
 
 Because the relay writes before it decodes, the client-flush boundary is chronologically earlier than the decode boundary it was learned from. Boundaries are appended in the order they occurred, not the order they were learned, so the timeline never runs backwards. Every derived duration depends on that: a negative interval is dropped rather than reported, so an out-of-order boundary does not produce a wrong number — it makes a whole phase disappear.
 
@@ -186,7 +186,7 @@ Token instruments record only what a runtime actually reported. Absent usage pro
 
 The window closes at the protocol terminator, not at transport end, so a runtime that stops generating and keeps its connection open cannot deflate this figure with idle time (ADR 0010).
 
-`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished.
+`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished. The same holds for bytes behind a per-event bound violation in that read: the terminator that preceded it still ends the exchange normally (ADR 0011).
 
 `agentsplice.prompt.tokens_per_second` is **absent by design, not deferred**. Nothing AgentSplice can observe marks the end of prompt processing, so the only interval available is time to first token — which measures the prompt, the queue, and the network together. Publishing that under a prompt-throughput name is exactly the conflation this document forbids. It becomes derivable only with runtime-log evidence (Stage 2E).
 

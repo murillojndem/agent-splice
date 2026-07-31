@@ -39,7 +39,11 @@
 - usage terminal chunk;
 - duplicate terminal event;
 - a runtime that stalls after the terminator;
+- an event larger than its bound, both unterminated and completed in the same read;
+- an oversized event behind the terminator in the same read;
 - an event-stream content type carrying a `charset` parameter;
+- a malformed content type that still names the right media type;
+- a valid content type longer than the evidence bound;
 - client disconnect;
 - a client write that reports the client gone without throwing.
 
@@ -146,6 +150,20 @@ disconnect. Each is asserted twice — once against the frame reader in isolatio
 through the gateway with an independent client-side parser.
 
 Still owed: persistence-failure behaviour (Stage 1C).
+
+### Added by the Stage 1A/1B correctness reviews
+
+The per-event bound is asserted at every shape that reaches it — unterminated, completed in the append
+that crosses the ceiling, exactly on it, split across reads, and many small events whose total exceeds
+it — because a bound enforced in the ordinary case and skipped in the interesting one looks exactly
+like a bound that works. The interaction between the bound and the protocol terminator is asserted in
+both directions: a violation behind `[DONE]` does not retract the completion, and one ahead of it
+still ends the stream.
+
+Media-type classification is asserted against the RFC 9110 grammar rather than against a list of
+strings that happen to work, including the malformed values that name the right media type
+(`text/event-stream; ===`) and the empty-parameter production the grammar permits
+(`text/event-stream;`).
 
 ### Stage 1B fixture additions
 
