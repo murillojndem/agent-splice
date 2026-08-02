@@ -128,6 +128,18 @@ indistinguishable to a caller who cannot see the store, and separating them woul
 the surface which of their guesses were well-formed. An exchange expired by retention answers the same
 way, which is what it is.
 
+Every `/api/v1` route requires authorization. A request from a loopback address is allowed — it came
+from this machine, which is the deployment AgentSplice is built for, and requiring a token there would
+make looking at your own traces need secret management. A request from anywhere else must carry
+`Authorization: Bearer <token>`, where the token is read from the environment variable named by
+`agentsplice:administration:apiKeyEnvironmentVariable`; the setting holds a variable name and never a
+secret. The comparison is constant-time, and a failure answers `401`
+`agentsplice_administration_unauthorized` rather than `404`, so an operator with a wrong token can
+tell a typo from a route that does not exist.
+
+Startup validation refuses a non-loopback binding with no token configured, so the dangerous
+combination has to be chosen rather than forgotten (FR-HEALTH-006).
+
 `/health/live` and `/health/ready` sit outside `/api/v1` because they serve an orchestrator rather
 than a dashboard. Liveness touches nothing and answers `204`: a probe that consulted a runtime would
 restart the gateway whenever the model server was slow, turning a diagnosable outage into a crash loop
@@ -213,6 +225,7 @@ Administrative:
 - `agentsplice_exchange_not_found`
 - `agentsplice_invalid_query`
 - `agentsplice_persistence_disabled`
+- `agentsplice_administration_unauthorized`
 
 These are produced only by `/api/v1` and are deliberately not part of the core set. The core codes are
 the completion path's vocabulary and are kept the same size as `FailureClass`, so that no failure

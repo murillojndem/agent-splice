@@ -36,6 +36,9 @@ public sealed class AgentSpliceOptions
     /// <summary>Liveness and readiness policy.</summary>
     public HealthOptions Health { get; set; } = new();
 
+    /// <summary>Who may read the administrative surface.</summary>
+    public AdministrationOptions Administration { get; set; } = new();
+
     /// <summary>Configured model runtimes.</summary>
     public IList<RuntimeEndpointOptions> Runtimes { get; set; } = new List<RuntimeEndpointOptions>();
 

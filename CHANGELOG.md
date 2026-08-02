@@ -4,6 +4,38 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1C, part 5: administrative authentication
+
+- Every `/api/v1` route now requires authorization, applied to the route group so a route added later
+  cannot be added unprotected by forgetting. A loopback caller is allowed — that is the deployment
+  AgentSplice is built for, and requiring a token there would make reading your own traces need secret
+  management first. Anything else needs `Authorization: Bearer <token>`, compared in constant time
+  against a value read from the environment variable named by the settings; the setting holds a
+  variable name and never a secret.
+- Startup refuses a network binding with no token rather than warning about it. A warning in a startup
+  log is a message read once, if the level happens to be right, on the deployment least likely to be
+  watched. A bare `HTTP_PORTS`, a wildcard host, and `0.0.0.0` all count as network bindings — that is
+  what a container publishing a port produces, which is exactly the case worth catching.
+- `/health/live` and `/health/ready` stay outside the group. A liveness probe that failed closed on a
+  misconfigured token would restart a healthy process.
+
+### Stage 1C, part 4: system, runtimes, model catalogue, and health
+
+- `GET /api/v1/system`, `/runtimes`, `/models`, `/health/runtimes`, plus `/health/live` and
+  `/health/ready`.
+- Health is derived from the same discovery the request path uses rather than probed separately. A
+  second prober would double the load on every runtime and could disagree with what routing sees, and
+  a health page saying a runtime is fine while completions to it fail is a page an operator believes.
+  A runtime nothing has consulted reports `unknown` with no `checkedAt`.
+- That rule caught a defect in the catalogue: `reachable` was a required boolean, and a runtime with
+  discovery disabled reported `true` having never been asked. It is nullable now — `false` would read
+  as unreachable for a runtime that is fully usable through its aliases, and `true` was an assertion
+  nothing supported.
+- `/api/v1/models` reports `created` as absent where `/v1/models` emits `0`. The zero is a
+  substitution the OpenAI schema forces and belongs to that envelope alone.
+- Readiness requires a reachable runtime only when asked to, and the default is off: a gateway whose
+  runtime is down is still correctly configured and is still the component able to report the outage.
+
 ### Stage 1C, part 3: the exchange, timeline, and observation APIs
 
 The evidence became readable. Parts 1 and 2 moved it from "discarded" to "stored and reachable only

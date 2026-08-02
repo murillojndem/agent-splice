@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Configuration;
 
 namespace AgentSplice.Api.Hosting;
@@ -35,5 +36,59 @@ internal static class LoopbackBindingDefault
         return string.IsNullOrWhiteSpace(configuration[UrlsKey])
             && string.IsNullOrWhiteSpace(configuration[HttpPortsKey])
             && string.IsNullOrWhiteSpace(configuration[HttpsPortsKey]);
+    }
+
+    /// <summary>
+    /// True when this host will listen somewhere a machine other than this one can reach.
+    /// </summary>
+    /// <remarks>
+    /// Read from the same three keys the default consults, because those are the ones that actually
+    /// decide where Kestrel binds. A bare port in HTTP_PORTS means every interface, and so does a
+    /// wildcard, <c>0.0.0.0</c>, or <c>[::]</c> in a URL — a container publishing a port produces
+    /// exactly that, which is why this has to be a decision an operator makes rather than one a
+    /// deployment falls into (FR-HEALTH-006, docs/SECURITY.md).
+    ///
+    /// Errs towards "reachable" for anything it cannot classify. A wrong answer in that direction
+    /// costs a startup failure naming the setting; the other direction costs an unauthenticated
+    /// administrative API on a network.
+    /// </remarks>
+    internal static bool ListensBeyondLoopback(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        if (ShouldApply(configuration))
+        {
+            return false;
+        }
+
+        // A port list names no host at all, which means every interface.
+        if (!string.IsNullOrWhiteSpace(configuration[HttpPortsKey])
+            || !string.IsNullOrWhiteSpace(configuration[HttpsPortsKey]))
+        {
+            return true;
+        }
+
+        foreach (var url in (configuration[UrlsKey] ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!IsLoopbackUrl(url.Trim()))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsLoopbackUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed))
+        {
+            // Unparsable, so unclassifiable, so treated as reachable.
+            return false;
+        }
+
+        return parsed.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6
+            ? IPAddress.TryParse(parsed.Host, out var address) && IPAddress.IsLoopback(address)
+            : string.Equals(parsed.Host, "localhost", StringComparison.OrdinalIgnoreCase);
     }
 }

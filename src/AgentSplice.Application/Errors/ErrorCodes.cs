@@ -61,6 +61,9 @@ public static class ErrorCodes
     /// <summary>This deployment retains no exchange metadata, so there is nothing to read.</summary>
     public const string PersistenceDisabled = "agentsplice_persistence_disabled";
 
+    /// <summary>The caller may not read the administrative surface.</summary>
+    public const string AdministrationUnauthorized = "agentsplice_administration_unauthorized";
+
     /// <summary>Every Stage 1 core error code. Verified against docs/API.md by a contract test.</summary>
     public static FrozenSet<string> Core { get; } = new[]
     {
@@ -94,6 +97,7 @@ public static class ErrorCodes
         ExchangeNotFound,
         InvalidQuery,
         PersistenceDisabled,
+        AdministrationUnauthorized,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>Every code this build may put in an error envelope.</summary>

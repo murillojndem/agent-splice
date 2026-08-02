@@ -203,10 +203,15 @@ public sealed class ExchangeApiTests
             await ProxyAsync(fixture);
         }
 
-        var first = await WaitForAsync(
+        // Wait for all three to be written before paging. Waiting only for the first page to fill
+        // would let the second page see a store that was still growing, which is a race the cursor
+        // is supposed to survive but not the thing this test is asserting.
+        await WaitForAsync(
             fixture,
-            "/api/v1/exchanges?limit=2",
-            document => document.GetProperty("items").GetArrayLength() == 2);
+            "/api/v1/exchanges",
+            document => document.GetProperty("items").GetArrayLength() == 3);
+
+        var first = await ReadJsonAsync(fixture, "/api/v1/exchanges?limit=2");
 
         var cursor = first.GetProperty("nextCursor").GetString();
         Assert.NotNull(cursor);

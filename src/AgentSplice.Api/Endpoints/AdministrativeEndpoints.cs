@@ -1,4 +1,5 @@
 using AgentSplice.Api.Correlation;
+using AgentSplice.Api.Hosting;
 using AgentSplice.Application.Administration;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,7 +19,8 @@ internal static class AdministrativeEndpoints
 {
     internal static WebApplication MapAdministrativeEndpoints(this WebApplication app)
     {
-        var api = app.MapGroup("/api/v1");
+        // On the group, so a route added later cannot be added unprotected by forgetting.
+        var api = app.MapGroup("/api/v1").AddEndpointFilter<AdministrationAuthorization>();
 
         api.MapGet("/system", GetSystem);
         api.MapGet("/runtimes", ListRuntimes);

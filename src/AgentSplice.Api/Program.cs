@@ -16,6 +16,11 @@ if (LoopbackBindingDefault.ShouldApply(builder.Configuration))
     builder.WebHost.UseUrls(LoopbackBindingDefault.Urls);
 }
 
+// A gateway reachable from the network must not serve its stored evidence to whoever asks. Refused
+// here rather than warned about, so the dangerous combination has to be chosen rather than forgotten
+// (FR-HEALTH-006, docs/SECURITY.md "Require authentication when listening on a non-loopback address").
+AdministrationBindingGuard.Verify(builder.Configuration);
+
 // A local model can legitimately produce one token every few seconds, which is below Kestrel's
 // default minimum response rate of 240 bytes/s. Left at the default, Kestrel aborts the response
 // mid-stream, and AgentSplice would record that as a client disconnect — blaming the client for a
@@ -36,6 +41,9 @@ builder.Services.AddOpenAiCompatibilityProtocol();
 builder.Services.AddLmStudioProvider();
 builder.Services.AddAgentSpliceObservability();
 builder.Services.AddCompletionConcurrencyLimit();
+
+// Resolved per request by the endpoint filter on the /api/v1 group.
+builder.Services.AddSingleton<AdministrationAuthorization>();
 
 // Last resort only. The gateways translate their own faults into an error carrying correlation
 // identifiers; this exists so that a fault escaping the pipeline still produces the stable envelope

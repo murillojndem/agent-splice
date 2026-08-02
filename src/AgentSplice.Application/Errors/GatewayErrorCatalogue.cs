@@ -171,6 +171,18 @@ public static class GatewayErrorCatalogue
         404,
         "No exchange with that identifier is retained.");
 
+    /// <summary>The caller may not read the administrative surface (FR-HEALTH-006).</summary>
+    /// <remarks>
+    /// 401 rather than 404. Hiding the surface would be security through a fiction the OpenAPI draft
+    /// publishes anyway, and it would leave an operator with a wrong token unable to tell a typo from
+    /// a route that does not exist. The message names no configuration and echoes nothing presented.
+    /// </remarks>
+    public static GatewayError AdministrationUnauthorized { get; } = GatewayError.Create(
+        ErrorCodes.AdministrationUnauthorized,
+        ErrorTypes.InvalidRequest,
+        401,
+        "The administrative API requires a bearer token when reached from a non-loopback address.");
+
     /// <summary>The deployment retains nothing, so a read of stored evidence has no answer.</summary>
     /// <remarks>
     /// Not an empty page. FR-DATA-001 makes ephemeral operation a supported deployment, so "no
