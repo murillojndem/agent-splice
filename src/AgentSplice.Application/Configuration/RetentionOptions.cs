@@ -15,4 +15,15 @@ public sealed class RetentionOptions
 
     /// <summary>How long sanitised content is kept, when content capture is enabled at all.</summary>
     public TimeSpan Content { get; set; } = TimeSpan.FromDays(1);
+
+    /// <summary>
+    /// How often expired evidence is swept.
+    /// </summary>
+    /// <remarks>
+    /// A retention window is a promise about what is not kept, and a promise nothing acts on is a
+    /// setting rather than a policy. Hourly by default: frequent enough that a 30-day window is
+    /// honoured to within a rounding error, rare enough that the sweep is never competing with the
+    /// writer for the same database.
+    /// </remarks>
+    public TimeSpan SweepInterval { get; set; } = TimeSpan.FromHours(1);
 }

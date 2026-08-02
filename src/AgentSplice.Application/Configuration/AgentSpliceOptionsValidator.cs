@@ -71,6 +71,16 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
                     $"agentsplice:persistence:connectionString is required when the mode is '{persistence.Mode}'."));
         }
 
+        // Refused rather than quietly served by SQLite. FR-DATA-003 commits to PostgreSQL through the
+        // same contracts and the model is kept provider-neutral for it, but no provider ships yet, and
+        // a deployment that asked for PostgreSQL and silently got a local file would have no way to
+        // find out until it went looking for its data.
+        if (persistence.Mode == PersistenceMode.Postgres)
+        {
+            failures.Add(
+                "agentsplice:persistence:mode 'Postgres' has no provider in this build. Use 'Sqlite' or 'None'; PostgreSQL arrives with the provider that implements it (FR-DATA-003).");
+        }
+
         if (persistence.MetadataQueueCapacity <= 0)
         {
             failures.Add(
@@ -119,23 +129,20 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
             failures.Add("agentsplice:capture:retention:content must be greater than zero.");
         }
 
-        if (!capture.ContentEnabled)
-        {
-            return;
-        }
-
-        // Content capture is the one setting that moves prompts and model output out of process
-        // memory. If it is on, it has to be on deliberately and completely.
-        if (options.Persistence.Mode == PersistenceMode.None)
+        if (capture.Retention.SweepInterval <= TimeSpan.Zero)
         {
             failures.Add(
-                "agentsplice:capture:contentEnabled is true but agentsplice:persistence:mode is 'None'; content capture requires a configured store.");
+                "agentsplice:capture:retention:sweepInterval must be greater than zero; a retention window nothing sweeps is a setting rather than a policy.");
         }
 
-        if (!capture.MetadataEnabled)
+        // Refused, not merely constrained. No code sanitises or stores content, so accepting the flag
+        // tells an operator that prompts and model output are being retained under a sanitiser that
+        // does not exist — the same reason the adapters flag is refused (FR-DATA-005, FR-DATA-006,
+        // ADR 0004). It becomes a real setting in the slice that implements sanitisation.
+        if (capture.ContentEnabled)
         {
             failures.Add(
-                "agentsplice:capture:contentEnabled is true but agentsplice:capture:metadataEnabled is false; content without its exchange metadata is not attributable.");
+                "agentsplice:capture:contentEnabled must be false. Content capture requires sanitisation, authorization, and independent retention, none of which exist in this build; enabling the flag would claim prompts are being retained safely when nothing retains them at all.");
         }
     }
 

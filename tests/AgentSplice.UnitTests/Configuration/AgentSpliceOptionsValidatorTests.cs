@@ -291,33 +291,37 @@ public sealed class AgentSpliceOptionsValidatorTests
     }
 
     [Fact]
-    public void Content_capture_without_a_store_fails()
+    public void Content_capture_is_refused_by_a_build_that_cannot_sanitise()
     {
+        // It used to be accepted whenever a store was configured, which told an operator that
+        // prompts and model output were being retained under a sanitiser that does not exist. The
+        // flag becomes a real setting in the slice that implements sanitisation, authorization, and
+        // independent retention (FR-DATA-005, FR-DATA-006, ADR 0004).
         var options = Valid();
-        options.Persistence.Mode = PersistenceMode.None;
-        options.Persistence.ConnectionString = null;
         options.Capture.ContentEnabled = true;
 
-        AssertFailure(options, "content capture requires a configured store");
+        AssertFailure(options, "contentEnabled must be false");
     }
 
     [Fact]
-    public void Content_capture_without_metadata_capture_fails()
+    public void An_unimplemented_persistence_mode_is_refused_rather_than_served_by_sqlite()
     {
+        // FR-DATA-003 commits to PostgreSQL through the same contracts and the model is kept
+        // provider-neutral for it, but no provider ships. A deployment that asked for PostgreSQL and
+        // silently got a local file would find out by going looking for its data.
         var options = Valid();
-        options.Capture.ContentEnabled = true;
-        options.Capture.MetadataEnabled = false;
+        options.Persistence.Mode = PersistenceMode.Postgres;
 
-        AssertFailure(options, "not attributable");
+        AssertFailure(options, "has no provider in this build");
     }
 
     [Fact]
-    public void Content_capture_with_a_store_and_metadata_is_accepted_as_an_explicit_opt_in()
+    public void The_retention_sweep_interval_must_be_positive()
     {
         var options = Valid();
-        options.Capture.ContentEnabled = true;
+        options.Capture.Retention.SweepInterval = TimeSpan.Zero;
 
-        Assert.True(Validate(options).Succeeded);
+        AssertFailure(options, "sweepInterval must be greater than zero");
     }
 
     [Fact]

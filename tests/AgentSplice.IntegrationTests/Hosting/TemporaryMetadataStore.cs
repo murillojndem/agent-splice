@@ -41,10 +41,24 @@ internal sealed class TemporaryMetadataStore : IDisposable
     }
 
     /// <summary>Opens a context for reading what the gateway wrote.</summary>
-    internal AgentSpliceDbContext OpenContext() =>
-        new(new DbContextOptionsBuilder<AgentSpliceDbContext>()
+    internal AgentSpliceDbContext OpenContext() => new(Options());
+
+    /// <summary>A factory for the services that take one, outside a host.</summary>
+    internal IDbContextFactory<AgentSpliceDbContext> ContextFactory() => new Factory(Options());
+
+    private DbContextOptions<AgentSpliceDbContext> Options() =>
+        new DbContextOptionsBuilder<AgentSpliceDbContext>()
             .UseSqlite(ConnectionString)
-            .Options);
+            .Options;
+
+    private sealed class Factory : IDbContextFactory<AgentSpliceDbContext>
+    {
+        private readonly DbContextOptions<AgentSpliceDbContext> options;
+
+        internal Factory(DbContextOptions<AgentSpliceDbContext> options) => this.options = options;
+
+        public AgentSpliceDbContext CreateDbContext() => new(options);
+    }
 
     public void Dispose()
     {

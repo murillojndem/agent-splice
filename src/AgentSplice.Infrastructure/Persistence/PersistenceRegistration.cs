@@ -47,6 +47,7 @@ public static class PersistenceRegistration
         // a database whose tables do not exist yet.
         services.AddHostedService<MetadataStoreInitializer>();
         services.AddHostedService<MetadataPersistenceService>();
+        services.AddHostedService<RetentionSweepService>();
 
         return services;
     }
