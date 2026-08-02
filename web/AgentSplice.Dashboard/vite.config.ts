@@ -1,4 +1,5 @@
-/// <reference types="vitest/config" />
+// `vitest/config` rather than `vite`: it is what types the `test` block below. A triple-slash
+// reference alongside it was redundant and is what the lint rule was objecting to.
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
