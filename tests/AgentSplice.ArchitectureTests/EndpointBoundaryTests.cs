@@ -46,6 +46,17 @@ public sealed class EndpointBoundaryTests
     }
 
     [Fact]
+    public void The_api_does_not_talk_to_the_database()
+    {
+        // The composition root registers persistence; it must never query it. An endpoint holding a
+        // DbContext would put the store's shape on the wire and make the administrative payloads
+        // whatever happened to be convenient to select — and it is the one place that could not be
+        // unit tested. AllProductionAssemblies deliberately excludes the API, so the module-boundary
+        // test that confines EF Core to Infrastructure does not cover this direction.
+        AssertApiDoesNotDependOn("Microsoft.EntityFrameworkCore", "Microsoft.Data.Sqlite");
+    }
+
+    [Fact]
     public void The_api_does_not_frame_or_interpret_a_stream()
     {
         // The transport writes bytes and flushes them. Deciding where an event ends, what it means,

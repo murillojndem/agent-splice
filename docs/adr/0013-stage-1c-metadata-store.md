@@ -94,6 +94,19 @@ Retrying reorders evidence behind whatever arrived while it retried, or stalls t
 behind a record the store will never accept — and a stalled queue loses every exchange after it, not
 only the one that failed.
 
+A batch is up to 64 exchanges, so a single unacceptable row loses the 63 beside it. That amplification
+is accepted **for as long as no per-record failure mode exists**, which is the case today: every
+string the store writes is already bounded by the domain rule that produced it, the primary key is
+guarded against reuse by the recorder's one-shot recording latch, and SQLite does not enforce column
+lengths in any event. Every failure this build can actually suffer — a locked database, a full disk, a
+missing file — fails the whole batch regardless, and isolating each record would mean 64 further
+attempts against a store that has just refused one.
+
+It stops being true when PostgreSQL ships, because that provider does enforce lengths, and
+`CompletionExchange.WithEnvironmentSnapshot` accepts an identifier the domain does not bound against
+the 128-character column waiting for it. The slice that adds the provider owns either bounding that
+value or writing each record independently on failure.
+
 ### 7. The wait for work is cancellable; the write is not
 
 `WaitToReadAsync` takes the stopping token. `SaveChangesAsync` takes `CancellationToken.None`.
@@ -160,7 +173,13 @@ that is now satisfied by the producer rather than by the SDK.
   the client's problem. That is a later slice of this stage.
 - Integration hosts default to `persistence:mode: None`. Without it every test that boots the host
   inherits the shipped SQLite default and creates a database file in the test output directory, shared
-  between test classes that run in parallel.
+  between test classes that run in parallel. The cost is that no test boots the shipped persistence
+  block any more, so a contract test asserts it against `appsettings.json` directly — otherwise a
+  wrong mode or a blank connection string would surface as a failed startup in production and nowhere
+  else.
+- The API composes persistence and must never query it. `AllProductionAssemblies` in the
+  module-boundary tests excludes the API, so that direction is asserted separately in
+  `EndpointBoundaryTests` alongside the other rules about what an endpoint may reach for.
 - The exchange record handed to `IExchangeRecordSink` never contains the persistence boundaries, so
   they are observable only by reading the store. Tests asserting their absence from the in-memory
   record are asserting the design, not a gap.

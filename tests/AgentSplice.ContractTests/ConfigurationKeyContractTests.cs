@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.Json;
 using AgentSplice.Application.Configuration;
 using AgentSplice.TestSupport;
 using Xunit;
@@ -73,6 +74,55 @@ public sealed class ConfigurationKeyContractTests
     }
 
     [Fact]
+    public void The_shipped_settings_name_a_persistence_mode_this_build_implements()
+    {
+        // Asserted against the file rather than through a booted host, because the integration
+        // factory forces persistence off so that tests do not each create a database. That override
+        // is right, and it means no test exercises the shipped persistence block any more — leaving
+        // a wrong mode or an empty connection string to surface as a failed startup in production
+        // and nowhere else.
+        var persistence = ShippedSettings()
+            .RootElement
+            .GetProperty("agentsplice")
+            .GetProperty("persistence");
+
+        var mode = persistence.GetProperty("mode").GetString();
+
+        Assert.True(
+            Enum.TryParse<PersistenceMode>(mode, out var parsed),
+            FormattableString.Invariant($"appsettings.json names an unknown persistence mode '{mode}'."));
+
+        Assert.True(
+            parsed is PersistenceMode.Sqlite or PersistenceMode.None,
+            FormattableString.Invariant(
+                $"appsettings.json selects '{parsed}', which has no provider in this build. Shipping it would fail every startup."));
+
+        if (parsed != PersistenceMode.None)
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace(persistence.GetProperty("connectionString").GetString()),
+                "A persistence mode other than None requires a connection string; startup validation refuses without one.");
+        }
+    }
+
+    [Fact]
+    public void The_shipped_settings_keep_the_store_from_logging_the_statements_it_runs()
+    {
+        // EF Core logs every command at Information by default. Parameters are redacted unless
+        // sensitive-data logging is switched on, so this is noise rather than leakage today — but the
+        // distance between the two is one setting, and a store that narrates itself into the default
+        // log is the wrong side of "no request or response bodies in default logs" to be sitting on.
+        var levels = ShippedSettings()
+            .RootElement
+            .GetProperty("Logging")
+            .GetProperty("LogLevel");
+
+        Assert.Equal(
+            "Warning",
+            levels.GetProperty("Microsoft.EntityFrameworkCore.Database.Command").GetString());
+    }
+
+    [Fact]
     public void An_unbindable_key_is_detected_by_the_resolver()
     {
         // Guards the resolver itself: the pre-Stage-0 Compose file used AGENTSPLICE_PERSISTENCE_MODE
@@ -85,6 +135,9 @@ public sealed class ConfigurationKeyContractTests
         Assert.True(TryResolve("AGENTSPLICE__RUNTIMES__0__BASEURL", out _));
         Assert.True(TryResolve("AGENTSPLICE__RUNTIMES__0__DISCOVERY__CACHEDURATION", out _));
     }
+
+    private static JsonDocument ShippedSettings() =>
+        JsonDocument.Parse(RepositoryPaths.ReadText("src", "AgentSplice.Api", "appsettings.json"));
 
     private static void AssertAllBind(IReadOnlyList<string> keys, string source)
     {

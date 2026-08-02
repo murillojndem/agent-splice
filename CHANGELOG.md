@@ -51,6 +51,17 @@ discharges the Stage 1C consequence ADR 0008 recorded.
   It asserts the policy rather than a broken file: a refusing context factory, and the failure logged
   with a stable event ID, counted per exchange lost rather than per batch, dropped rather than
   retried, with the writer still draining and nothing reaching the caller.
+- Restored the coverage the test-host change removed. Integration hosts now force persistence off so
+  that tests do not each create a database, which left nothing exercising the shipped persistence
+  block; a contract test asserts it against `appsettings.json` directly, including that the mode named
+  there has a provider in this build.
+- Added an architecture test that the API never reaches for a `DbContext`. It composes persistence and
+  must not query it, and the module-boundary test that confines EF Core to Infrastructure does not
+  cover the API assembly.
+- Quieted EF Core's command logging to `Warning` in the shipped settings, with a contract test.
+  Parameters are redacted unless sensitive-data logging is enabled, so this is noise rather than
+  leakage — but a store that narrates itself into the default log is one setting away from being the
+  other thing.
 - Removed `UnimplementedPersistenceNotice`. It existed to say the store had not shipped.
 - Deferred the OpenTelemetry SDK swap from Stage 1C to Stage 1D, in `docs/OBSERVABILITY.md` and the
   architecture test that referenced it. Until an exporter exists, adopting the SDK adds a dependency
