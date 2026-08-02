@@ -115,8 +115,8 @@ public sealed class ChatCompletionGateway
             logger.LogError(
                 GatewayEventIds.ExchangeFaulted,
                 exception,
-                "Completion request {RequestId} failed unexpectedly.",
-                request.RequestId.Value);
+                "Completion exchange {ExchangeId} failed unexpectedly.",
+                recorder.ExchangeId.Value);
 
             if (client.HasStarted)
             {
@@ -515,8 +515,8 @@ public sealed class ChatCompletionGateway
             logger.LogError(
                 GatewayEventIds.EvidenceRecordingFailed,
                 exception,
-                "Recording evidence for request {RequestId} failed. The client response is unaffected.",
-                recorder.RequestId.Value);
+                "Recording evidence for exchange {ExchangeId} failed. The client response is unaffected.",
+                recorder.ExchangeId.Value);
         }
 
         return outcome;
@@ -596,8 +596,8 @@ public sealed class ChatCompletionGateway
             logger.LogError(
                 GatewayEventIds.InstrumentationFailed,
                 exception,
-                "Instrumenting request {RequestId} failed. The client response is unaffected.",
-                recorder.RequestId.Value);
+                "Instrumenting exchange {ExchangeId} failed. The client response is unaffected.",
+                recorder.ExchangeId.Value);
         }
     }
 

@@ -86,12 +86,15 @@ public sealed class QueuedExchangeRecordSink : IExchangeRecordSink
 
         telemetry.RecordPersistenceFailure(PersistenceFailureReason.QueueSaturated);
 
-        // The identifier and nothing else. A saturated queue is an operational fact about the
-        // gateway, not an invitation to log what the request contained.
+        // The exchange identifier, never the correlation token. PublicRequestId is whatever the
+        // client put in x-request-id — up to 128 characters of printable ASCII it chose — so logging
+        // it writes client-supplied text into the operator's logs. ExchangeId is AgentSplice's own
+        // GUID, is returned to the client as x-agentsplice-exchange-id, and is the primary key of the
+        // row this drop means does not exist.
         logger.LogWarning(
             GatewayEventIds.MetadataQueueSaturated,
-            "The metadata queue is full; evidence for request {RequestId} was dropped. The client response is unaffected.",
-            record.RequestId.Value);
+            "The metadata queue is full; evidence for exchange {ExchangeId} was dropped. The client response is unaffected.",
+            record.ExchangeId.Value);
 
         return ValueTask.CompletedTask;
     }

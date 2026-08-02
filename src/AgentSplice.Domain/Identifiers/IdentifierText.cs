@@ -97,8 +97,12 @@ internal static class IdentifierText
 
         foreach (var character in trimmed)
         {
-            // Correlation tokens are echoed in response headers. Anything outside printable
-            // ASCII would allow header injection or smuggle content into observability output.
+            // Correlation tokens are echoed in response headers, so anything outside printable ASCII
+            // would allow header injection. That is the whole of what this check buys, and it is
+            // worth being exact about: printable ASCII is not safe text. A client is free to put
+            // 128 characters of anything readable in x-request-id, so a correlation token must never
+            // be written to a log, a metric dimension, or an export — ExchangeId is AgentSplice's own
+            // identifier and is what those use.
             if (character is < ' ' or > '~')
             {
                 throw new ArgumentException(

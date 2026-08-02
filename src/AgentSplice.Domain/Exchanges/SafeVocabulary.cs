@@ -33,10 +33,23 @@ namespace AgentSplice.Domain.Exchanges;
 /// </remarks>
 public static class SafeVocabulary
 {
-    /// <summary>Bucket for a value outside its protocol's vocabulary.</summary>
+    /// <summary>
+    /// Bucket for a value the caller sent that its protocol's vocabulary does not contain.
+    /// </summary>
+    /// <remarks>
+    /// Covers every non-canonical spelling, not only hostile ones: <c>"User"</c>, <c>" user "</c>, and
+    /// <c>""</c> all land here, because each is a thing the caller sent and none is the token the
+    /// protocol defines.
+    /// </remarks>
     public const string Unrecognised = "(unrecognised)";
 
-    /// <summary>Bucket for a message whose role was absent or was not a string.</summary>
+    /// <summary>
+    /// Bucket for a field that was absent, or present and not a string.
+    /// </summary>
+    /// <remarks>
+    /// Reachable only from a <c>null</c>, which is to say only from AgentSplice observing an absence.
+    /// No caller-supplied string produces it, including the literal <c>"(unspecified)"</c>.
+    /// </remarks>
     public const string Unspecified = "(unspecified)";
 
     /// <summary>Prefix identifying a hashed name, so a reader is never left guessing what it is.</summary>
@@ -86,10 +99,10 @@ public static class SafeVocabulary
         "function_call",
     }.ToFrozenSet(StringComparer.Ordinal);
 
-    /// <summary>Returns the role itself when the vocabulary contains it, and a bucket otherwise.</summary>
+    /// <summary>Returns the role itself when the vocabulary contains it exactly, and a bucket otherwise.</summary>
     public static string Role(string? value) => Match(value, Roles);
 
-    /// <summary>Returns the finish reason itself when the vocabulary contains it, and a bucket otherwise.</summary>
+    /// <summary>Returns the finish reason itself when the vocabulary contains it exactly, and a bucket otherwise.</summary>
     public static string FinishReason(string? value) => Match(value, FinishReasons);
 
     /// <summary>
@@ -112,27 +125,25 @@ public static class SafeVocabulary
         return string.Concat(HashPrefix, Convert.ToHexString(digest)[..HashLength].ToLowerInvariant());
     }
 
-    private static string Match(string? value, FrozenSet<string> vocabulary)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return Unspecified;
-        }
-
-        var trimmed = value.Trim();
-
-        // The buckets are values this type produced, and a caller counting messages hands them back.
-        // Without this they fail the vocabulary check and "the message stated no role" collapses into
-        // "the message stated a role we will not repeat" — two facts an operator needs apart, since
-        // one is an ordinary client and the other is one putting text somewhere it does not belong.
-        if (string.Equals(trimmed, Unspecified, StringComparison.Ordinal)
-            || string.Equals(trimmed, Unrecognised, StringComparison.Ordinal))
-        {
-            return trimmed;
-        }
-
-        // Case-insensitive on purpose: a client sending "User" means the role, not a new one, and
-        // bucketing it would lose a count for a spelling difference.
-        return vocabulary.Contains(trimmed.ToLowerInvariant()) ? trimmed.ToLowerInvariant() : Unrecognised;
-    }
+    /// <summary>
+    /// Exact, ordinal, and unforgiving.
+    /// </summary>
+    /// <remarks>
+    /// An earlier version trimmed and lower-cased before matching, so <c>" User "</c> was recorded as
+    /// <c>user</c> — a token the client never sent. That is a semantic transformation of the observed
+    /// protocol, stored as though it were the observation, in a product whose entire claim is that it
+    /// reports what actually crossed the wire. A client that sends a non-canonical role has done
+    /// something worth seeing, and <see cref="Unrecognised"/> is what says so.
+    ///
+    /// The buckets are outputs and are never accepted as inputs. Passing them through made
+    /// <c>{"role": "(unspecified)"}</c> indistinguishable from a message that stated no role at all,
+    /// which let a client forge an AgentSplice-internal observation. Absence now travels out of band —
+    /// as a C# <c>null</c> here, and as a separate count in
+    /// <see cref="StructuralRequestSummary.Create"/> — because a dictionary key is a string and any
+    /// string is forgeable, while the absence of one is not.
+    /// </remarks>
+    private static string Match(string? value, FrozenSet<string> vocabulary) =>
+        value is null ? Unspecified
+            : vocabulary.Contains(value) ? value
+            : Unrecognised;
 }

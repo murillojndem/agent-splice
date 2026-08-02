@@ -65,7 +65,22 @@ Sanitization occurs before persistence, not after.
   JSON property it sends, and a runtime chooses the value of `finish_reason`, so truncating those
   bounds how much caller-chosen text is retained and nothing else. Every string a summary holds is
   therefore either drawn from a closed protocol vocabulary and bucketed when it does not match, or
-  hashed. See `SafeVocabulary`.
+  hashed. See `SafeVocabulary`. Matching is exact and ordinal: a value is the token the protocol
+  defines or it is bucketed, because recording `" User "` as `user` would store a corrected version of
+  the protocol and present it as what was observed. The buckets are outputs and are never accepted as
+  inputs, so a client cannot send `"(unspecified)"` and be recorded as having sent no role at all.
+- Three identifiers are **operational metadata retained verbatim**: `ClientModelId`,
+  `PublicRequestId`, and `UpstreamRequestId`. Each is chosen by an untrusted party — the client names
+  the model and the correlation token, the runtime names its own request ID — and each is bounded
+  printable text rather than safe text. They are kept whole because diagnosis needs them: an operator
+  correlating a client's complaint to a stored exchange has nothing else to match on. Treat them as
+  potentially sensitive. They must not reach a log, a metric dimension, or an export, and the
+  administrative APIs that serve them require the same authorization as any other stored evidence.
+- Never log the client's correlation token. `x-request-id` is accepted as up to 128 characters of
+  printable ASCII, which prevents header injection and nothing else; a client is free to put a name,
+  a ticket subject, or a path in it. `ExchangeId` is AgentSplice's own identifier, is returned as
+  `x-agentsplice-exchange-id`, and is what logs carry. The correlation token is also redacted from
+  `IHttpClientFactory` header logging, because AgentSplice forwards it upstream.
 - Errors must not expose upstream credentials, connection strings, or raw response bodies.
 - Unknown values remain unknown rather than being derived from sensitive content without policy.
 

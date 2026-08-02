@@ -131,9 +131,32 @@ public sealed class LogRedactionTests : IDisposable
             $"'{sentinel}' reached a log while streaming: {string.Join(" | ", offending)}");
     }
 
+    [Fact]
+    public async Task A_correlation_token_the_client_chose_never_reaches_a_log()
+    {
+        // x-request-id is accepted as up to 128 characters of printable ASCII and adopted as the
+        // exchange's PublicRequestId. Printable is not the same as safe: it stops header injection
+        // and does nothing about a client putting a patient name, a ticket subject, or a file path
+        // in it. Anything that logs the correlation token writes client-chosen text into the
+        // operator's logs, so nothing does — the logs carry ExchangeId, which AgentSplice generates
+        // and returns as x-agentsplice-exchange-id.
+        const string Sentinel = "SENTINEL-REQUESTID-patient-name";
+
+        var logs = await ProxyAsync(clientRequestId: Sentinel);
+
+        var offending = logs.AllText
+            .Where(text => text.Contains(Sentinel, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(
+            offending.Length == 0,
+            $"The client's own correlation token reached a log: {string.Join(" | ", offending)}");
+    }
+
     private static async Task<CapturingLoggerProvider> ProxyAsync(
         UpstreamResponseScript? script = null,
-        bool streaming = false)
+        bool streaming = false,
+        string? clientRequestId = null)
     {
         var logs = new CapturingLoggerProvider();
 
@@ -160,9 +183,17 @@ public sealed class LogRedactionTests : IDisposable
             Encoding.UTF8,
             "application/json");
 
-        using var response = await fixture.Client.PostAsync(
-            new Uri("/v1/chat/completions", UriKind.Relative),
-            content);
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/v1/chat/completions", UriKind.Relative))
+        {
+            Content = content,
+        };
+
+        if (clientRequestId is not null)
+        {
+            request.Headers.TryAddWithoutValidation("x-request-id", clientRequestId);
+        }
+
+        using var response = await fixture.Client.SendAsync(request);
 
         Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
 

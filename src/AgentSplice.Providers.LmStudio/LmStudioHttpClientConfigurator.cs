@@ -24,6 +24,12 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
     /// the runtime's bearer token is written verbatim to any sink an operator has enabled — a
     /// disclosure that has nothing to do with AgentSplice's own logging and would survive every
     /// precaution taken elsewhere in the request path.
+    ///
+    /// <c>x-request-id</c> is on the list for a different reason and is not a credential. AgentSplice
+    /// forwards the client's correlation token upstream, and that token is up to 128 characters of
+    /// printable ASCII the client chose — which stops header injection and stops nothing else. A
+    /// client naming a person or a ticket in it would otherwise have that written to the operator's
+    /// logs by the HTTP stack, entirely outside AgentSplice's own logging.
     /// </remarks>
     private static readonly FrozenSet<string> RedactedHeaders = new[]
     {
@@ -35,6 +41,7 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
         "set-cookie",
         "api-key",
         "x-api-key",
+        "x-request-id",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     private readonly RuntimeRegistry runtimes;

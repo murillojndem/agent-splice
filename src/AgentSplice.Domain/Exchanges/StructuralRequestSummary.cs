@@ -83,9 +83,16 @@ public sealed record StructuralRequestSummary
     public bool UnknownFieldNamesTruncated { get; private init; }
 
     /// <summary>Creates a validated structural summary.</summary>
+    /// <param name="unspecifiedRoleCount">
+    /// Messages whose role was absent or was not a string, counted separately from
+    /// <paramref name="messageCountsByRole"/> on purpose. A dictionary key is a string, and any string
+    /// is one a client could have sent — so routing absence through the same channel would let
+    /// <c>{"role": "(unspecified)"}</c> be recorded as a message that stated no role.
+    /// </param>
     public static StructuralRequestSummary Create(
         int messageCount,
         IEnumerable<KeyValuePair<string, int>>? messageCountsByRole = null,
+        int unspecifiedRoleCount = 0,
         int toolDeclarationCount = 0,
         bool toolChoicePresent = false,
         bool streamRequested = false,
@@ -95,6 +102,7 @@ public sealed record StructuralRequestSummary
         IEnumerable<string>? droppedFieldNames = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(messageCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(unspecifiedRoleCount);
         ArgumentOutOfRangeException.ThrowIfNegative(toolDeclarationCount);
         ArgumentOutOfRangeException.ThrowIfNegative(requestBodyBytes);
 
@@ -103,7 +111,7 @@ public sealed record StructuralRequestSummary
         return new StructuralRequestSummary
         {
             MessageCount = messageCount,
-            MessageCountsByRole = RoleCounts(messageCountsByRole),
+            MessageCountsByRole = RoleCounts(messageCountsByRole, unspecifiedRoleCount),
             ToolDeclarationCount = toolDeclarationCount,
             ToolChoicePresent = toolChoicePresent,
             StreamRequested = streamRequested,
@@ -125,16 +133,18 @@ public sealed record StructuralRequestSummary
     /// roles a request invents.
     /// </remarks>
     private static FrozenDictionary<string, int> RoleCounts(
-        IEnumerable<KeyValuePair<string, int>>? roleCounts)
+        IEnumerable<KeyValuePair<string, int>>? roleCounts,
+        int unspecifiedCount)
     {
-        if (roleCounts is null)
-        {
-            return FrozenDictionary<string, int>.Empty;
-        }
-
         var accumulated = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        foreach (var (role, count) in roleCounts)
+        if (unspecifiedCount > 0)
+        {
+            // The one entry no caller-supplied string can reach.
+            accumulated[SafeVocabulary.Unspecified] = unspecifiedCount;
+        }
+
+        foreach (var (role, count) in roleCounts ?? [])
         {
             ArgumentOutOfRangeException.ThrowIfNegative(count, nameof(roleCounts));
 

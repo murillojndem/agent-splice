@@ -47,7 +47,7 @@ public sealed record StructuralResponseSummary
     /// <summary>Creates a validated structural response summary.</summary>
     public static StructuralResponseSummary Create(
         int choiceCount = 0,
-        IEnumerable<string>? finishReasons = null,
+        IEnumerable<string?>? finishReasons = null,
         int nativeToolCallCount = 0,
         long responseBodyBytes = 0,
         int streamEventCount = 0,
@@ -77,7 +77,7 @@ public sealed record StructuralResponseSummary
     /// plus one bucket however many distinct strings a runtime returns. The bound and its truncation
     /// flag were removed rather than kept as unreachable contracts.
     /// </remarks>
-    private static ReadOnlyCollection<string> NormaliseFinishReasons(IEnumerable<string>? finishReasons)
+    private static ReadOnlyCollection<string> NormaliseFinishReasons(IEnumerable<string?>? finishReasons)
     {
         if (finishReasons is null)
         {
@@ -88,11 +88,9 @@ public sealed record StructuralResponseSummary
 
         foreach (var reason in finishReasons)
         {
-            if (string.IsNullOrWhiteSpace(reason))
-            {
-                continue;
-            }
-
+            // Nothing is skipped. Dropping blanks made a choice that carried `"finish_reason": ""`
+            // indistinguishable from one that carried no finish reason at all, which is a fact about
+            // the runtime disappearing into the gap between two different facts.
             var recognised = SafeVocabulary.FinishReason(reason);
 
             if (!accumulated.Contains(recognised, StringComparer.Ordinal))

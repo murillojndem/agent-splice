@@ -55,6 +55,26 @@ discharges the Stage 1C consequence ADR 0008 recorded.
   defect.
 - Removed a fault channel found in the same place: the field-name helper *threw* on a control
   character, so a hostile `role` turned client input into a failed request.
+- Made vocabulary matching exact and ordinal. The first version of the fix trimmed and lower-cased
+  before comparing, so `" User "` was stored as `user` — a token the client never sent. Closing a
+  leak by persisting a tidied copy of the protocol and serving it as the observation is not a fix;
+  a non-canonical role is a fact, and `(unrecognised)` is what reports it.
+- Stopped a client forging an AgentSplice observation. The buckets are outputs and were being
+  accepted back as inputs, so `{"role": "(unspecified)"}` was recorded as a message that stated no
+  role. Absence now travels out of band, as a separate count the scanner supplies, because a
+  dictionary key is a string and every string is forgeable while the absence of one is not.
+- Stopped dropping blank finish reasons, which made `"finish_reason": ""` indistinguishable from a
+  response that carried none.
+- Stopped logging the client's own correlation token. `x-request-id` is accepted as up to 128
+  characters of printable ASCII, which prevents header injection and nothing else — a client is free
+  to put a name or a ticket subject in it. Four AgentSplice log sites wrote it, and a fifth path
+  wrote it with no AgentSplice involvement at all: `IHttpClientFactory` logs request headers at
+  `Trace` and the token is forwarded upstream. Logs now carry `ExchangeId`, and the header joins the
+  HTTP-client redaction list. `IdentifierText`'s claim that its validation kept content out of
+  observability was false and is corrected.
+- Documented `ClientModelId`, `PublicRequestId`, and `UpstreamRequestId` as operational metadata
+  retained verbatim: chosen by untrusted parties, potentially sensitive, kept whole because diagnosis
+  needs them, and authorized like any other stored evidence.
 - Stopped every persisted row claiming that nothing was retained. `ExchangeRecorder.Accept` opens each
   exchange as `Disabled` and cannot know better, so the row carried that through while holding
   summaries, observations, and measurements. The store stamps `MetadataOnly`, because the store is

@@ -77,7 +77,7 @@ evidence FR-CHAT-004 and FR-TRACE-008 want. A hash rather than the name, because
 party reading stored evidence, and that party cannot invert a digest of text it does not already have.
 
 The same change removed a denial of service: the old helper *threw* on a control character in a name,
-so `"role": "ab"` turned client input into a failed request. Input validation that rejects by
+so a `role` value carrying a control character turned client input into a failed request. Input validation that rejects by
 throwing, on a value the client controls, is a fault channel wearing the costume of a guard.
 
 Also removed: `MaxRoleNames`, `RoleNamesTruncated`, `MaxFinishReasons`, `FinishReasonsTruncated`, and
@@ -85,7 +85,43 @@ Also removed: `MaxRoleNames`, `RoleNamesTruncated`, `MaxFinishReasons`, `FinishR
 visibility flags became unreachable, and an unreachable contract is the thing this repository keeps
 having to delete.
 
-### 4. The store stamps its own boundaries, in two transactions
+**Matching is exact, ordinal, and un-normalising.** The first version of this fix trimmed and
+lower-cased before comparing, which closed the leak and opened a smaller one: `" User "` was stored as
+`user`, a token the client never sent. A gateway whose claim is that it reports what crossed the wire
+cannot persist a tidied copy of the protocol and serve it as the observation. A non-canonical role is
+a fact worth seeing, and `(unrecognised)` is what says so.
+
+**The buckets are outputs and are never inputs.** Accepting them back let a client send the literal
+`"(unspecified)"` and be recorded as a message that stated no role — forging an observation
+AgentSplice makes about itself. Absence now travels out of band: as a C# `null` into
+`SafeVocabulary`, and as `StructuralRequestSummary.Create(unspecifiedRoleCount:)` from the scanner,
+because a dictionary key is a string and every string is forgeable while the absence of one is not.
+
+**Nothing is dropped for being blank.** Skipping empty finish reasons made a runtime that returned
+`"finish_reason": ""` indistinguishable from one that returned none — one fact vanishing into the gap
+between two others.
+
+### 4. The client's correlation token is stored, and never logged
+
+`x-request-id` is accepted as up to 128 characters of printable ASCII and adopted as the exchange's
+`PublicRequestId`. Printable is not safe: the check prevents header injection and does nothing about a
+client putting a patient name or a ticket subject in it. `IdentifierText` claimed the check also kept
+content out of observability, which was not true and is now corrected in place.
+
+Four AgentSplice log sites wrote that token, and a fifth path wrote it without AgentSplice's
+involvement at all: `IHttpClientFactory` logs request headers at `Trace`, and the token is forwarded
+upstream. All five now carry or redact accordingly — logs use `ExchangeId`, which AgentSplice
+generates and returns as `x-agentsplice-exchange-id`, and the header joins the HTTP-client redaction
+list beside the credentials.
+
+The token is still **stored**, along with `ClientModelId` and `UpstreamRequestId`. That is a product
+decision rather than an oversight, and `docs/SECURITY.md` now states it: these three are operational
+metadata retained verbatim, chosen by untrusted parties, and potentially sensitive. Diagnosis needs
+them whole — an operator correlating a client's complaint to a stored exchange has nothing else to
+match on — so they are kept and the administrative surface that serves them is authorized like any
+other stored evidence, rather than hashed into uselessness.
+
+### 5. The store stamps its own boundaries, in two transactions
 
 `MetadataQueued` is read by the sink as the record enters the queue. `PersistenceCompleted` is read by
 the writer *after* the commit returned, which requires a second transaction.
@@ -101,7 +137,7 @@ exchange rather than as the batch's write time. A batch covers many exchanges; a
 duration to each would report one number N times and overstate every one. The name had been declared
 in `MeasurementNames` since Stage 1A with nothing able to produce it.
 
-### 5. `PersistenceFailed` is not a stored observation
+### 6. `PersistenceFailed` is not a stored observation
 
 The store that rejected the write is the one the row would have to live in. A failure is a log event
 with a stable ID and an `agentsplice.persistence.failures` increment; nothing pretends to be evidence
@@ -110,7 +146,7 @@ that survived.
 The asymmetry is deliberate and worth stating, because a reader who finds `MetadataQueued` and
 `PersistenceCompleted` in the schema will look for the third and should not conclude it was forgotten.
 
-### 6. The queue refuses rather than drops silently
+### 7. The queue refuses rather than drops silently
 
 The bounded channel uses `BoundedChannelFullMode.Wait` and is never awaited. `TryWrite` under that
 mode returns `false` immediately when full, which is the only configuration that both refuses to block
@@ -124,7 +160,7 @@ Full means drop, with a counter and a log line. Waiting turns a slow store into 
 then into a stalled stream; growing without limit turns it into an out-of-memory kill that takes the
 proxy down with it.
 
-### 7. A failed batch is dropped, not retried
+### 8. A failed batch is dropped, not retried
 
 Retrying reorders evidence behind whatever arrived while it retried, or stalls the queue forever
 behind a record the store will never accept — and a stalled queue loses every exchange after it, not
@@ -143,7 +179,7 @@ It stops being true when PostgreSQL ships, because that provider does enforce le
 the 128-character column waiting for it. The slice that adds the provider owns either bounding that
 value or writing each record independently on failure.
 
-### 8. The wait for work is cancellable; the write is not
+### 9. The wait for work is cancellable; the write is not
 
 `WaitToReadAsync` takes the stopping token. `SaveChangesAsync` takes `CancellationToken.None`.
 
@@ -157,7 +193,7 @@ The shutdown flush lives at the end of `ExecuteAsync` rather than in `StopAsync`
 the channel. A second reader in `StopAsync` would race the loop whenever the shutdown timeout elapsed
 first.
 
-### 9. Whether a store exists is decided at resolution, never at registration
+### 10. Whether a store exists is decided at resolution, never at registration
 
 Reading `IConfiguration` while services are being registered reads it half-built: a host layers its
 sources as it is assembled, and a test host adds its overrides after the composition root has run. The
@@ -168,7 +204,7 @@ The context factory and both hosted services are registered unconditionally and 
 `IOptions<AgentSpliceOptions>` when resolved. A registration is not a connection: with persistence off
 nothing creates a context, so no provider initialises and no file appears.
 
-### 10. A store that cannot be opened fails startup; a write that fails later does not
+### 11. A store that cannot be opened fails startup; a write that fails later does not
 
 Different classes of problem. A store that cannot be migrated at all is a deployment fault — a bad
 path, a read-only volume, a schema from a newer build — and NFR 14.2 puts that before readiness. A
@@ -177,7 +213,7 @@ write that fails at runtime is a condition the gateway must survive (FR-DATA-009
 Starting silently with a broken store would produce a gateway that proxies perfectly and retains
 nothing, which is the one failure an evidence product must not have quietly.
 
-### 11. The model is provider-neutral, and the schema is versioned
+### 12. The model is provider-neutral, and the schema is versioned
 
 No SQLite type names, no provider-specific value generation, no raw SQL, timestamps as UTC ticks.
 FR-DATA-003 commits to PostgreSQL through the same contracts, and a model that must be rewritten to
@@ -187,7 +223,7 @@ is refused rather than quietly served by SQLite.
 Migrations rather than `EnsureCreated`, because an existing store has to survive an upgrade and
 `EnsureCreated` leaves no way to alter one.
 
-### 12. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
+### 13. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
 
 ADR 0009 deferred the SDK to Stage 1C, "which is when persistence and the trace API give it something
 to export". Persistence now exists and the reasoning did not survive contact with it: what the SDK

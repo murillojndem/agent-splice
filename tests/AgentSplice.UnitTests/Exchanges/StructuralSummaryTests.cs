@@ -190,10 +190,63 @@ public sealed class StructuralSummaryTests
     }
 
     [Fact]
-    public void Blank_finish_reasons_are_ignored()
+    public void A_blank_finish_reason_is_recorded_rather_than_dropped()
     {
+        // Blanks used to be skipped, which made a choice carrying `"finish_reason": ""` look exactly
+        // like one carrying no finish reason at all. Two different facts about the runtime, and the
+        // second is the only one the old output could express.
         var summary = StructuralResponseSummary.Create(finishReasons: ["", "   ", "stop"]);
 
-        Assert.Equal(["stop"], summary.FinishReasons);
+        Assert.Equal([SafeVocabulary.Unrecognised, "stop"], summary.FinishReasons);
+    }
+
+    [Fact]
+    public void A_finish_reason_that_was_present_and_not_a_string_is_unspecified()
+    {
+        // Distinct from the blank above: null reaches this method only when AgentSplice observed the
+        // field and found it was not a string, which no runtime-supplied string can imitate.
+        var summary = StructuralResponseSummary.Create(finishReasons: [null, "stop"]);
+
+        Assert.Equal([SafeVocabulary.Unspecified, "stop"], summary.FinishReasons);
+    }
+
+    [Fact]
+    public void A_near_miss_token_is_unrecognised_rather_than_corrected()
+    {
+        // The product's claim is that it reports what crossed the wire. Trimming and lower-casing
+        // recorded " User " as `user` — a token the client never sent — and stored the correction as
+        // though it were the observation.
+        var summary = StructuralRequestSummary.Create(
+            messageCount: 3,
+            messageCountsByRole:
+            [
+                new KeyValuePair<string, int>("user", 1),
+                new KeyValuePair<string, int>("User", 1),
+                new KeyValuePair<string, int>(" user ", 1),
+            ]);
+
+        Assert.Equal(1, summary.MessageCountsByRole["user"]);
+        Assert.Equal(2, summary.MessageCountsByRole[SafeVocabulary.Unrecognised]);
+    }
+
+    [Fact]
+    public void A_client_cannot_forge_the_absent_role_bucket()
+    {
+        // The buckets are outputs. Accepting one as an input let a client send the literal
+        // "(unspecified)" and be recorded as a message that stated no role at all — a client forging
+        // an observation AgentSplice makes about itself.
+        var summary = StructuralRequestSummary.Create(
+            messageCount: 3,
+            messageCountsByRole:
+            [
+                new KeyValuePair<string, int>(SafeVocabulary.Unspecified, 1),
+                new KeyValuePair<string, int>(SafeVocabulary.Unrecognised, 1),
+            ],
+            unspecifiedRoleCount: 1);
+
+        // The forged pair lands in the unrecognised bucket with the other non-token; only the
+        // out-of-band count reaches the unspecified one.
+        Assert.Equal(1, summary.MessageCountsByRole[SafeVocabulary.Unspecified]);
+        Assert.Equal(2, summary.MessageCountsByRole[SafeVocabulary.Unrecognised]);
     }
 }

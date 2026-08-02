@@ -67,5 +67,14 @@ internal sealed class ChatCompletionRequestScan
 
     internal Dictionary<string, int> RoleCounts { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Messages whose role was absent, null, or not a string.
+    /// </summary>
+    /// <remarks>
+    /// Counted here rather than under a reserved key in <see cref="RoleCounts"/>, because a key is a
+    /// string and a client can send any string it likes — including the reserved one.
+    /// </remarks>
+    internal int UnspecifiedRoleCount { get; set; }
+
     internal List<string> UnknownFieldNames { get; } = [];
 }

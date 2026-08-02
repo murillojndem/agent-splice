@@ -54,6 +54,7 @@ public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCod
         var summary = StructuralRequestSummary.Create(
             scan.MessageCount,
             scan.RoleCounts,
+            scan.UnspecifiedRoleCount,
             scan.ToolDeclarationCount,
             scan.ToolChoicePresent,
             scan.StreamRequested,
