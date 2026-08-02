@@ -65,3 +65,42 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: artifacts/test-results
           if-no-files-found: error
+
+  dashboard:
+    # The dashboard is optional (FR-DASH-002) and gated separately, so a broken .NET build and a
+    # broken dashboard build report as two findings rather than one. Linux only: it produces static
+    # assets, and nothing about that is platform-dependent — unlike the gateway, where Windows is a
+    # first-class deployment path and therefore gates.
+    name: dashboard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/AgentSplice.Dashboard
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/AgentSplice.Dashboard/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build

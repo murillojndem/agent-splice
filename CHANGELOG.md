@@ -4,6 +4,33 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1C, part 6: the minimal dashboard
+
+Stage 1C's last piece, and the first consumer of the API the previous parts published. `web/AgentSplice.Dashboard`
+is React, TypeScript, and Vite, gated in CI by its own `pnpm lint`, `pnpm test`, and `pnpm build` job.
+
+- Overview, Exchanges, Exchange Detail with a latency waterfall, and Runtimes (FR-DASH-003,
+  FR-DASH-004). It is a client of the documented `/api/v1` endpoints and holds no database
+  connection, no configuration file, and no knowledge of the store's schema (FR-DASH-002).
+- A phase that was never observed is listed and marked unknown rather than drawn as a zero-width bar
+  or dropped. A missing bar reads as "took no time" and a missing row as "does not apply", and both
+  are wrong for a phase that simply was not measured (FR-DASH-006).
+- Every measurement is shown with its provenance, and the weaker ones are labelled where the value
+  appears rather than only in a table nobody scrolls to (FR-OBS-010).
+- Prompt processing and generation are never one bar, and no figure is offered as prompt throughput.
+  The note under the waterfall explains the absence instead of filling it (FR-OBS-005).
+- No content is rendered anywhere, and the retention notice says so rather than leaving a reader to
+  notice the absence and suspect a bug (FR-DASH-005).
+- The timeline is ordered by recorded sequence, not by timestamp. A host clock that stepped backwards
+  mid-exchange orders two timestamps impossibly; the gateway keeps that visible on purpose, and
+  re-sorting would hide the anomaly it preserved.
+- The administrative token is held in memory only. In `localStorage` it would survive the tab, be
+  readable by anything injected into the origin, and outlive the operator's intent.
+- Writing the tests caught a defect: `toLocaleString()` follows the machine's locale, so on a pt-BR
+  host 1024 tokens rendered as `1.024` — a number an English-reading operator parses as one. Numeric
+  evidence is now formatted in a pinned locale, because evidence has to mean the same thing to
+  whoever opens it.
+
 ### Stage 1C review corrections
 
 Directed review of the finished backend found three material problems, one of them a regression the

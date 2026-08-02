@@ -87,11 +87,9 @@ Exit criteria:
 - the exchange timeline is reconstructable;
 - prompt-processing and generation metrics are never conflated.
 
-### Stage 1C — Metadata persistence and administrative APIs
+### Stage 1C — Metadata persistence, administrative APIs, and the minimal dashboard
 
-Status: backend complete. See `CHANGELOG.md` and ADR 0013. The minimal React dashboard is deferred to
-its own slice: CLAUDE.md admits it only after the trace API is stable, and the API it consumes only
-became stable here.
+Status: complete. See `CHANGELOG.md` and ADR 0013.
 
 Five slices, and three of them shipped corrections found by review rather than by building. The write
 path alone yielded a queue whose drops were silent, a registration-time configuration read that
@@ -109,11 +107,16 @@ copy of the protocol as though it were the observation.
 - runtime health and model catalog APIs;
 - retention policies;
 - explicit content-retention opt-in;
-- administrative authentication for non-loopback bindings.
+- administrative authentication for non-loopback bindings;
+- minimal React dashboard with Overview, Exchanges, Exchange Detail, and Runtimes.
+
+The dashboard was built last on purpose: CLAUDE.md admits it only after the trace API is stable, and
+building it against the finished API is what proved the API is usable rather than merely published.
+It is a client of the documented endpoints and nothing else, which is the constraint that keeps it
+honest — a field it needs has to be a field the contract declares.
 
 Deferred from this stage:
 
-- the minimal React dashboard, which begins once the API it reads has been exercised;
 - the OpenTelemetry SDK, moved to Stage 1D by ADR 0013: what it adds is an exporter, and none is
   configured until packaging.
 

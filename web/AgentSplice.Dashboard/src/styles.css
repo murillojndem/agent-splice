@@ -1,0 +1,122 @@
+/*
+ * Restrained on purpose. This is a diagnostic surface: an operator reads it while something is wrong,
+ * so density and legibility matter and decoration does not. The one place colour carries meaning is
+ * the status pill, and the one place it carries a warning is a weak provenance.
+ */
+
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --line: #262b35;
+  --text: #e6e8ec;
+  --muted: #9aa3b2;
+  --accent: #7aa2f7;
+  --warn: #e0af68;
+  --bad: #f7768e;
+  --good: #9ece6a;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; background: var(--bg); color: var(--text); }
+
+.app { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+nav { display: flex; gap: 1.25rem; }
+nav a { color: var(--muted); text-decoration: none; padding: 0.25rem 0; }
+nav a:hover { color: var(--text); }
+nav a.active { color: var(--text); border-bottom: 2px solid var(--accent); }
+
+.token { display: flex; align-items: end; gap: 0.5rem; }
+.token label { display: flex; flex-direction: column; font-size: 0.75rem; color: var(--muted); gap: 0.25rem; }
+.token input, .filters select {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 4px; padding: 0.35rem 0.5rem;
+}
+button {
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 4px; padding: 0.35rem 0.75rem; cursor: pointer;
+}
+button:disabled { opacity: 0.4; cursor: default; }
+
+h1 { font-size: 1.4rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+h2 { font-size: 1rem; margin: 0; }
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 1rem; margin: 1rem 0;
+}
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; margin: 0; }
+.facts dt { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.facts dd { margin: 0.15rem 0 0; }
+
+.grid { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.grid th { text-align: left; font-size: 0.7rem; text-transform: uppercase; color: var(--muted); padding: 0.4rem 0.5rem; }
+.grid td { padding: 0.45rem 0.5rem; border-top: 1px solid var(--line); vertical-align: top; }
+
+code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 0.85em; }
+.muted { color: var(--muted); }
+.empty, .loading { color: var(--muted); font-style: italic; }
+.note { color: var(--muted); font-size: 0.8rem; margin: 0.75rem 0 0; }
+.crumbs { color: var(--muted); font-size: 0.85rem; }
+.crumbs a { color: var(--accent); }
+
+/* Wall-clock time is the prominent figure (docs/SPECIFICATION.md 19.2). */
+.wall-clock { font-size: 1.6rem; margin: 0; display: flex; align-items: baseline; gap: 0.5rem; }
+.wall-clock-label { font-size: 0.7rem; text-transform: uppercase; color: var(--muted); }
+
+.waterfall { list-style: none; margin: 1rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.phase { display: grid; grid-template-columns: 12rem 1fr 11rem; align-items: center; gap: 0.75rem; font-size: 0.85rem; }
+.phase-name { color: var(--muted); }
+.phase-bar-track { background: #11131a; border-radius: 3px; height: 0.65rem; overflow: hidden; }
+.phase-bar { display: block; height: 100%; background: var(--accent); }
+.phase-value { text-align: right; }
+.phase-unknown .phase-value { color: var(--muted); }
+.phase-unknown-why { font-size: 0.7rem; }
+
+.provenance { font-size: 0.7rem; color: var(--muted); margin-left: 0.4rem; }
+.provenance-weak { color: var(--warn); }
+.confidence { font-size: 0.7rem; color: var(--muted); }
+
+.pill { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); text-transform: lowercase; }
+.pill-completed, .pill-healthy { color: var(--good); border-color: var(--good); }
+.pill-failed, .pill-unreachable, .pill-authentication_failed, .pill-incompatible_response { color: var(--bad); border-color: var(--bad); }
+.pill-cancelled, .pill-no_models, .pill-unknown { color: var(--warn); border-color: var(--warn); }
+
+.retention { color: var(--muted); font-size: 0.85rem; border-left: 2px solid var(--line); padding-left: 0.75rem; }
+
+.notice { background: var(--panel); border: 1px solid var(--warn); border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+.notice-error { border-color: var(--bad); }
+.notice p { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+
+.health, .recent { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.5rem; }
+.health li, .recent li { display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; }
+
+.timeline { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.35rem; font-size: 0.85rem; }
+.timeline li { display: grid; grid-template-columns: 2rem 18rem 15rem 1fr; gap: 0.75rem; align-items: baseline; }
+.timeline-seq { color: var(--muted); text-align: right; }
+.timeline-at, .timeline-source { color: var(--muted); }
+.details { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.2rem 0 0; font-size: 0.75rem; }
+.details dt { color: var(--muted); display: inline; }
+.details dd { display: inline; margin: 0 0 0 0.25rem; }
+
+.filters { display: flex; gap: 1rem; margin: 1rem 0; }
+.filters label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.75rem; color: var(--muted); }
+.pager { display: flex; gap: 0.5rem; margin-top: 1rem; }
+
+footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.8rem; }
