@@ -16,16 +16,35 @@ public sealed class ErrorCodeContractTests
     public void The_declared_core_error_codes_are_exactly_those_published_in_the_api_document()
     {
         var documented = MarkdownLists
-            .InlineCodeBullets(ApiDocument(), "## Stable error codes\n\nCore:", "Later stages:")
+            .InlineCodeBullets(ApiDocument(), "## Stable error codes\n\nCore:", "Administrative:")
             .ToHashSet(StringComparer.Ordinal);
 
         Assert.Equal(documented, ErrorCodes.Core.ToHashSet(StringComparer.Ordinal));
     }
 
     [Fact]
+    public void The_declared_administrative_error_codes_are_exactly_those_published()
+    {
+        var documented = MarkdownLists
+            .InlineCodeBullets(ApiDocument(), "Administrative:", "Later stages:")
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(documented, ErrorCodes.Administration.ToHashSet(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void The_two_vocabularies_do_not_overlap()
+    {
+        // A code that meant one thing on the completion path and another on the administrative one
+        // would make the published contract ambiguous exactly where a client switches on it.
+        Assert.Empty(ErrorCodes.Core.Intersect(ErrorCodes.Administration, StringComparer.Ordinal));
+        Assert.Equal(ErrorCodes.Core.Count + ErrorCodes.Administration.Count, ErrorCodes.All.Count);
+    }
+
+    [Fact]
     public void Every_core_error_code_uses_the_agentsplice_prefix()
     {
-        foreach (var code in ErrorCodes.Core)
+        foreach (var code in ErrorCodes.All)
         {
             Assert.StartsWith("agentsplice_", code, StringComparison.Ordinal);
         }
@@ -34,7 +53,7 @@ public sealed class ErrorCodeContractTests
     [Fact]
     public void Every_core_error_code_is_lower_snake_case()
     {
-        foreach (var code in ErrorCodes.Core)
+        foreach (var code in ErrorCodes.All)
         {
             Assert.All(code, character =>
                 Assert.True(

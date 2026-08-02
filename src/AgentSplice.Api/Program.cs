@@ -48,11 +48,12 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseRateLimiter();
 
-// Model discovery and completions, streamed or buffered. The /api/v1 administrative surface arrives
-// with Stage 1C (docs/ROADMAP.md). Nothing is mapped before it can answer honestly: a placeholder
-// response would let a client mistake an unimplemented gateway for a working one, which the "an HTTP
-// 200 result must never be recorded as proof of full compatibility" rule in CLAUDE.md exists to
-// prevent.
+// Model discovery and completions, streamed or buffered.
 app.MapOpenAiCompatibilityEndpoints();
+
+// The administrative surface that reads what the store retained. Nothing here answers with a
+// placeholder: a deployment that retains nothing says so rather than returning an empty page, because
+// "no exchanges are stored" and "no exchanges happened" are different facts.
+app.MapAdministrativeEndpoints();
 
 await app.RunAsync().ConfigureAwait(false);

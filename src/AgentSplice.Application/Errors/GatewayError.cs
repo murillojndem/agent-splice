@@ -57,7 +57,7 @@ public sealed record GatewayError
                 "An HTTP status code must be in the range 100 to 599.");
         }
 
-        if (!ErrorCodes.Core.Contains(code))
+        if (!ErrorCodes.All.Contains(code))
         {
             throw new ArgumentException(
                 FormattableString.Invariant(

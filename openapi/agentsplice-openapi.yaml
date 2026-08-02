@@ -462,7 +462,7 @@ components:
 
     ExchangeSummary:
       type: object
-      required: [exchangeId, startedAt, status, streaming, contentRetentionState]
+      required: [exchangeId, startedAt, status, contentRetentionState]
       properties:
         exchangeId: { type: string, format: uuid }
         requestId: { type: string }
@@ -473,7 +473,12 @@ components:
         runtimeId: { type: string }
         clientModelId: { type: string }
         upstreamModelId: { type: string }
-        streaming: { type: boolean }
+        streaming:
+          type: [boolean, 'null']
+          description: >-
+            Whether the client asked for a stream. Null when the request was refused before its
+            envelope was read and therefore never stated a preference; false would be a claim about a
+            body nothing parsed.
         contentRetentionState:
           type: string
           enum: [disabled, metadata_only, sanitized_content, expired, deleted]
@@ -518,9 +523,21 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Measurement'
+            errorCode:
+              type: [string, 'null']
+              description: The stable code the client received, when an error envelope was sent.
             structuralSummary:
               type: object
               additionalProperties: true
+            responseSummary:
+              type: object
+              additionalProperties: true
+            usage:
+              type: object
+              additionalProperties: true
+              description: >-
+                Token usage with per-component provenance. Absent when nothing reported any; a zero
+                would claim no tokens were consumed.
 
     TimelineObservation:
       type: object

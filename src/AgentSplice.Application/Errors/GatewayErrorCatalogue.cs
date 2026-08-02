@@ -159,6 +159,47 @@ public static class GatewayErrorCatalogue
             param,
             FailureClass.InvalidRequest);
 
+    /// <summary>An administrative read named an exchange the store does not hold.</summary>
+    /// <remarks>
+    /// Carries no failure class. Nothing failed: a caller asked for a row that is not there, which
+    /// is an ordinary answer on a read surface and not an exchange outcome. It is also the honest
+    /// answer for a row that existed and was expired by retention.
+    /// </remarks>
+    public static GatewayError ExchangeNotFound { get; } = GatewayError.Create(
+        ErrorCodes.ExchangeNotFound,
+        ErrorTypes.InvalidRequest,
+        404,
+        "No exchange with that identifier is retained.");
+
+    /// <summary>The deployment retains nothing, so a read of stored evidence has no answer.</summary>
+    /// <remarks>
+    /// Not an empty page. FR-DATA-001 makes ephemeral operation a supported deployment, so "no
+    /// exchanges are stored" and "no exchanges happened" are both true statements about it and only
+    /// one is what the caller asked. Returning 200 with an empty list would report the second, which
+    /// is the kind of confident wrong answer this product exists to remove.
+    ///
+    /// 503 with a configuration type, matching RuntimeNotFound: the capability is not configured
+    /// here, which is an operator fact rather than a fault.
+    /// </remarks>
+    public static GatewayError PersistenceDisabled { get; } = GatewayError.Create(
+        ErrorCodes.PersistenceDisabled,
+        ErrorTypes.Configuration,
+        503,
+        "This deployment retains no exchange metadata; set agentsplice:persistence:mode to enable it.");
+
+    /// <summary>A query parameter on an administrative endpoint is not usable.</summary>
+    /// <remarks>
+    /// The message names the parameter rather than echoing its value: the value is caller-supplied
+    /// text, and an error envelope is a place it must not be reflected into.
+    /// </remarks>
+    public static GatewayError InvalidQuery(string message, string? param = null) =>
+        GatewayError.Create(
+            ErrorCodes.InvalidQuery,
+            ErrorTypes.InvalidRequest,
+            400,
+            message,
+            param);
+
     /// <summary>A request body larger than the configured bound.</summary>
     public static GatewayError BodyTooLarge { get; } = GatewayError.Create(
         ErrorCodes.InvalidRequest,

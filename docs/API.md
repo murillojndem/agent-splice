@@ -114,6 +114,27 @@ GET /api/v1/exchanges/{id}/observations
 
 The exchange list defaults to metadata only. Content endpoints must not exist until content retention, sanitization, authorization, and retention policies are implemented.
 
+`GET /api/v1/exchanges` is ordered `(startedAt DESC, exchangeId DESC)` and paged by an opaque cursor
+carrying that whole key rather than an offset, so a row written or expired between two pages cannot
+make the second skip or repeat one. `limit` is 1–200 and defaults to 50. `status` and `runtimeId` are
+validated against the published vocabularies and refused with `agentsplice_invalid_query` when they do
+not match — a filter that is silently ignored returns a page that looks like an answer to the question
+asked and is an answer to a different one.
+
+An exchange identifier that does not parse and one that is not retained both answer `404`. They are
+indistinguishable to a caller who cannot see the store, and separating them would tell anyone probing
+the surface which of their guesses were well-formed. An exchange expired by retention answers the same
+way, which is what it is.
+
+`timeline` and `observations` return the same data in Stage 1. The timeline is already every
+observation in sequence order — nothing collapses or de-duplicates it — so making them differ would
+invent a distinction the evidence does not have.
+
+A deployment with `agentsplice:persistence:mode: None` answers these endpoints with `503`
+`agentsplice_persistence_disabled` rather than an empty page. Ephemeral operation is supported
+(FR-DATA-001), and on such a deployment "no exchanges are stored" and "no exchanges happened" are both
+true; only one of them answers the question.
+
 ## Stage 2 replay and conformance endpoints
 
 ```http
@@ -168,6 +189,17 @@ Core:
 - `agentsplice_gateway_overloaded`
 - `agentsplice_persistence_unavailable`
 - `agentsplice_internal_error`
+
+Administrative:
+
+- `agentsplice_exchange_not_found`
+- `agentsplice_invalid_query`
+- `agentsplice_persistence_disabled`
+
+These are produced only by `/api/v1` and are deliberately not part of the core set. The core codes are
+the completion path's vocabulary and are kept the same size as `FailureClass`, so that no failure
+class can exist without a client-facing code; reading stored evidence is not an exchange and has no
+failure class.
 
 Later stages:
 

@@ -1,5 +1,7 @@
+using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Exchanges;
+using AgentSplice.Infrastructure.Administration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -36,12 +38,20 @@ public static class PersistenceRegistration
         services.AddDbContextFactory<AgentSpliceDbContext>((provider, builder) =>
             Configure(builder, Options(provider)));
 
+        services.AddSingleton<IAdministrativeEnvelopeWriter, AdministrativeJsonWriter>();
+        services.AddSingleton<ExchangeQueryService>();
+
         services.AddSingleton<QueuedExchangeRecordSink>();
 
         services.AddSingleton<IExchangeRecordSink>(provider =>
             Retains(Options(provider))
                 ? provider.GetRequiredService<QueuedExchangeRecordSink>()
                 : new NullExchangeRecordSink());
+
+        // The read side. It consults the same options before touching a context, so a deployment
+        // with no store answers "nothing is retained here" rather than failing on a provider that was
+        // never pointed at a database.
+        services.AddSingleton<IExchangeQueryStore, ExchangeQueryStore>();
 
         // Ordered. The initializer completes its migration in StartAsync, so the writer cannot reach
         // a database whose tables do not exist yet.

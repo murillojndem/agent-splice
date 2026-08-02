@@ -52,6 +52,15 @@ public static class ErrorCodes
     /// <summary>An unexpected gateway fault.</summary>
     public const string InternalError = "agentsplice_internal_error";
 
+    /// <summary>The requested exchange is not in the store.</summary>
+    public const string ExchangeNotFound = "agentsplice_exchange_not_found";
+
+    /// <summary>A query parameter on an administrative endpoint is not usable.</summary>
+    public const string InvalidQuery = "agentsplice_invalid_query";
+
+    /// <summary>This deployment retains no exchange metadata, so there is nothing to read.</summary>
+    public const string PersistenceDisabled = "agentsplice_persistence_disabled";
+
     /// <summary>Every Stage 1 core error code. Verified against docs/API.md by a contract test.</summary>
     public static FrozenSet<string> Core { get; } = new[]
     {
@@ -68,4 +77,26 @@ public static class ErrorCodes
         PersistenceUnavailable,
         InternalError,
     }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Codes only the administrative surface produces.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="Core"/> rather than folded into it. <see cref="Core"/> is the
+    /// completion path's vocabulary and is deliberately the same size as
+    /// <see cref="Domain.Exchanges.FailureClass"/>, so that no failure class can exist without a
+    /// client-facing code to translate into. These describe reading stored evidence, which is not an
+    /// exchange and has no failure class — adding them to that set would have meant inventing a
+    /// failure class for "the caller asked for a row that is not there".
+    /// </remarks>
+    public static FrozenSet<string> Administration { get; } = new[]
+    {
+        ExchangeNotFound,
+        InvalidQuery,
+        PersistenceDisabled,
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>Every code this build may put in an error envelope.</summary>
+    public static FrozenSet<string> All { get; } =
+        Core.Concat(Administration).ToFrozenSet(StringComparer.Ordinal);
 }

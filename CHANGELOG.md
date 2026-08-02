@@ -4,6 +4,52 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1C, part 3: the exchange, timeline, and observation APIs
+
+The evidence became readable. Parts 1 and 2 moved it from "discarded" to "stored and reachable only
+by opening the database file"; this is the surface `openapi/agentsplice-openapi.yaml` and
+`docs/API.md` have specified since Stage 0.
+
+- `GET /api/v1/exchanges`, `/exchanges/{id}`, `/exchanges/{id}/timeline`, and
+  `/exchanges/{id}/observations`. The handlers read query values, call the application, and write what
+  comes back; validation, pagination, status selection, and payload shape are decided in
+  `ExchangeQueryService`, which returns the same `GatewayResponse` the completion endpoints use.
+- Paged by an opaque cursor carrying the whole sort key rather than an offset. An offset into
+  `(startedAt DESC, exchangeId DESC)` skips or repeats rows whenever an exchange is written or expired
+  between two pages, which on a gateway still serving traffic is every page.
+- Filters are validated, not ignored. A `status` or `runtimeId` outside the published vocabulary is
+  refused with `agentsplice_invalid_query` naming the parameter — never echoing its value — because a
+  silently dropped filter returns a page that looks like an answer to the question asked and is an
+  answer to a different one.
+- An identifier that does not parse and one that is not retained answer the same 404. They are
+  indistinguishable to a caller who cannot see the store, and separating them would tell anyone
+  probing the surface which of their guesses were well-formed.
+- A deployment with `persistence:mode: None` answers `503 agentsplice_persistence_disabled` rather
+  than an empty page. Ephemeral operation is supported, and on such a deployment "no exchanges are
+  stored" and "no exchanges happened" are both true while only one answers the question.
+- Administrative error codes are a separate published set from the core ones. The core set is the
+  completion path's vocabulary and is deliberately the same size as `FailureClass`; reading stored
+  evidence is not an exchange and has no failure class, so folding them together would have meant
+  inventing one for "the caller asked for a row that is not there".
+- The stored structural summaries are served through unchanged, embedded rather than reparsed. The
+  schema declares them `additionalProperties: true` precisely so a summary can gain a field without a
+  contract change, and a serialiser would have made the writer the thing that has to keep up.
+- `ExchangeSummary.streaming` became nullable in the OpenAPI draft. A request refused before its
+  envelope was read never stated a preference, and `false` would be a claim about a body nothing
+  parsed.
+- Normalised the working tree back to LF. Editing scripts had rewritten eleven files as CRLF, which
+  `.gitattributes` forbids and which broke a contract test that reads the document it verifies.
+
+### Stage 1C, part 2: retention sweep and the settings this build cannot honour
+
+- `RetentionSweepService` removes exchanges past `capture:retention:metadata` in bounded batches,
+  sweeping once at startup and then on `capture:retention:sweepInterval`. A gateway restarted more
+  often than its interval would otherwise never sweep at all. Idempotent by construction, and
+  auditable by counts and the window rather than by naming what was deleted — a log that names deleted
+  evidence is a copy of it that outlives the policy.
+- `contentEnabled` and `PersistenceMode.Postgres` are now refused. The first claimed prompts were
+  retained under a sanitiser that does not exist; the second was silently served by SQLite.
+
 ### Stage 1C, part 1: SQLite metadata store and the write path
 
 Exchanges survive the process. Until now every exchange produced a complete timeline, measurements
