@@ -128,8 +128,16 @@ public sealed record ReadinessView
     /// <summary>Whether readiness requires a reachable runtime here.</summary>
     public required bool RequiresReachableRuntime { get; init; }
 
-    /// <summary>How many enabled runtimes answered their last discovery attempt.</summary>
-    public required int ReachableRuntimes { get; init; }
+    /// <summary>
+    /// How many enabled runtimes answered their last discovery attempt, or <c>null</c> when
+    /// readiness did not evaluate reachability.
+    /// </summary>
+    /// <remarks>
+    /// Absent whenever <see cref="RequiresReachableRuntime"/> is false, because in that case nothing
+    /// was consulted. Reporting zero would say every runtime was found unreachable, which is a claim
+    /// about a check that never ran (FR-TRACE-006).
+    /// </remarks>
+    public int? ReachableRuntimes { get; init; }
 
     /// <summary>How many runtimes are enabled.</summary>
     public required int EnabledRuntimes { get; init; }

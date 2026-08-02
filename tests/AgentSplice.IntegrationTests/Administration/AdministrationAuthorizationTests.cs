@@ -34,18 +34,31 @@ public sealed class AdministrationAuthorizationTests
     }
 
     [Fact]
-    public async Task A_loopback_caller_reads_the_surface_even_when_a_token_is_configured()
+    public async Task A_configured_token_is_required_even_from_loopback()
     {
-        Environment.SetEnvironmentVariable(TokenVariable, "SENTINEL-ADMIN-TOKEN");
+        // The proxy correction, through the real host. Behind nginx or Caddy on the same machine,
+        // Kestrel sees the proxy's loopback address for every relayed request, so trusting loopback
+        // let an external caller skip the token. Once a token exists, everyone presents it.
+        const string Token = "SENTINEL-ADMIN-TOKEN-host";
+
+        Environment.SetEnvironmentVariable(TokenVariable, Token);
 
         try
         {
             await using var fixture = await GatewayFixture.StartAsync(settings =>
                 settings["agentsplice:administration:apiKeyEnvironmentVariable"] = TokenVariable);
 
-            using var response = await fixture.Client.GetAsync(new Uri("/api/v1/runtimes", UriKind.Relative));
+            using var refused = await fixture.Client.GetAsync(new Uri("/api/v1/runtimes", UriKind.Relative));
 
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, refused.StatusCode);
+            Assert.Equal("Bearer", refused.Headers.WwwAuthenticate.ToString());
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/api/v1/runtimes", UriKind.Relative));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
+
+            using var allowed = await fixture.Client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
         }
         finally
         {
@@ -65,9 +78,14 @@ public sealed class AdministrationAuthorizationTests
             await using var fixture = await GatewayFixture.StartAsync(settings =>
                 settings["agentsplice:administration:apiKeyEnvironmentVariable"] = TokenVariable);
 
-            using var response = await fixture.Client.GetAsync(new Uri("/health/live", UriKind.Relative));
+            using var live = await fixture.Client.GetAsync(new Uri("/health/live", UriKind.Relative));
+            using var ready = await fixture.Client.GetAsync(new Uri("/health/ready", UriKind.Relative));
 
-            Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, live.StatusCode);
+
+            // Readiness too: an orchestrator probe that failed closed on a token would take a healthy
+            // gateway out of rotation for a configuration problem it has no part in.
+            Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
         }
         finally
         {
@@ -206,6 +224,53 @@ public sealed class AdministrationAuthorizationTests
         finally
         {
             Environment.SetEnvironmentVariable("AGENTSPLICE_TEST_EMPTY_TOKEN", null);
+        }
+    }
+
+    [Fact]
+    public async Task A_late_network_binding_with_no_token_fails_host_startup()
+    {
+        // The guard used to read builder.Configuration during composition, which a host is still
+        // assembling — the test factory adds its overrides through ConfigureAppConfiguration, after
+        // the composition root has run. A binding arriving that way was therefore invisible to the
+        // very check meant to catch it. It now reads app.Configuration, which is the finished article.
+        var factory = new AgentSpliceApplicationFactory(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["urls"] = "http://0.0.0.0:5280",
+        });
+
+        await using (factory)
+        {
+            var failure = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+
+            Assert.Contains("apiKeyEnvironmentVariable", failure.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task A_late_network_binding_starts_when_the_named_variable_holds_a_token()
+    {
+        Environment.SetEnvironmentVariable(TokenVariable, "SENTINEL-ADMIN-TOKEN-late");
+
+        try
+        {
+            var factory = new AgentSpliceApplicationFactory(new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["urls"] = "http://0.0.0.0:5280",
+                ["agentsplice:administration:apiKeyEnvironmentVariable"] = TokenVariable,
+            });
+
+            await using (factory)
+            {
+                using var client = factory.CreateClient();
+                using var response = await client.GetAsync(new Uri("/health/live", UriKind.Relative));
+
+                Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(TokenVariable, null);
         }
     }
 

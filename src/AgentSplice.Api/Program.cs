@@ -16,10 +16,6 @@ if (LoopbackBindingDefault.ShouldApply(builder.Configuration))
     builder.WebHost.UseUrls(LoopbackBindingDefault.Urls);
 }
 
-// A gateway reachable from the network must not serve its stored evidence to whoever asks. Refused
-// here rather than warned about, so the dangerous combination has to be chosen rather than forgotten
-// (FR-HEALTH-006, docs/SECURITY.md "Require authentication when listening on a non-loopback address").
-AdministrationBindingGuard.Verify(builder.Configuration);
 
 // A local model can legitimately produce one token every few seconds, which is below Kestrel's
 // default minimum response rate of 240 bytes/s. Left at the default, Kestrel aborts the response
@@ -52,6 +48,13 @@ builder.Services.AddExceptionHandler<GatewayExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+// After Build, and deliberately. builder.Configuration is still being assembled while the composition
+// root runs — a host layers its sources as it is built, and the test host adds its overrides through
+// ConfigureAppConfiguration — so a guard reading it there can miss the very binding it exists to
+// catch. app.Configuration is the finished article, and this still runs before the server accepts
+// anything (FR-HEALTH-006, NFR 14.2).
+AdministrationBindingGuard.Verify(app.Configuration);
 
 app.UseExceptionHandler();
 app.UseRateLimiter();

@@ -48,6 +48,55 @@ internal sealed class OpenApiDocument
             .ToArray();
     }
 
+    /// <summary>The operations under a path, keyed by verb.</summary>
+    internal IReadOnlyDictionary<string, YamlMappingNode> Operations(string path)
+    {
+        var operations = Mapping(Mapping(root, "paths"), path);
+
+        return operations.Children.ToDictionary(
+            entry => ((YamlScalarNode)entry.Key).Value!,
+            entry => (YamlMappingNode)entry.Value,
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>The response status codes an operation declares.</summary>
+    internal static IReadOnlyList<string> ResponseStatuses(YamlMappingNode operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return Mapping(operation, "responses")
+            .Children
+            .Keys
+            .Select(key => ((YamlScalarNode)key).Value!)
+            .ToArray();
+    }
+
+    /// <summary>The security scheme names an operation requires, or an empty list when it requires none.</summary>
+    internal static IReadOnlyList<string> SecuritySchemes(YamlMappingNode operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        if (!operation.Children.TryGetValue(new YamlScalarNode("security"), out var security))
+        {
+            return [];
+        }
+
+        return ((YamlSequenceNode)security)
+            .Children
+            .OfType<YamlMappingNode>()
+            .SelectMany(requirement => requirement.Children.Keys)
+            .Select(key => ((YamlScalarNode)key).Value!)
+            .ToArray();
+    }
+
+    /// <summary>Names of the declared security schemes.</summary>
+    internal IReadOnlyList<string> SecuritySchemeNames() =>
+        Mapping(Mapping(root, "components"), "securitySchemes")
+            .Children
+            .Keys
+            .Select(key => ((YamlScalarNode)key).Value!)
+            .ToArray();
+
     private static YamlMappingNode Mapping(YamlMappingNode parent, string key)
     {
         if (!parent.Children.TryGetValue(new YamlScalarNode(key), out var child))

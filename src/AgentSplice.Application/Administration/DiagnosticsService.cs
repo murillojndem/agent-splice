@@ -120,29 +120,56 @@ public sealed class DiagnosticsService
     /// is off because a gateway whose runtime is down is still correctly configured and still the
     /// thing that should answer the request that proves it — reporting itself unready would make an
     /// orchestrator remove the one component able to report the outage.
+    ///
+    /// With the option off this performs <em>no I/O at all</em>, and the early return is the whole
+    /// point rather than an optimisation. Evaluating health first and checking the flag afterwards
+    /// meant a probe opened a connection to every runtime and could wait out a connect timeout — so a
+    /// deployment that had explicitly said runtime reachability was not a readiness condition still
+    /// had its readiness answer gated on it, and an orchestrator's own probe timeout could expire
+    /// first and mark the gateway down for a reason its configuration denied.
+    ///
+    /// <see cref="ReadinessView.ReachableRuntimes"/> is therefore absent rather than zero here. Zero
+    /// would report that nothing was reachable, which is a claim about a check that did not happen.
     /// </remarks>
     public async Task<GatewayResponse> DescribeReadinessAsync(
         PublicRequestId requestId,
         CancellationToken cancellationToken)
     {
         var required = options.Value.Health.RequireReachableRuntime;
+
+        if (!required)
+        {
+            return Readiness(
+                new ReadinessView
+                {
+                    Ready = true,
+                    RequiresReachableRuntime = false,
+                    ReachableRuntimes = null,
+                    EnabledRuntimes = runtimes.Enabled.Count,
+                },
+                requestId);
+        }
+
         var health = await HealthAsync(cancellationToken).ConfigureAwait(false);
         var reachable = health.Count(view => view.Status == RuntimeHealthStatus.Healthy);
 
-        var view = new ReadinessView
-        {
-            Ready = !required || reachable > 0,
-            RequiresReachableRuntime = required,
-            ReachableRuntimes = reachable,
-            EnabledRuntimes = runtimes.Enabled.Count,
-        };
+        return Readiness(
+            new ReadinessView
+            {
+                Ready = reachable > 0,
+                RequiresReachableRuntime = true,
+                ReachableRuntimes = reachable,
+                EnabledRuntimes = runtimes.Enabled.Count,
+            },
+            requestId);
+    }
 
-        return GatewayResponse.Success(
+    private GatewayResponse Readiness(ReadinessView view, PublicRequestId requestId) =>
+        GatewayResponse.Success(
             view.Ready ? 200 : 503,
             writer.MediaType,
             writer.Write(view),
             requestId);
-    }
 
     /// <summary>
     /// Health for every enabled runtime.

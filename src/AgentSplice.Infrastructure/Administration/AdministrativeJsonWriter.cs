@@ -284,7 +284,12 @@ internal sealed class AdministrativeJsonWriter : IAdministrativeEnvelopeWriter
             writer.WriteStartObject();
             writer.WriteBoolean("ready", readiness.Ready);
             writer.WriteBoolean("requiresReachableRuntime", readiness.RequiresReachableRuntime);
-            writer.WriteNumber("reachableRuntimes", readiness.ReachableRuntimes);
+            // Absent when readiness did not evaluate reachability. Zero would report that every
+            // runtime was found unreachable, from a check that never ran.
+            if (readiness.ReachableRuntimes is { } reachable)
+            {
+                writer.WriteNumber("reachableRuntimes", reachable);
+            }
             writer.WriteNumber("enabledRuntimes", readiness.EnabledRuntimes);
             writer.WriteEndObject();
         });

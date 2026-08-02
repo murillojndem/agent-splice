@@ -123,6 +123,56 @@ public sealed class ConfigurationKeyContractTests
     }
 
     [Fact]
+    public void The_compose_configuration_satisfies_the_administrative_binding_guard()
+    {
+        // The Compose service sets ASPNETCORE_URLS to 0.0.0.0, which AdministrationBindingGuard
+        // correctly treats as network-reachable and refuses without an administrative credential.
+        // The shipped configuration therefore has to supply one, and this asserts the two halves
+        // agree — otherwise the repository's own default container does not start, which is exactly
+        // what happened when the guard landed (FR-HEALTH-006).
+        var compose = RepositoryPaths.ReadText("docker-compose.yml");
+
+        Assert.Contains(
+            "AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE: AGENTSPLICE_ADMIN_API_KEY",
+            compose,
+            StringComparison.Ordinal);
+
+        // Required, with no default. A shipped default token is a token everybody knows.
+        Assert.Contains("${AGENTSPLICE_ADMIN_API_KEY:?", compose, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_example_env_file_documents_the_administrative_token_without_supplying_one()
+    {
+        var env = RepositoryPaths.ReadText(".env.example");
+
+        Assert.Contains("AGENTSPLICE_ADMIN_API_KEY=", env, StringComparison.Ordinal);
+
+        foreach (var line in env.Split('\n'))
+        {
+            var trimmed = line.Trim();
+
+            if (trimmed.StartsWith("AGENTSPLICE_ADMIN_API_KEY=", StringComparison.Ordinal))
+            {
+                Assert.Equal("AGENTSPLICE_ADMIN_API_KEY=", trimmed);
+            }
+        }
+    }
+
+    [Fact]
+    public void The_example_env_file_does_not_advertise_settings_this_build_refuses()
+    {
+        // Both were accurate before the validator started refusing them, and a sample file that
+        // offers a setting the gateway rejects at startup is a first run that fails for a reason the
+        // documentation caused.
+        var env = RepositoryPaths.ReadText(".env.example");
+
+        Assert.DoesNotContain("None, Sqlite, or Postgres", env, StringComparison.Ordinal);
+        Assert.Contains("Postgres is refused at startup", env, StringComparison.Ordinal);
+        Assert.Contains("Refused at startup if set to true", env, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void An_unbindable_key_is_detected_by_the_resolver()
     {
         // Guards the resolver itself: the pre-Stage-0 Compose file used AGENTSPLICE_PERSISTENCE_MODE

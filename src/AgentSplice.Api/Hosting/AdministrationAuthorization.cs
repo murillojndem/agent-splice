@@ -1,31 +1,45 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using AgentSplice.Api.Correlation;
+using AgentSplice.Api.Endpoints;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Protocols;
-using AgentSplice.Api.Correlation;
-using AgentSplice.Api.Endpoints;
 using Microsoft.Extensions.Options;
 
 namespace AgentSplice.Api.Hosting;
 
 /// <summary>
-/// Decides who may read the administrative surface (FR-HEALTH-006).
+/// Decides who may read the administrative surface (FR-HEALTH-006, docs/SECURITY.md).
 /// </summary>
 /// <remarks>
-/// Two rules, and the second is the one that matters. A request arriving from a loopback address is
-/// allowed: it came from this machine, which is the deployment AgentSplice is built for, and
-/// requiring a token there would make the ordinary local case need secret management to look at its
-/// own traces. A request arriving from anywhere else must carry the configured bearer token.
+/// One rule, chosen by whether a token is configured:
 ///
-/// Startup validation refuses a non-loopback binding with no token configured, so the dangerous
-/// combination cannot be reached by forgetting rather than by deciding. The per-request check is
-/// still the authority, because a binding is what an operator configured and a remote address is what
-/// actually arrived.
+/// <list type="bullet">
+/// <item>A token is configured — every request carries it, <em>including one arriving from
+/// loopback</em>.</item>
+/// <item>No token is configured — only loopback is served, and the deployment is supported only as a
+/// directly-reached local process. Startup refuses a binding that is reachable from a network, so
+/// this case cannot be combined with exposure by forgetting.</item>
+/// </list>
 ///
-/// The comparison is constant-time. A token check that returns early on the first wrong byte tells an
-/// attacker how much of a guess was right, one request at a time.
+/// The earlier rule — loopback always trusted, token required only for the rest — was wrong behind a
+/// reverse proxy, which is an ordinary way to run this. Nginx or Caddy on the same host connects to
+/// Kestrel from <c>127.0.0.1</c>, so every relayed request looked local and skipped the token; the
+/// remote address Kestrel sees is the proxy's, and without Forwarded Headers Middleware configured
+/// against known proxies there is nothing to recover the original from.
+///
+/// Reading <c>X-Forwarded-For</c> without that configuration would be worse than the bug: any caller
+/// can send that header, so it would turn a proxy-only weakness into one anybody can reach. A trusted
+/// proxy configuration is a real answer and is not this slice's; requiring the token whenever one
+/// exists removes the ambiguity outright, because a request relayed by a local proxy and a request
+/// made locally then have to satisfy the same check.
+///
+/// The comparison is fixed-time <em>for equal-length inputs</em>.
+/// <see cref="CryptographicOperations.FixedTimeEquals"/> returns immediately when the lengths differ,
+/// so the length of the configured token is observable. That is acceptable for a random token and is
+/// stated rather than papered over.
 /// </remarks>
 internal sealed class AdministrationAuthorization : IEndpointFilter
 {
@@ -55,35 +69,25 @@ internal sealed class AdministrationAuthorization : IEndpointFilter
             return await next(context).ConfigureAwait(false);
         }
 
-        var (requestId, _) = ClientRequestId.Resolve(
-            context.HttpContext.Request.Headers[GatewayHeaderNames.ClientRequestId]);
-
-        await GatewayResponseWriter
-            .WriteAsync(
-                context.HttpContext,
-                GatewayResponse.Failure(
-                    GatewayErrorCatalogue.AdministrationUnauthorized,
-                    errorWriter.MediaType,
-                    errorWriter.Write(GatewayErrorCatalogue.AdministrationUnauthorized),
-                    requestId),
-                context.HttpContext.RequestAborted)
-            .ConfigureAwait(false);
-
-        return null;
+        // Returned rather than written here. A filter that writes the response itself and then
+        // returns null leaves the framework to materialise that null onto a response that has already
+        // started, which throws over the top of the refusal.
+        return new UnauthorizedEnvelope(errorWriter);
     }
 
-    private bool IsAuthorized(HttpContext context)
+    /// <summary>Whether this request may read stored evidence.</summary>
+    internal bool IsAuthorized(HttpContext context)
     {
-        if (IsLoopback(context.Connection.RemoteIpAddress))
-        {
-            return true;
-        }
+        ArgumentNullException.ThrowIfNull(context);
 
         var expected = Token();
 
-        // No token configured and a remote caller: refused. Startup validation should already have
-        // stopped this deployment, and if it somehow starts, the safe answer is the closed one.
-        return expected is not null && Matches(context.Request.Headers.Authorization, expected);
+        // A configured token is required from everyone. See the remarks: a local reverse proxy makes
+        // "arrived from loopback" and "was made locally" the same observation, so the token is the
+        // only thing that separates them.
+        return expected is null
+            ? IsLoopback(context.Connection.RemoteIpAddress)
+            : Matches(context.Request.Headers.Authorization, expected);
     }
 
     /// <summary>
@@ -91,12 +95,20 @@ internal sealed class AdministrationAuthorization : IEndpointFilter
     /// </summary>
     /// <remarks>
     /// A null remote address is treated as loopback: that is what an in-process test server and a
-    /// Unix socket produce, and neither is a network caller. It is not a hole a remote client can
-    /// reach through, because a real socket always has an address.
+    /// Unix socket produce, and neither is a network caller. A real socket always has an address.
+    ///
+    /// Only consulted when no token is configured, which is the deployment that startup has already
+    /// confirmed binds nowhere a network can reach.
     /// </remarks>
     private static bool IsLoopback(IPAddress? address) =>
         address is null || IPAddress.IsLoopback(address);
 
+    /// <summary>The configured token, or <c>null</c> when this deployment has none.</summary>
+    /// <remarks>
+    /// Read from the environment on each call rather than cached, so rotating the variable takes
+    /// effect on the next request instead of at the next restart. The read is a dictionary lookup
+    /// against process environment; this surface is not a hot path.
+    /// </remarks>
     private string? Token()
     {
         var variable = options.Value.Administration.ApiKeyEnvironmentVariable;
@@ -108,12 +120,49 @@ internal sealed class AdministrationAuthorization : IEndpointFilter
 
         var value = Environment.GetEnvironmentVariable(variable);
 
-        return string.IsNullOrEmpty(value) ? null : value;
+        // A named-but-empty variable is not a token. Treating it as one would authorise everybody
+        // with an empty bearer; treating it as "no token configured" would silently downgrade a
+        // deployment that asked for authentication to loopback-only. It is neither: the request is
+        // refused, and startup already refuses this combination on a network binding.
+        return string.IsNullOrEmpty(value) ? string.Empty : value;
+    }
+
+    /// <summary>The 401 body, written through the same path every other gateway response uses.</summary>
+    private sealed class UnauthorizedEnvelope : IResult
+    {
+        private readonly IErrorEnvelopeWriter errorWriter;
+
+        internal UnauthorizedEnvelope(IErrorEnvelopeWriter errorWriter) => this.errorWriter = errorWriter;
+
+        public async Task ExecuteAsync(HttpContext httpContext)
+        {
+            ArgumentNullException.ThrowIfNull(httpContext);
+
+            var (requestId, _) = ClientRequestId.Resolve(
+                httpContext.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+            var error = GatewayErrorCatalogue.AdministrationUnauthorized;
+
+            // RFC 9110 requires a 401 to say how to authenticate. No realm: a realm is a string an
+            // operator would have to choose, and choosing one per deployment invites putting a
+            // hostname in it.
+            httpContext.Response.Headers.WWWAuthenticate = "Bearer";
+
+            await GatewayResponseWriter
+                .WriteAsync(
+                    httpContext,
+                    GatewayResponse.Failure(error, errorWriter.MediaType, errorWriter.Write(error), requestId),
+                    httpContext.RequestAborted)
+                .ConfigureAwait(false);
+        }
     }
 
     private static bool Matches(string? authorization, string expected)
     {
-        if (authorization is null || !authorization.StartsWith(BearerPrefix, StringComparison.Ordinal))
+        // An empty configured token authorises nobody.
+        if (expected.Length == 0
+            || authorization is null
+            || !authorization.StartsWith(BearerPrefix, StringComparison.Ordinal))
         {
             return false;
         }
@@ -121,9 +170,6 @@ internal sealed class AdministrationAuthorization : IEndpointFilter
         var presented = Encoding.UTF8.GetBytes(authorization[BearerPrefix.Length..]);
         var configured = Encoding.UTF8.GetBytes(expected);
 
-        // FixedTimeEquals returns false for a length mismatch without comparing, so the lengths are
-        // compared first only to avoid the exception, not to shortcut the comparison.
-        return presented.Length == configured.Length
-            && CryptographicOperations.FixedTimeEquals(presented, configured);
+        return CryptographicOperations.FixedTimeEquals(presented, configured);
     }
 }

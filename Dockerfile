@@ -4,11 +4,22 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /source
 
 # Restore against the manifests first so that a source-only change reuses the package layer.
-COPY global.json Directory.Build.props Directory.Packages.props ./
+#
+# .editorconfig is part of the build contract, not an editor preference: Directory.Build.props turns
+# warnings into errors, and the analyser severities this repository sets — CA1848 among them — live
+# there. Without it the container build fails on rules the solution has deliberately waived.
+COPY global.json Directory.Build.props Directory.Packages.props .editorconfig ./
+
+# Every project the API transitively references. A missing manifest here does not fail the restore;
+# it fails the publish below with NETSDK1004, because --no-restore then finds no assets file for a
+# project nobody restored.
 COPY src/AgentSplice.Api/AgentSplice.Api.csproj src/AgentSplice.Api/
 COPY src/AgentSplice.Application/AgentSplice.Application.csproj src/AgentSplice.Application/
 COPY src/AgentSplice.Domain/AgentSplice.Domain.csproj src/AgentSplice.Domain/
 COPY src/AgentSplice.Infrastructure/AgentSplice.Infrastructure.csproj src/AgentSplice.Infrastructure/
+COPY src/AgentSplice.Observability/AgentSplice.Observability.csproj src/AgentSplice.Observability/
+COPY src/AgentSplice.Protocols.OpenAI/AgentSplice.Protocols.OpenAI.csproj src/AgentSplice.Protocols.OpenAI/
+COPY src/AgentSplice.Providers.LmStudio/AgentSplice.Providers.LmStudio.csproj src/AgentSplice.Providers.LmStudio/
 RUN dotnet restore src/AgentSplice.Api/AgentSplice.Api.csproj
 
 COPY src/ src/

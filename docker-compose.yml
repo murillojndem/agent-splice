@@ -18,6 +18,15 @@ services:
       AGENTSPLICE__RUNTIMES__0__APIKEYENVIRONMENTVARIABLE: LM_STUDIO_API_KEY
       LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY:-}
       AGENTSPLICE__CAPTURE__CONTENTENABLED: ${AGENTSPLICE__CAPTURE__CONTENTENABLED:-false}
+      # The administrative API serves stored evidence, and a container binds every interface inside
+      # itself — the process cannot see that the host published the port on loopback only. So the
+      # token is mandatory here and the gateway refuses to start without it (FR-HEALTH-006).
+      #
+      # As with every other secret, the gateway is told the variable name and never the value.
+      AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE: AGENTSPLICE_ADMIN_API_KEY
+      # Deliberately has no default. Compose fails with "variable is not set" naming this variable,
+      # which is a better first experience than a container that starts with a token everybody knows.
+      AGENTSPLICE_ADMIN_API_KEY: ${AGENTSPLICE_ADMIN_API_KEY:?set AGENTSPLICE_ADMIN_API_KEY in .env to a value you choose; the administrative API is unauthenticated without it}
     ports:
       # Bound to loopback on the host. AgentSplice traffic carries prompts and model output, so the
       # default must not be reachable from the local network (docs/SECURITY.md).
@@ -28,6 +37,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # Scaffolding for a later stage. AgentSplice cannot use it: agentsplice:persistence:mode accepts
+  # Sqlite or None in this build and refuses Postgres at startup, because no provider implements it
+  # (FR-DATA-003). The service is kept so the Compose topology does not have to be invented later.
   postgres:
     image: postgres:16-alpine
     profiles: ["postgres"]

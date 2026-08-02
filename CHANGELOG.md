@@ -4,6 +4,46 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1C review corrections
+
+Directed review of the finished backend found three material problems, one of them a regression the
+slice introduced into the repository's own container configuration.
+
+- **Docker and Compose could not start.** `AdministrationBindingGuard` correctly treats the
+  container's `0.0.0.0:5280` as network-reachable and refuses without a credential, and nothing
+  shipped one. Compose now requires `AGENTSPLICE_ADMIN_API_KEY` with no default, failing at
+  `docker compose config` with a message naming the variable — a default token is a token everybody
+  knows. The guard was not weakened: a process inside a container cannot tell that the host published
+  its port on loopback only.
+- Two Dockerfile defects surfaced while proving this and had been latent since the projects existed:
+  the restore stage copied four of seven manifests, so `--no-restore` publish failed with
+  `NETSDK1004`, and `.editorconfig` never entered the build context, so the analyser severities this
+  repository waives — `CA1848` among them — were errors inside the image.
+- **Readiness consulted runtimes with the option off.** Health was evaluated before
+  `requireReachableRuntime` was read, so a probe could wait out a connect timeout on a deployment
+  whose configuration had explicitly said reachability was not a readiness condition — long enough for
+  an orchestrator's own probe to expire and take a healthy gateway out of rotation. The early return
+  is now the contract, and `reachableRuntimes` is absent rather than zero when nothing was consulted.
+- **A local reverse proxy could bypass the administrative token.** Trusting a loopback remote address
+  is wrong behind nginx or Caddy, which connect to Kestrel from `127.0.0.1`, so every relayed request
+  looked local. Reading `X-Forwarded-For` without trusted-proxy configuration would be worse — that
+  header is caller-supplied. A configured token is now required from every caller, loopback included,
+  which makes a relayed request and a local one satisfy the same check.
+- `AdministrationBindingGuard` now runs against `app.Configuration` after `Build()`. Reading
+  `builder.Configuration` inside the composition root is the same defect as ADR 0013 decision 13 one
+  layer up: a late binding was invisible to the check meant to catch it.
+- The filter returns its refusal as an `IResult` instead of writing the response and returning null,
+  which left the framework materialising that null onto a response that had already started.
+- `401` now carries `WWW-Authenticate: Bearer`. The envelope still names the mechanism and never the
+  presented token, the configured variable, or the caller.
+- The OpenAPI draft gained a bearer security scheme, per-operation `400`/`401`/`404`/`500`/`503`
+  responses, and a corrected description: timeline and observations return the same ordered sequence
+  in Stage 1, which the document had described as a projection that has never existed.
+- `.env.example` no longer offers PostgreSQL or content capture as usable; both are refused at
+  startup.
+- Corrected "constant-time" to what it is: `FixedTimeEquals` returns immediately on a length mismatch,
+  so the configured token's length is observable. Acceptable for a random token, and stated.
+
 ### Stage 1C, part 5: administrative authentication
 
 - Every `/api/v1` route now requires authorization, applied to the route group so a route added later

@@ -33,7 +33,25 @@
 
 ## Authentication
 
-Stage 1 may support a static bearer token for local-network use. Store only a secret reference or appropriate hash. Future deployments may add OIDC, but OIDC is not required for the first alpha.
+Stage 1 supports a static bearer token for the administrative API. Only a secret reference is stored:
+`agentsplice:administration:apiKeyEnvironmentVariable` holds the *name* of an environment variable.
+Future deployments may add OIDC, but OIDC is not required for the first alpha.
+
+The rule is chosen by whether a token is configured, and there is deliberately no middle setting:
+
+- **A token is configured.** Every `/api/v1` request carries it, including one arriving from loopback.
+- **No token is configured.** Only loopback is served, and startup refuses a binding a network can
+  reach, so this case cannot be combined with exposure by forgetting.
+
+A loopback remote address is not evidence of a local caller. A reverse proxy on the same host connects
+to Kestrel from `127.0.0.1`, so a relayed external request is indistinguishable from a local one at
+the socket. Trusting `X-Forwarded-For` without Forwarded Headers Middleware configured against known
+proxies would make it worse — that header is caller-supplied — so the token is required from everyone
+once one exists. A trusted-proxy deployment needs `KnownProxies`/`KnownNetworks` configuration that
+this stage does not implement.
+
+The container configuration therefore requires a token: a process inside a container binds every
+interface it can see and cannot tell that the host published the port on loopback only.
 
 ## Upstream credentials
 

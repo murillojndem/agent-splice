@@ -81,7 +81,7 @@ paths:
         '400':
           $ref: '#/components/responses/ErrorResponse'
         '404':
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: '#/components/responses/ExchangeNotFound'
         '413':
           $ref: '#/components/responses/ErrorResponse'
         '429':
@@ -140,6 +140,8 @@ paths:
     get:
       tags: [System]
       operationId: getSystemInfo
+      security:
+        - AdministrationBearer: []
       responses:
         '200':
           description: Redacted build and module information
@@ -147,11 +149,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/health/runtimes:
     get:
       tags: [Runtimes]
       operationId: getRuntimeHealth
+      security:
+        - AdministrationBearer: []
       responses:
         '200':
           description: Runtime health states
@@ -161,11 +169,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RuntimeHealth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/runtimes:
     get:
       tags: [Runtimes]
       operationId: listRuntimes
+      security:
+        - AdministrationBearer: []
       description: >-
         Configured runtime endpoints with redacted connection detail. Credentials are referenced by
         environment-variable name and never returned.
@@ -178,11 +192,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RuntimeSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/models:
     get:
       tags: [Runtimes]
       operationId: listModelCatalog
+      security:
+        - AdministrationBearer: []
       description: >-
         Administrative model catalogue. Distinguishes configured entries from currently reachable
         ones and retains capability provenance.
@@ -195,11 +215,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CatalogModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/exchanges:
     get:
       tags: [Exchanges]
       operationId: listExchanges
+      security:
+        - AdministrationBearer: []
       parameters:
         - name: cursor
           in: query
@@ -220,11 +246,21 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExchangePage'
+        '400':
+          $ref: '#/components/responses/InvalidQuery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/PersistenceDisabled'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/exchanges/{exchangeId}:
     get:
       tags: [Exchanges]
       operationId: getExchange
+      security:
+        - AdministrationBearer: []
       parameters:
         - $ref: '#/components/parameters/ExchangeId'
       responses:
@@ -235,12 +271,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExchangeDetail'
         '404':
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: '#/components/responses/ExchangeNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/PersistenceDisabled'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/exchanges/{exchangeId}/timeline:
     get:
       tags: [Exchanges]
       operationId: getExchangeTimeline
+      security:
+        - AdministrationBearer: []
       parameters:
         - $ref: '#/components/parameters/ExchangeId'
       responses:
@@ -253,15 +297,26 @@ paths:
                 items:
                   $ref: '#/components/schemas/TimelineObservation'
         '404':
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: '#/components/responses/ExchangeNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/PersistenceDisabled'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/exchanges/{exchangeId}/observations:
     get:
       tags: [Exchanges]
       operationId: getExchangeObservations
+      security:
+        - AdministrationBearer: []
       description: >-
-        Raw observation records for an exchange. Unlike the timeline projection, this surface returns
-        every recorded observation including repeated boundaries.
+        Every recorded observation for an exchange, in sequence order. In Stage 1 this is byte-for-byte
+        what the timeline route returns: the timeline already is every observation in order, and
+        nothing collapses or de-duplicates it. Both routes exist because both are published; making
+        them differ would invent a distinction the evidence does not have. A later stage that adds a
+        timeline projection is where they separate.
       parameters:
         - $ref: '#/components/parameters/ExchangeId'
       responses:
@@ -274,12 +329,20 @@ paths:
                 items:
                   $ref: '#/components/schemas/TimelineObservation'
         '404':
-          $ref: '#/components/responses/ErrorResponse'
+          $ref: '#/components/responses/ExchangeNotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/PersistenceDisabled'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/replay-artifacts:
     post:
       tags: [Replay]
       operationId: createReplayArtifact
+      security:
+        - AdministrationBearer: []
       description: Stage 2 endpoint. Creates a sanitized immutable artifact.
       requestBody:
         required: true
@@ -294,6 +357,9 @@ paths:
       responses:
         '202':
           description: Artifact creation accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
           content:
             application/json:
               schema:
@@ -305,6 +371,8 @@ paths:
     post:
       tags: [Conformance]
       operationId: startConformanceRun
+      security:
+        - AdministrationBearer: []
       description: Stage 2 endpoint.
       requestBody:
         required: true
@@ -320,12 +388,37 @@ paths:
       responses:
         '202':
           description: Run accepted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationAccepted'
 
+security: []
+
 components:
+  securitySchemes:
+    AdministrationBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        Bearer token for /api/v1. The token is read from the environment variable named by
+        agentsplice:administration:apiKeyEnvironmentVariable; the setting holds a variable name and
+        never a value.
+
+        When a token is configured it is required for every /api/v1 request, including one arriving
+        from loopback. Behind a local reverse proxy Kestrel sees the proxy's loopback address, so
+        "arrived from 127.0.0.1" and "was made on this machine" are the same observation and cannot be
+        told apart without trusted-proxy configuration this build does not have.
+
+        When no token is configured only loopback is served, and startup refuses a binding reachable
+        from a network — so the unauthenticated case cannot be combined with exposure by forgetting.
+
+        /health/live and /health/ready are outside this scheme: a probe that failed closed on a
+        misconfigured token would take a healthy gateway out of rotation.
+
   parameters:
     ClientRequestId:
       name: x-request-id
@@ -356,6 +449,57 @@ components:
       schema: { type: string }
 
   responses:
+    Unauthorized:
+      description: >-
+        agentsplice_administration_unauthorized. Carries WWW-Authenticate: Bearer. The envelope names
+        the mechanism and never the presented token, the configured variable, or the caller.
+      headers:
+        WWW-Authenticate:
+          schema: { type: string }
+        x-agentsplice-request-id:
+          $ref: '#/components/headers/AgentSpliceRequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    ExchangeNotFound:
+      description: >-
+        agentsplice_exchange_not_found. The identifier names no retained exchange. An identifier that
+        does not parse answers the same way: a caller who cannot see the store cannot tell the two
+        apart, and separating them would report which guesses were well-formed. An exchange removed by
+        retention answers this too, which is what it is.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    PersistenceDisabled:
+      description: >-
+        agentsplice_persistence_disabled. This deployment retains no exchange metadata, so a read of
+        stored evidence has no answer. Not an empty page: ephemeral operation is supported, and there
+        "nothing is stored" and "nothing happened" are both true while only one answers the question.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    InvalidQuery:
+      description: >-
+        agentsplice_invalid_query. A query parameter is outside the published vocabulary. The envelope
+        names the parameter and never echoes its value.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+    InternalError:
+      description: agentsplice_internal_error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
     ErrorResponse:
       description: Stable OpenAI-compatible error envelope
       headers:
@@ -450,11 +594,17 @@ components:
 
     Readiness:
       type: object
-      required: [ready, requiresReachableRuntime, reachableRuntimes, enabledRuntimes]
+      required: [ready, requiresReachableRuntime, enabledRuntimes]
       properties:
         ready: { type: boolean }
         requiresReachableRuntime: { type: boolean }
-        reachableRuntimes: { type: integer, minimum: 0 }
+        reachableRuntimes:
+          type: integer
+          minimum: 0
+          description: >-
+            Enabled runtimes known reachable. Absent when requiresReachableRuntime is false, because
+            readiness then performs no discovery at all — zero would report that every runtime was
+            found unreachable by a check that never ran.
         enabledRuntimes: { type: integer, minimum: 0 }
 
     RuntimeHealth:

@@ -64,8 +64,8 @@ is proven instead.
 
 ## Running the host
 
-Stage 0's host boots and validates configuration; it serves no HTTP endpoints. `GET /v1/models` and
-`POST /v1/chat/completions` arrive with Stage 1A.
+The host serves `GET /v1/models` and `POST /v1/chat/completions`, the `/api/v1` administrative surface
+that reads retained evidence, and the `/health/live` and `/health/ready` probes.
 
 ```powershell
 dotnet run --project src/AgentSplice.Api
@@ -96,6 +96,39 @@ ignored and the deployment quietly runs on defaults.
 
 Copy `.env.example` to `.env` for Compose. Never commit a real API key: a runtime is configured with
 the *name* of the environment variable holding its key, never the value.
+
+### Running in Docker
+
+Compose requires an administrative token and refuses to start without one:
+
+```bash
+cp .env.example .env
+# choose your own value and put it in .env
+echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
+docker compose up --build
+```
+
+Omitting it fails at `docker compose config` with a message naming the variable. That is deliberate:
+the container binds `0.0.0.0:5280` inside itself, and a process cannot tell that the host published
+that port on loopback only — so from the gateway's point of view it is network-reachable, and
+`AdministrationBindingGuard` refuses to serve stored evidence without a credential. Shipping a default
+token instead would ship a token everybody knows.
+
+Once a token is configured it is required for **every** `/api/v1` call, including one made from the
+host through the published port:
+
+```bash
+curl -i http://127.0.0.1:5280/health/live                       # 204, no token needed
+curl -i http://127.0.0.1:5280/api/v1/system                     # 401
+curl -i -H "Authorization: Bearer $AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5280/api/v1/system  # 200
+```
+
+See `docs/SECURITY.md` for why loopback alone does not authorise: behind a reverse proxy every
+relayed request arrives from `127.0.0.1`.
+
+Running directly rather than in a container needs none of this — the default binding is loopback and
+no token is configured, so `/api/v1` serves local callers and startup refuses any binding that would
+change that.
 
 ## Adding a package
 

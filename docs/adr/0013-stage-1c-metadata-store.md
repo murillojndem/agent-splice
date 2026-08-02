@@ -121,7 +121,52 @@ them whole — an operator correlating a client's complaint to a stored exchange
 match on — so they are kept and the administrative surface that serves them is authorized like any
 other stored evidence, rather than hashed into uselessness.
 
-### 5. The store stamps its own boundaries, in two transactions
+### 5. A configured administrative token is required from everyone, loopback included
+
+The first version trusted a loopback remote address outright and asked for the token only from
+everyone else. That is wrong behind a reverse proxy, which is an ordinary way to run this: nginx or
+Caddy on the same host connects to Kestrel from `127.0.0.1`, so every request it relays arrives with a
+loopback address and skipped the token entirely.
+
+Rejected: reading `X-Forwarded-For`. Without Forwarded Headers Middleware configured against known
+proxies, that header is caller-supplied — it would turn a proxy-only weakness into one any caller can
+reach, which is worse than the bug.
+
+Rejected for this slice: trusted-proxy configuration. `KnownProxies`/`KnownNetworks` is the real
+answer for a proxied deployment and needs its own tests for the direct, trusted-proxy, and
+spoofed-header cases. It is a deployment feature, not a correction.
+
+So: a token, when configured, is required from every caller. A relayed request and a local one then
+satisfy the same check, and the ambiguity disappears rather than being adjudicated. When no token is
+configured, only loopback is served and startup refuses a binding a network can reach — the two rules
+together mean the unauthenticated deployment cannot be exposed by forgetting.
+
+The container configuration requires a token for a reason worth stating: a process inside a container
+binds every interface it can see and cannot tell that the host published the port on loopback only.
+`docker-compose.yml` therefore fails with a message naming the variable rather than shipping a default
+token, because a default token is a token everybody knows.
+
+### 6. Readiness performs no runtime I/O unless asked to
+
+`requireReachableRuntime` is off by default so that readiness does not depend on a runtime. The first
+version evaluated health and *then* consulted the flag, so a probe opened a connection to every
+runtime and could wait out a connect timeout on a deployment whose configuration had explicitly said
+runtime reachability was not a readiness condition — long enough for an orchestrator's own probe
+timeout to expire and mark the gateway down for a reason its configuration denied.
+
+The early return is therefore the contract rather than an optimisation, and `reachableRuntimes` is
+absent rather than zero when reachability was not evaluated: zero would report every runtime found
+unreachable by a check that never ran.
+
+### 7. Startup validation reads the final configuration
+
+`AdministrationBindingGuard` originally ran against `builder.Configuration` inside the composition
+root, which is the same defect as decision 10 one layer up: a host layers its sources as it is built,
+and the test host adds overrides through `ConfigureAppConfiguration` afterwards. A late binding was
+invisible to the check that exists to catch it. It now runs against `app.Configuration` after
+`Build()` and before the server accepts anything.
+
+### 8. The store stamps its own boundaries, in two transactions
 
 `MetadataQueued` is read by the sink as the record enters the queue. `PersistenceCompleted` is read by
 the writer *after* the commit returned, which requires a second transaction.
@@ -137,7 +182,7 @@ exchange rather than as the batch's write time. A batch covers many exchanges; a
 duration to each would report one number N times and overstate every one. The name had been declared
 in `MeasurementNames` since Stage 1A with nothing able to produce it.
 
-### 6. `PersistenceFailed` is not a stored observation
+### 9. `PersistenceFailed` is not a stored observation
 
 The store that rejected the write is the one the row would have to live in. A failure is a log event
 with a stable ID and an `agentsplice.persistence.failures` increment; nothing pretends to be evidence
@@ -146,7 +191,7 @@ that survived.
 The asymmetry is deliberate and worth stating, because a reader who finds `MetadataQueued` and
 `PersistenceCompleted` in the schema will look for the third and should not conclude it was forgotten.
 
-### 7. The queue refuses rather than drops silently
+### 10. The queue refuses rather than drops silently
 
 The bounded channel uses `BoundedChannelFullMode.Wait` and is never awaited. `TryWrite` under that
 mode returns `false` immediately when full, which is the only configuration that both refuses to block
@@ -160,7 +205,7 @@ Full means drop, with a counter and a log line. Waiting turns a slow store into 
 then into a stalled stream; growing without limit turns it into an out-of-memory kill that takes the
 proxy down with it.
 
-### 8. A failed batch is dropped, not retried
+### 11. A failed batch is dropped, not retried
 
 Retrying reorders evidence behind whatever arrived while it retried, or stalls the queue forever
 behind a record the store will never accept — and a stalled queue loses every exchange after it, not
@@ -179,7 +224,7 @@ It stops being true when PostgreSQL ships, because that provider does enforce le
 the 128-character column waiting for it. The slice that adds the provider owns either bounding that
 value or writing each record independently on failure.
 
-### 9. The wait for work is cancellable; the write is not
+### 12. The wait for work is cancellable; the write is not
 
 `WaitToReadAsync` takes the stopping token. `SaveChangesAsync` takes `CancellationToken.None`.
 
@@ -193,7 +238,7 @@ The shutdown flush lives at the end of `ExecuteAsync` rather than in `StopAsync`
 the channel. A second reader in `StopAsync` would race the loop whenever the shutdown timeout elapsed
 first.
 
-### 10. Whether a store exists is decided at resolution, never at registration
+### 13. Whether a store exists is decided at resolution, never at registration
 
 Reading `IConfiguration` while services are being registered reads it half-built: a host layers its
 sources as it is assembled, and a test host adds its overrides after the composition root has run. The
@@ -204,7 +249,7 @@ The context factory and both hosted services are registered unconditionally and 
 `IOptions<AgentSpliceOptions>` when resolved. A registration is not a connection: with persistence off
 nothing creates a context, so no provider initialises and no file appears.
 
-### 11. A store that cannot be opened fails startup; a write that fails later does not
+### 14. A store that cannot be opened fails startup; a write that fails later does not
 
 Different classes of problem. A store that cannot be migrated at all is a deployment fault — a bad
 path, a read-only volume, a schema from a newer build — and NFR 14.2 puts that before readiness. A
@@ -213,7 +258,7 @@ write that fails at runtime is a condition the gateway must survive (FR-DATA-009
 Starting silently with a broken store would produce a gateway that proxies perfectly and retains
 nothing, which is the one failure an evidence product must not have quietly.
 
-### 12. The model is provider-neutral, and the schema is versioned
+### 15. The model is provider-neutral, and the schema is versioned
 
 No SQLite type names, no provider-specific value generation, no raw SQL, timestamps as UTC ticks.
 FR-DATA-003 commits to PostgreSQL through the same contracts, and a model that must be rewritten to
@@ -223,7 +268,7 @@ is refused rather than quietly served by SQLite.
 Migrations rather than `EnsureCreated`, because an existing store has to survive an upgrade and
 `EnsureCreated` leaves no way to alter one.
 
-### 13. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
+### 16. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
 
 ADR 0009 deferred the SDK to Stage 1C, "which is when persistence and the trace API give it something
 to export". Persistence now exists and the reasoning did not survive contact with it: what the SDK

@@ -128,24 +128,50 @@ indistinguishable to a caller who cannot see the store, and separating them woul
 the surface which of their guesses were well-formed. An exchange expired by retention answers the same
 way, which is what it is.
 
-Every `/api/v1` route requires authorization. A request from a loopback address is allowed — it came
-from this machine, which is the deployment AgentSplice is built for, and requiring a token there would
-make looking at your own traces need secret management. A request from anywhere else must carry
-`Authorization: Bearer <token>`, where the token is read from the environment variable named by
-`agentsplice:administration:apiKeyEnvironmentVariable`; the setting holds a variable name and never a
-secret. The comparison is constant-time, and a failure answers `401`
-`agentsplice_administration_unauthorized` rather than `404`, so an operator with a wrong token can
-tell a typo from a route that does not exist.
+Every `/api/v1` route requires authorization, and which rule applies depends on whether a token is
+configured:
 
-Startup validation refuses a non-loopback binding with no token configured, so the dangerous
-combination has to be chosen rather than forgotten (FR-HEALTH-006).
+| `agentsplice:administration:apiKeyEnvironmentVariable` | Rule |
+|---|---|
+| Set, and the named variable holds a value | Every request carries `Authorization: Bearer <token>`, **including one from loopback** |
+| Unset | Only loopback is served, and startup refuses a binding a network can reach |
+
+The setting holds the *name* of an environment variable and never a secret.
+
+**Loopback alone is not proof of a local caller.** A reverse proxy on the same host — nginx, Caddy —
+connects to Kestrel from `127.0.0.1`, so every request it relays arrives with a loopback remote
+address. Without Forwarded Headers Middleware configured against known proxies there is nothing to
+recover the original caller from, and reading `X-Forwarded-For` without that configuration would be
+worse than the gap it closes: any caller can send that header. So once a token exists it is required
+from everyone, which makes a relayed request and a local one satisfy the same check. A trusted-proxy
+configuration is a real answer and is not this stage's.
+
+Startup refuses a network-reachable binding with no token, so the unauthenticated case cannot be
+combined with exposure by forgetting (FR-HEALTH-006). A bare `HTTP_PORTS`, a wildcard host, and
+`0.0.0.0` all count as network-reachable — that is what a container publishing a port produces.
+
+A refusal answers `401` `agentsplice_administration_unauthorized` with `WWW-Authenticate: Bearer`,
+rather than `404`. Hiding the surface would be a fiction the OpenAPI draft publishes anyway, and it
+would leave an operator with a wrong token unable to tell a typo from a route that does not exist. The
+envelope names the mechanism and never the presented token, the configured variable, or the caller.
+
+The token comparison is fixed-time for equal-length inputs. `CryptographicOperations.FixedTimeEquals`
+returns immediately when lengths differ, so the length of the configured token is observable; that is
+acceptable for a random token and is stated rather than implied away.
 
 `/health/live` and `/health/ready` sit outside `/api/v1` because they serve an orchestrator rather
 than a dashboard. Liveness touches nothing and answers `204`: a probe that consulted a runtime would
 restart the gateway whenever the model server was slow, turning a diagnosable outage into a crash loop
-(FR-HEALTH-002). Readiness answers `200`, or `503` when `agentsplice:health:requireReachableRuntime`
-is on and no enabled runtime has answered. That flag is off by default, because a gateway whose
-runtime is down is still correctly configured and is still the component able to report the outage.
+(FR-HEALTH-002). Readiness answers `200`, or `503` when `agentsplice:health:requireReachableRuntime` is on and no
+enabled runtime has answered. That flag is off by default, because a gateway whose runtime is down is
+still correctly configured and is still the component able to report the outage.
+
+**With the flag off, readiness performs no runtime I/O at all** — no discovery refresh, no upstream
+connection, no timeout to wait out — and `reachableRuntimes` is absent rather than zero, because zero
+would report that every runtime was found unreachable by a check that never ran. Evaluating health
+first and consulting the flag afterwards meant a probe could block on a connect timeout for a
+deployment whose configuration had explicitly said runtime reachability was not a readiness condition,
+long enough for an orchestrator's own probe timeout to expire and mark the gateway down.
 
 `/api/v1/health/runtimes` derives health from the same discovery the request path uses rather than
 probing separately. A second prober would double the load on every runtime and could disagree with
