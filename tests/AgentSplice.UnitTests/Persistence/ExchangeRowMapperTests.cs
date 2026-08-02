@@ -6,6 +6,7 @@ using AgentSplice.Domain.Identifiers;
 using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 using AgentSplice.Infrastructure.Persistence;
+using Rows = AgentSplice.Infrastructure.Persistence.Rows;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -39,7 +40,7 @@ public sealed class ExchangeRowMapperTests
         clock.Advance(TimeSpan.FromSeconds(3));
         recorder.Complete();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
 
         Assert.Equal(recorder.ExchangeId.Value, row.ExchangeId);
         Assert.Equal("gpt-oss-20b", row.ClientModelId);
@@ -63,7 +64,7 @@ public sealed class ExchangeRowMapperTests
         recorder.Observe(ObservationType.RequestAccepted, Origin);
         recorder.Fail(GatewayErrorCatalogue.For(FailureClass.ModelNotFound));
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
 
         Assert.Equal(Origin.UtcTicks, row.StartedAtTicks);
         Assert.Equal((int)ExchangeStatus.Failed, row.Status);
@@ -89,7 +90,7 @@ public sealed class ExchangeRowMapperTests
         recorder.Observe(ObservationType.RequestAccepted, Origin);
         recorder.Cancel();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
 
         Assert.Equal((int)ExchangeStatus.Cancelled, row.Status);
     }
@@ -105,7 +106,7 @@ public sealed class ExchangeRowMapperTests
         clock.Advance(TimeSpan.FromSeconds(1));
         recorder.Fail(GatewayErrorCatalogue.For(FailureClass.ModelNotFound));
 
-        Assert.Null(ExchangeRowMapper.ToRow(recorder.ToRecord()).CompletedAtTicks);
+        Assert.Null(Row(recorder).CompletedAtTicks);
     }
 
     [Fact]
@@ -118,7 +119,7 @@ public sealed class ExchangeRowMapperTests
 
         // Zero would be a claim that no tokens were consumed. Absence is the claim that AgentSplice
         // does not know, and the two must not be stored the same way (FR-OBS-003).
-        Assert.Null(ExchangeRowMapper.ToRow(recorder.ToRecord()).UsageJson);
+        Assert.Null(Row(recorder).UsageJson);
     }
 
     [Fact]
@@ -132,7 +133,7 @@ public sealed class ExchangeRowMapperTests
             TokenCount.FromGatewayEstimate(22))));
         recorder.Complete();
 
-        var usage = JsonDocument.Parse(ExchangeRowMapper.ToRow(recorder.ToRecord()).UsageJson!).RootElement;
+        var usage = JsonDocument.Parse(Row(recorder).UsageJson!).RootElement;
 
         Assert.Equal(11, usage.GetProperty("promptTokens").GetProperty("value").GetInt32());
         Assert.Equal(
@@ -159,7 +160,7 @@ public sealed class ExchangeRowMapperTests
         clock.Advance(TimeSpan.FromMilliseconds(5));
         recorder.Complete();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
         var sequences = row.Observations.Select(observation => observation.Sequence).ToArray();
 
         Assert.Equal([0, 1, 2], sequences);
@@ -175,7 +176,7 @@ public sealed class ExchangeRowMapperTests
         recorder.Observe(ObservationType.RequestAccepted, Origin);
         recorder.Observe(ObservationType.ModelResolved, SafeDetails.Create("runtime.id", "lmstudio-local"));
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
 
         Assert.Null(row.Observations.First().DetailsJson);
         Assert.Contains(
@@ -193,7 +194,7 @@ public sealed class ExchangeRowMapperTests
         clock.Advance(TimeSpan.FromSeconds(2));
         recorder.Complete();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
         var names = row.Measurements.Select(measurement => measurement.Name).ToArray();
 
         Assert.Contains(MeasurementNames.TotalDuration, names, StringComparer.Ordinal);
@@ -214,7 +215,7 @@ public sealed class ExchangeRowMapperTests
         clock.Advance(TimeSpan.FromSeconds(1));
         recorder.Complete();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
         var prompt = row.Measurements.Single(measurement =>
             string.Equals(measurement.Name, MeasurementNames.PromptTokens, StringComparison.Ordinal));
 
@@ -243,11 +244,19 @@ public sealed class ExchangeRowMapperTests
             "text/event-stream; charset=utf-8; boundary=" + new string('x', 300))));
         recorder.Complete();
 
-        var row = ExchangeRowMapper.ToRow(recorder.ToRecord());
+        var row = Row(recorder);
 
         Assert.Equal("text/event-stream", row.UpstreamMediaType);
         Assert.Equal(200, row.UpstreamStatusCode);
     }
+
+    /// <summary>Maps a recorder's evidence the way the writer does.</summary>
+    /// <remarks>
+    /// The retention state is the writer's to supply, not the exchange's: every exchange is opened
+    /// as Disabled and only the store knows whether it is about to retain anything.
+    /// </remarks>
+    private static Rows.ExchangeRow Row(ExchangeRecorder recorder) =>
+        ExchangeRowMapper.ToRow(recorder.ToRecord(), ContentRetentionState.MetadataOnly);
 
     private static ExchangeRecorder Recorder(out FakeTimeProvider clock)
     {

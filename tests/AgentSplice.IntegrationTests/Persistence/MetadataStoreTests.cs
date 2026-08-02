@@ -197,6 +197,85 @@ public sealed class MetadataStoreTests
     }
 
     [Fact]
+    public async Task No_caller_chosen_text_reaches_the_store_through_a_metadata_field()
+    {
+        // The adversarial half of the leakage suite. The previous test puts its sentinels in
+        // "content", which the gateway never reads — so it passed while three fields that AgentSplice
+        // does record carried whatever the caller put in them straight into SQLite with content
+        // capture disabled: the role, the name of any unknown property, and the runtime's own
+        // finish_reason (FR-DATA-005, docs/SECURITY.md "Safe structural summaries must not
+        // reconstruct sensitive payloads accidentally").
+        const string RoleSentinel = "SENTINEL-ROLE-aaa111";
+        const string FieldSentinel = "SENTINEL-FIELD-bbb222";
+        const string FinishSentinel = "SENTINEL-FINISH-ccc333";
+
+        using var store = new TemporaryMetadataStore();
+
+        var completion = Completion.Replace("\"stop\"", $"\"{FinishSentinel}\"", StringComparison.Ordinal);
+
+        await ProxyAsync(
+            store,
+            body: $$"""
+                {"model":"qwen3.6-27b-mtp",
+                 "messages":[{"role":"{{RoleSentinel}}","content":"hi"}],
+                 "{{FieldSentinel}}":1}
+                """,
+            completion: completion);
+
+        await SingleExchangeAsync(store);
+
+        using var context = store.OpenContext();
+        var stored = new List<string>();
+
+        foreach (var row in await context.Exchanges.ToListAsync())
+        {
+            stored.Add(row.RequestSummaryJson ?? string.Empty);
+            stored.Add(row.ResponseSummaryJson ?? string.Empty);
+            stored.Add(row.ClientModelId ?? string.Empty);
+        }
+
+        foreach (var observation in await context.Observations.ToListAsync())
+        {
+            stored.Add(observation.DetailsJson ?? string.Empty);
+        }
+
+        var everything = string.Join('\n', stored);
+
+        Assert.DoesNotContain("SENTINEL", everything, StringComparison.OrdinalIgnoreCase);
+
+        // Not merely absent: replaced by something a reader can interpret. The role and the finish
+        // reason become buckets, and the field name becomes a hash an operator can reproduce.
+        Assert.Contains(SafeVocabulary.Unrecognised, everything, StringComparison.Ordinal);
+        Assert.Contains(SafeVocabulary.HashName(FieldSentinel), everything, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_stored_exchange_declares_that_metadata_was_retained()
+    {
+        // Every row used to say Disabled, whose documented meaning is "nothing was retained", while
+        // holding summaries, observations, and measurements. ExchangeRecorder.Accept opens every
+        // exchange that way and cannot know better; only the store knows whether it is storing
+        // (FR-TRACE-010).
+        using var store = new TemporaryMetadataStore();
+
+        await ProxyAsync(store);
+
+        Assert.Equal((int)ContentRetentionState.MetadataOnly, (await SingleExchangeAsync(store)).ContentRetentionState);
+    }
+
+    [Fact]
+    public async Task A_request_refused_before_its_envelope_was_read_also_declares_metadata_retention()
+    {
+        // Such a record has no CompletionExchange to carry the state at all, so a row built from one
+        // would have had to invent it. The store supplies it because the store is what retained.
+        using var store = new TemporaryMetadataStore();
+
+        var row = await RefusedAsync(store, "{ not json at all", System.Net.HttpStatusCode.BadRequest);
+
+        Assert.Equal((int)ContentRetentionState.MetadataOnly, row.ContentRetentionState);
+    }
+
+    [Fact]
     public async Task A_request_naming_an_unknown_model_keeps_the_name_and_records_no_runtime()
     {
         // The exchange is opened before resolution runs, deliberately, so a request naming an unknown

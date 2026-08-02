@@ -53,33 +53,38 @@ public sealed class ChatCompletionRequestCodecTests
 
         Assert.Equal(
             1,
-            envelope.Summary.MessageCountsByRole[StructuralRequestSummary.UnspecifiedRoleName]);
+            envelope.Summary.MessageCountsByRole[SafeVocabulary.Unspecified]);
     }
 
     [Fact]
-    public void Distinct_role_names_are_bounded_and_the_truncation_is_visible()
+    public void A_role_the_protocol_does_not_define_is_bucketed_rather_than_recorded()
     {
-        // A request with a unique role per message would otherwise grow the summary without limit.
-        var messages = Enumerable.Range(0, StructuralRequestSummary.MaxRoleNames + 5)
+        // The client picks this string. A cardinality bound stopped the dictionary growing and did
+        // nothing about what was in it, which is how a prompt fragment reached the store through
+        // "role" while content capture was off.
+        var messages = Enumerable.Range(0, 20)
+            .Select(index => $$"""{"role":"SENTINEL-PROMPT-{{index}}","content":"x"}""");
+
+        var envelope = Read($$"""{"model":"m","messages":[{{string.Join(",", messages)}}]}""");
+
+        Assert.Equal([SafeVocabulary.Unrecognised], envelope.Summary.MessageCountsByRole.Keys);
+        Assert.DoesNotContain(
+            "SENTINEL",
+            string.Join('|', envelope.Summary.MessageCountsByRole.Keys),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Bucketed_roles_still_account_for_every_message()
+    {
+        const int Count = 20;
+
+        var messages = Enumerable.Range(0, Count)
             .Select(index => $$"""{"role":"role-{{index}}","content":"x"}""");
 
         var envelope = Read($$"""{"model":"m","messages":[{{string.Join(",", messages)}}]}""");
 
-        Assert.True(envelope.Summary.RoleNamesTruncated);
-        Assert.True(envelope.Summary.MessageCountsByRole.Count <= StructuralRequestSummary.MaxRoleNames + 1);
-        Assert.Contains(StructuralRequestSummary.OtherRoleName, envelope.Summary.MessageCountsByRole.Keys);
-    }
-
-    [Fact]
-    public void Folded_roles_still_account_for_every_message()
-    {
-        var count = StructuralRequestSummary.MaxRoleNames + 5;
-        var messages = Enumerable.Range(0, count)
-            .Select(index => $$"""{"role":"role-{{index}}","content":"x"}""");
-
-        var envelope = Read($$"""{"model":"m","messages":[{{string.Join(",", messages)}}]}""");
-
-        Assert.Equal(count, envelope.Summary.MessageCountsByRole.Values.Sum());
+        Assert.Equal(Count, envelope.Summary.MessageCountsByRole.Values.Sum());
     }
 
     [Fact]
@@ -88,7 +93,9 @@ public sealed class ChatCompletionRequestCodecTests
         var envelope = Read(
             """{"model":"m","messages":[{"role":"user"}],"seed":7,"reasoning_effort":"high"}""");
 
-        Assert.Equal(["seed", "reasoning_effort"], envelope.Summary.UnknownTopLevelFieldNames);
+        Assert.Equal(
+            [SafeVocabulary.HashName("seed"), SafeVocabulary.HashName("reasoning_effort")],
+            envelope.Summary.UnknownTopLevelFieldNames);
     }
 
     [Fact]

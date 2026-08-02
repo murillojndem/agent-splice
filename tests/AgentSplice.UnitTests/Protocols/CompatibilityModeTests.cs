@@ -2,6 +2,7 @@ using System.Text;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Protocols.OpenAI.ChatCompletions;
 using Microsoft.Extensions.Options;
+using AgentSplice.Domain.Exchanges;
 using Xunit;
 
 namespace AgentSplice.UnitTests.Protocols;
@@ -32,7 +33,9 @@ public sealed class CompatibilityModeTests
         var result = Codec(CompatibilityMode.Transparent).Read(Encoding.UTF8.GetBytes(WithUnknownField));
 
         Assert.True(result.Succeeded);
-        Assert.Equal(["seed"], result.Envelope!.Summary.UnknownTopLevelFieldNames);
+        Assert.Equal(
+            [SafeVocabulary.HashName("seed")],
+            result.Envelope!.Summary.UnknownTopLevelFieldNames);
     }
 
     [Fact]

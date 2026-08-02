@@ -21,9 +21,23 @@ namespace AgentSplice.Infrastructure.Persistence;
 internal static class ExchangeRowMapper
 {
     /// <summary>Projects a completed request's evidence into a row graph.</summary>
-    internal static ExchangeRow ToRow(ExchangeRecord record)
+    /// <param name="record">The evidence gathered for one request.</param>
+    /// <param name="retention">
+    /// What this write actually retains. Supplied by the caller rather than copied from the exchange,
+    /// because the exchange cannot know: <c>ExchangeRecorder.Accept</c> opens every exchange as
+    /// <see cref="ContentRetentionState.Disabled"/> and the gateway hands the record to whichever sink
+    /// is registered without being told which one that is. Copying it through produced a store full of
+    /// rows carrying summaries, observations, and measurements while declaring that nothing was
+    /// retained — the value FR-TRACE-010 exists to make readable, and systematically wrong.
+    /// </param>
+    internal static ExchangeRow ToRow(ExchangeRecord record, ContentRetentionState retention)
     {
         ArgumentNullException.ThrowIfNull(record);
+
+        if (!Enum.IsDefined(retention))
+        {
+            throw new ArgumentOutOfRangeException(nameof(retention), retention, "Unknown content retention state.");
+        }
 
         var exchange = record.Exchange;
         var row = new ExchangeRow
@@ -45,7 +59,7 @@ internal static class ExchangeRowMapper
             FailureClass = FailureClassOf(record) is { } failure ? (int)failure : null,
             ErrorCode = record.Error?.Code,
             StreamTermination = (int)(exchange?.StreamTermination ?? StreamTermination.NotApplicable),
-            ContentRetentionState = (int)(exchange?.ContentRetentionState ?? ContentRetentionState.Disabled),
+            ContentRetentionState = (int)retention,
             EnvironmentSnapshotId = exchange?.EnvironmentSnapshotId,
             UpstreamStatusCode = exchange?.UpstreamResponse?.StatusCode,
             UpstreamMediaType = exchange?.UpstreamResponse?.ContentType,

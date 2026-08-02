@@ -274,7 +274,9 @@ public sealed class FakeUpstreamExchangeRepresentationTests
         Assert.Equal(ContentRetentionState.MetadataOnly, exchange.ContentRetentionState);
 
         // FR-CHAT-004 evidence: the unknown field was seen and nothing was dropped.
-        Assert.Equal(["reasoning_effort"], exchange.RequestSummary?.UnknownTopLevelFieldNames);
+        Assert.Equal(
+            [SafeVocabulary.HashName("reasoning_effort")],
+            exchange.RequestSummary?.UnknownTopLevelFieldNames);
         Assert.Empty(exchange.RequestSummary?.DroppedFieldNames ?? []);
 
         Assert.Equal(5, eventCount);

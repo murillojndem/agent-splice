@@ -1,6 +1,5 @@
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
-using System.Globalization;
 
 namespace AgentSplice.Domain.Exchanges;
 
@@ -11,33 +10,19 @@ namespace AgentSplice.Domain.Exchanges;
 /// <remarks>
 /// This type carries no message text, tool arguments, or field values. It records how many messages
 /// there were, which roles appeared, how many tools were declared, and which unknown top-level
-/// fields were present by name, so that "what did the client actually send" is answerable without
-/// storing the prompt. Field names are length-bounded and count-bounded for the same reason
-/// <see cref="Observations.SafeDetails"/> is.
+/// fields were present, so that "what did the client actually send" is answerable without storing
+/// the prompt.
+///
+/// Every string it holds is either drawn from a closed vocabulary or hashed; see
+/// <see cref="SafeVocabulary"/> for why bounding length and count was not enough. Both roles and
+/// field names are chosen by the caller, and until this summary was persisted that only meant a
+/// bounded amount of caller text in a trace attribute. Once it reaches a database with content
+/// capture disabled, "bounded" and "safe" stop being the same claim.
 /// </remarks>
 public sealed record StructuralRequestSummary
 {
     /// <summary>Maximum number of recorded unknown field names.</summary>
     public const int MaxUnknownFieldNames = 32;
-
-    /// <summary>Maximum recorded length of a single field name.</summary>
-    public const int MaxFieldNameLength = 64;
-
-    /// <summary>
-    /// Maximum number of distinct role names counted individually.
-    /// </summary>
-    /// <remarks>
-    /// Role names are client-supplied. Without a cardinality bound, a request carrying a unique
-    /// role per message would grow this dictionary without limit, which is the very thing the
-    /// per-name length bound exists to prevent.
-    /// </remarks>
-    public const int MaxRoleNames = 16;
-
-    /// <summary>Bucket for roles beyond <see cref="MaxRoleNames"/>.</summary>
-    public const string OtherRoleName = "(other)";
-
-    /// <summary>Bucket for a message whose role was absent or not a string.</summary>
-    public const string UnspecifiedRoleName = "(unspecified)";
 
     private StructuralRequestSummary()
     {
@@ -46,7 +31,14 @@ public sealed record StructuralRequestSummary
     /// <summary>Number of messages in the request.</summary>
     public int MessageCount { get; private init; }
 
-    /// <summary>Message counts per declared role. Role names only, never message content.</summary>
+    /// <summary>
+    /// Message counts per role, keyed by <see cref="SafeVocabulary.Roles"/>.
+    /// </summary>
+    /// <remarks>
+    /// A role outside the vocabulary is counted under <see cref="SafeVocabulary.Unrecognised"/>, so
+    /// the per-role counts still sum to <see cref="MessageCount"/> and a reader can tell that every
+    /// message was accounted for.
+    /// </remarks>
     public IReadOnlyDictionary<string, int> MessageCountsByRole { get; private init; } =
         FrozenDictionary<string, int>.Empty;
 
@@ -66,14 +58,18 @@ public sealed record StructuralRequestSummary
     public long RequestBodyBytes { get; private init; }
 
     /// <summary>
-    /// Names of top-level fields AgentSplice does not model. Recorded so that transparent
-    /// forwarding of unknown fields is verifiable without inspecting their values.
+    /// Hashed names of top-level fields AgentSplice does not model, in first-seen order.
     /// </summary>
+    /// <remarks>
+    /// Recorded so that transparent forwarding of unknown fields is verifiable without storing a
+    /// name the client chose. To ask whether a particular field appeared, hash it with
+    /// <see cref="SafeVocabulary.HashName"/> and compare.
+    /// </remarks>
     public IReadOnlyList<string> UnknownTopLevelFieldNames { get; private init; } = [];
 
     /// <summary>
-    /// Names of top-level fields that were not forwarded upstream. Empty in a transparent exchange;
-    /// a non-empty list is the evidence FR-TRACE-008 requires for a structural difference.
+    /// Hashed names of top-level fields that were not forwarded upstream. Empty in a transparent
+    /// exchange; a non-empty list is the evidence FR-TRACE-008 requires for a structural difference.
     /// </summary>
     public IReadOnlyList<string> DroppedFieldNames { get; private init; } = [];
 
@@ -85,9 +81,6 @@ public sealed record StructuralRequestSummary
     /// were at least 32", and a silent bound reads as completeness.
     /// </remarks>
     public bool UnknownFieldNamesTruncated { get; private init; }
-
-    /// <summary>True when distinct roles exceeded <see cref="MaxRoleNames"/> and were folded.</summary>
-    public bool RoleNamesTruncated { get; private init; }
 
     /// <summary>Creates a validated structural summary.</summary>
     public static StructuralRequestSummary Create(
@@ -105,15 +98,12 @@ public sealed record StructuralRequestSummary
         ArgumentOutOfRangeException.ThrowIfNegative(toolDeclarationCount);
         ArgumentOutOfRangeException.ThrowIfNegative(requestBodyBytes);
 
-        var roles = NormaliseRoleCounts(messageCountsByRole);
-        var unknownNames = NormaliseFieldNames(unknownTopLevelFieldNames, nameof(unknownTopLevelFieldNames));
-        var droppedNames = NormaliseFieldNames(droppedFieldNames, nameof(droppedFieldNames));
+        var unknownNames = HashNames(unknownTopLevelFieldNames);
 
         return new StructuralRequestSummary
         {
             MessageCount = messageCount,
-            MessageCountsByRole = roles.Counts,
-            RoleNamesTruncated = roles.Truncated,
+            MessageCountsByRole = RoleCounts(messageCountsByRole),
             ToolDeclarationCount = toolDeclarationCount,
             ToolChoicePresent = toolChoicePresent,
             StreamRequested = streamRequested,
@@ -121,49 +111,42 @@ public sealed record StructuralRequestSummary
             RequestBodyBytes = requestBodyBytes,
             UnknownTopLevelFieldNames = unknownNames.Names,
             UnknownFieldNamesTruncated = unknownNames.Truncated,
-            DroppedFieldNames = droppedNames.Names,
+            DroppedFieldNames = HashNames(droppedFieldNames).Names,
         };
     }
 
     /// <summary>
-    /// Counts messages per role, folding roles beyond the cardinality bound into a single bucket.
+    /// Counts messages per role, folding anything outside the vocabulary into one bucket.
     /// </summary>
     /// <remarks>
-    /// Folding rather than dropping keeps <see cref="MessageCount"/> reconcilable with the sum of
-    /// the per-role counts, so a reader can still tell that every message was accounted for.
+    /// Folding rather than dropping keeps <see cref="MessageCount"/> reconcilable with the sum of the
+    /// per-role counts. There is no cardinality bound any more and none is needed: the vocabulary is
+    /// closed, so the dictionary cannot exceed its size plus the two buckets however many distinct
+    /// roles a request invents.
     /// </remarks>
-    private static (FrozenDictionary<string, int> Counts, bool Truncated) NormaliseRoleCounts(
+    private static FrozenDictionary<string, int> RoleCounts(
         IEnumerable<KeyValuePair<string, int>>? roleCounts)
     {
         if (roleCounts is null)
         {
-            return (FrozenDictionary<string, int>.Empty, false);
+            return FrozenDictionary<string, int>.Empty;
         }
 
         var accumulated = new Dictionary<string, int>(StringComparer.Ordinal);
-        var truncated = false;
 
         foreach (var (role, count) in roleCounts)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(count, nameof(roleCounts));
 
-            var name = TruncateName(role, nameof(roleCounts));
-
-            if (!accumulated.ContainsKey(name) && accumulated.Count >= MaxRoleNames)
-            {
-                name = OtherRoleName;
-                truncated = true;
-            }
-
+            var name = SafeVocabulary.Role(role);
             accumulated[name] = accumulated.GetValueOrDefault(name) + count;
         }
 
-        return (accumulated.ToFrozenDictionary(StringComparer.Ordinal), truncated);
+        return accumulated.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
-    private static (ReadOnlyCollection<string> Names, bool Truncated) NormaliseFieldNames(
-        IEnumerable<string>? names,
-        string parameterName)
+    /// <summary>Hashes each distinct name, preserving first-seen order and bounding the count.</summary>
+    private static (ReadOnlyCollection<string> Names, bool Truncated) HashNames(IEnumerable<string>? names)
     {
         if (names is null)
         {
@@ -175,48 +158,24 @@ public sealed record StructuralRequestSummary
 
         foreach (var name in names)
         {
-            var candidate = TruncateName(name, parameterName);
+            var hashed = SafeVocabulary.HashName(name);
 
-            if (accumulated.Contains(candidate, StringComparer.Ordinal))
+            if (accumulated.Contains(hashed, StringComparer.Ordinal))
             {
                 continue;
             }
 
             if (accumulated.Count == MaxUnknownFieldNames)
             {
-                // Bounded on purpose: an adversarial or generated request could otherwise turn the
-                // summary into an unbounded store of attacker-chosen strings.
+                // Bounded on purpose: hashing makes each name safe, and nothing makes an unbounded
+                // number of them safe to accumulate per exchange.
                 truncated = true;
                 break;
             }
 
-            accumulated.Add(candidate);
+            accumulated.Add(hashed);
         }
 
         return (accumulated.AsReadOnly(), truncated);
-    }
-
-    private static string TruncateName(string? name, string parameterName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name, parameterName);
-
-        var sanitised = name.Trim();
-
-        foreach (var character in sanitised)
-        {
-            if (char.IsControl(character))
-            {
-                throw new ArgumentException(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "'{0}' must not contain control characters.",
-                        parameterName),
-                    parameterName);
-            }
-        }
-
-        return sanitised.Length <= MaxFieldNameLength
-            ? sanitised
-            : sanitised[..MaxFieldNameLength];
     }
 }

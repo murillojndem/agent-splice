@@ -246,7 +246,7 @@ internal static class ChatCompletionRequestScanner
         if (reader.TokenType != JsonTokenType.StartObject)
         {
             reader.Skip();
-            Increment(scan, Domain.Exchanges.StructuralRequestSummary.UnspecifiedRoleName);
+            Increment(scan, Domain.Exchanges.SafeVocabulary.Unspecified);
             return;
         }
 
@@ -276,7 +276,7 @@ internal static class ChatCompletionRequestScanner
             }
         }
 
-        Increment(scan, role ?? Domain.Exchanges.StructuralRequestSummary.UnspecifiedRoleName);
+        Increment(scan, role ?? Domain.Exchanges.SafeVocabulary.Unspecified);
     }
 
     private static void ReadStream(ref Utf8JsonReader reader, ChatCompletionRequestScan scan)

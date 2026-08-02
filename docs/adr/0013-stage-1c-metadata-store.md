@@ -49,7 +49,43 @@ Note what this does *not* cover: a request naming a model AgentSplice cannot res
 exchange, because the exchange is opened before resolution runs — deliberately, so that exactly this
 case leaves evidence. Its row keeps the client's own model string and records no runtime.
 
-### 3. The store stamps its own boundaries, in two transactions
+### 3. Structural summaries hold vocabulary or hashes, never caller-chosen text
+
+Found in review of this slice, and the reason it is a decision rather than a patch: the summaries were
+already bounded in length and count, and that had been treated as making them safe. It does not. A
+client picks the value of `role` and the name of every JSON property it sends; a runtime picks the
+value of `finish_reason`. Truncating those to 64 characters bounds how much caller-chosen text is kept
+and leaves every character of the remainder caller-chosen.
+
+That was tolerable while summaries lived in process memory and a trace attribute. This slice writes
+them to a database that content capture is documented as keeping empty, so `"role": "<prompt
+fragment>"` became a retained prompt fragment. The privacy test did not catch it because it put its
+sentinels in `content`, which the gateway never reads.
+
+Two rules, by what the value is:
+
+- A value with a protocol vocabulary — role, finish reason — is matched against it and bucketed when
+  it does not match. The vocabulary is closed, so nothing caller-chosen survives, and folding rather
+  than dropping keeps the per-role counts reconcilable with the message count.
+- A value with no vocabulary — the name of an unknown request field — is hashed. There is nothing to
+  match it against, and it is recorded to make transparent forwarding verifiable, which a stable
+  identifier does as well as the name. An operator asking whether `top_k` was forwarded hashes `top_k`
+  and compares.
+
+A hash rather than a bucket, because bucketing every unknown name to one marker would destroy the
+evidence FR-CHAT-004 and FR-TRACE-008 want. A hash rather than the name, because the threat is a third
+party reading stored evidence, and that party cannot invert a digest of text it does not already have.
+
+The same change removed a denial of service: the old helper *threw* on a control character in a name,
+so `"role": "ab"` turned client input into a failed request. Input validation that rejects by
+throwing, on a value the client controls, is a fault channel wearing the costume of a guard.
+
+Also removed: `MaxRoleNames`, `RoleNamesTruncated`, `MaxFinishReasons`, `FinishReasonsTruncated`, and
+`MaxFieldNameLength`. A closed vocabulary cannot exceed its own size, so those bounds and their
+visibility flags became unreachable, and an unreachable contract is the thing this repository keeps
+having to delete.
+
+### 4. The store stamps its own boundaries, in two transactions
 
 `MetadataQueued` is read by the sink as the record enters the queue. `PersistenceCompleted` is read by
 the writer *after* the commit returned, which requires a second transaction.
@@ -65,7 +101,7 @@ exchange rather than as the batch's write time. A batch covers many exchanges; a
 duration to each would report one number N times and overstate every one. The name had been declared
 in `MeasurementNames` since Stage 1A with nothing able to produce it.
 
-### 4. `PersistenceFailed` is not a stored observation
+### 5. `PersistenceFailed` is not a stored observation
 
 The store that rejected the write is the one the row would have to live in. A failure is a log event
 with a stable ID and an `agentsplice.persistence.failures` increment; nothing pretends to be evidence
@@ -74,7 +110,7 @@ that survived.
 The asymmetry is deliberate and worth stating, because a reader who finds `MetadataQueued` and
 `PersistenceCompleted` in the schema will look for the third and should not conclude it was forgotten.
 
-### 5. The queue refuses rather than drops silently
+### 6. The queue refuses rather than drops silently
 
 The bounded channel uses `BoundedChannelFullMode.Wait` and is never awaited. `TryWrite` under that
 mode returns `false` immediately when full, which is the only configuration that both refuses to block
@@ -88,7 +124,7 @@ Full means drop, with a counter and a log line. Waiting turns a slow store into 
 then into a stalled stream; growing without limit turns it into an out-of-memory kill that takes the
 proxy down with it.
 
-### 6. A failed batch is dropped, not retried
+### 7. A failed batch is dropped, not retried
 
 Retrying reorders evidence behind whatever arrived while it retried, or stalls the queue forever
 behind a record the store will never accept — and a stalled queue loses every exchange after it, not
@@ -107,7 +143,7 @@ It stops being true when PostgreSQL ships, because that provider does enforce le
 the 128-character column waiting for it. The slice that adds the provider owns either bounding that
 value or writing each record independently on failure.
 
-### 7. The wait for work is cancellable; the write is not
+### 8. The wait for work is cancellable; the write is not
 
 `WaitToReadAsync` takes the stopping token. `SaveChangesAsync` takes `CancellationToken.None`.
 
@@ -121,7 +157,7 @@ The shutdown flush lives at the end of `ExecuteAsync` rather than in `StopAsync`
 the channel. A second reader in `StopAsync` would race the loop whenever the shutdown timeout elapsed
 first.
 
-### 8. Whether a store exists is decided at resolution, never at registration
+### 9. Whether a store exists is decided at resolution, never at registration
 
 Reading `IConfiguration` while services are being registered reads it half-built: a host layers its
 sources as it is assembled, and a test host adds its overrides after the composition root has run. The
@@ -132,7 +168,7 @@ The context factory and both hosted services are registered unconditionally and 
 `IOptions<AgentSpliceOptions>` when resolved. A registration is not a connection: with persistence off
 nothing creates a context, so no provider initialises and no file appears.
 
-### 9. A store that cannot be opened fails startup; a write that fails later does not
+### 10. A store that cannot be opened fails startup; a write that fails later does not
 
 Different classes of problem. A store that cannot be migrated at all is a deployment fault — a bad
 path, a read-only volume, a schema from a newer build — and NFR 14.2 puts that before readiness. A
@@ -141,7 +177,7 @@ write that fails at runtime is a condition the gateway must survive (FR-DATA-009
 Starting silently with a broken store would produce a gateway that proxies perfectly and retains
 nothing, which is the one failure an evidence product must not have quietly.
 
-### 10. The model is provider-neutral, and the schema is versioned
+### 11. The model is provider-neutral, and the schema is versioned
 
 No SQLite type names, no provider-specific value generation, no raw SQL, timestamps as UTC ticks.
 FR-DATA-003 commits to PostgreSQL through the same contracts, and a model that must be rewritten to
@@ -151,7 +187,7 @@ is refused rather than quietly served by SQLite.
 Migrations rather than `EnsureCreated`, because an existing store has to survive an upgrade and
 `EnsureCreated` leaves no way to alter one.
 
-### 11. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
+### 12. The OpenTelemetry SDK moves from Stage 1C to Stage 1D
 
 ADR 0009 deferred the SDK to Stage 1C, "which is when persistence and the trace API give it something
 to export". Persistence now exists and the reasoning did not survive contact with it: what the SDK

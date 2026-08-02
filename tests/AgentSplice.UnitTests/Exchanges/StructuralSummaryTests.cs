@@ -44,7 +44,9 @@ public sealed class StructuralSummaryTests
             messageCount: 1,
             unknownTopLevelFieldNames: ["reasoning_effort", "seed"]);
 
-        Assert.Equal(["reasoning_effort", "seed"], summary.UnknownTopLevelFieldNames);
+        Assert.Equal(
+            [SafeVocabulary.HashName("reasoning_effort"), SafeVocabulary.HashName("seed")],
+            summary.UnknownTopLevelFieldNames);
         Assert.Empty(summary.DroppedFieldNames);
     }
 
@@ -55,7 +57,7 @@ public sealed class StructuralSummaryTests
             messageCount: 1,
             unknownTopLevelFieldNames: ["seed", "seed", "seed"]);
 
-        Assert.Equal(["seed"], summary.UnknownTopLevelFieldNames);
+        Assert.Equal([SafeVocabulary.HashName("seed")], summary.UnknownTopLevelFieldNames);
     }
 
     [Fact]
@@ -71,25 +73,65 @@ public sealed class StructuralSummaryTests
     }
 
     [Fact]
-    public void Unknown_field_names_are_truncated_in_length()
+    public void An_unknown_field_name_is_stored_as_a_hash_and_never_as_itself()
     {
-        var longName = new string('f', StructuralRequestSummary.MaxFieldNameLength + 20);
+        // The name is chosen by the client, so it can carry anything the client wants to put into a
+        // store that has content capture switched off. Truncating it bounded how much was kept and
+        // left every character of the remainder client-chosen.
+        const string Secret = "SENTINEL-PROMPT-abc123";
 
         var summary = StructuralRequestSummary.Create(
             messageCount: 1,
-            unknownTopLevelFieldNames: [longName]);
+            unknownTopLevelFieldNames: [Secret]);
 
-        Assert.Equal(
-            StructuralRequestSummary.MaxFieldNameLength,
-            summary.UnknownTopLevelFieldNames[0].Length);
+        var stored = Assert.Single(summary.UnknownTopLevelFieldNames);
+
+        Assert.DoesNotContain("SENTINEL", stored, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith(SafeVocabulary.HashPrefix, stored, StringComparison.Ordinal);
+
+        // Stable, so an operator asking "was this field forwarded?" hashes the name and compares.
+        Assert.Equal(SafeVocabulary.HashName(Secret), stored);
     }
 
     [Fact]
-    public void Field_names_containing_control_characters_are_rejected()
+    public void A_field_name_containing_control_characters_is_hashed_rather_than_rejected()
     {
-        Assert.Throws<ArgumentException>(() => StructuralRequestSummary.Create(
+        // It used to throw. The name comes from the client, so a validating helper that rejects by
+        // throwing turns a hostile property name into a failed request: input validation shaped like
+        // a denial of service.
+        var summary = StructuralRequestSummary.Create(
             messageCount: 1,
-            unknownTopLevelFieldNames: ["field\nname"]));
+            unknownTopLevelFieldNames: ["field\nname"]);
+
+        Assert.StartsWith(
+            SafeVocabulary.HashPrefix,
+            Assert.Single(summary.UnknownTopLevelFieldNames),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_role_outside_the_vocabulary_is_bucketed_and_still_counted()
+    {
+        var summary = StructuralRequestSummary.Create(
+            messageCount: 3,
+            messageCountsByRole:
+            [
+                new KeyValuePair<string, int>("user", 1),
+                new KeyValuePair<string, int>("SENTINEL-PROMPT-abc123", 1),
+                new KeyValuePair<string, int>("also-not-a-role", 1),
+            ]);
+
+        Assert.Equal(1, summary.MessageCountsByRole["user"]);
+
+        // Both unrecognised roles fold into one bucket, and the counts still reconcile with
+        // MessageCount so nothing looks lost.
+        Assert.Equal(2, summary.MessageCountsByRole[SafeVocabulary.Unrecognised]);
+        Assert.Equal(summary.MessageCount, summary.MessageCountsByRole.Values.Sum());
+
+        foreach (var key in summary.MessageCountsByRole.Keys)
+        {
+            Assert.DoesNotContain("SENTINEL", key, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     [Fact]
@@ -133,18 +175,17 @@ public sealed class StructuralSummaryTests
     }
 
     [Fact]
-    public void Finish_reasons_are_deduplicated_and_bounded()
+    public void Finish_reasons_are_deduplicated_and_drawn_from_the_vocabulary()
     {
-        var reasons = Enumerable
-            .Range(0, StructuralResponseSummary.MaxFinishReasons + 5)
-            .Select(index => "reason" + index.ToString(CultureInfo.InvariantCulture))
-            .ToList();
+        // The runtime chooses this string. A runtime returning generated text in it would otherwise
+        // have that text stored with content capture disabled.
+        var summary = StructuralResponseSummary.Create(
+            finishReasons: ["stop", "stop", "length", "SENTINEL-RESPONSE-xyz789", "another-unknown"]);
 
-        reasons.Insert(0, "reason0");
+        Assert.Equal(["stop", "length", SafeVocabulary.Unrecognised], summary.FinishReasons);
 
-        var summary = StructuralResponseSummary.Create(finishReasons: reasons);
-
-        Assert.Equal(StructuralResponseSummary.MaxFinishReasons, summary.FinishReasons.Count);
+        // No count bound is needed once the vocabulary is closed, and there is none: the list cannot
+        // exceed the vocabulary plus one bucket however many distinct strings arrive.
         Assert.Equal(summary.FinishReasons.Distinct(StringComparer.Ordinal).Count(), summary.FinishReasons.Count);
     }
 

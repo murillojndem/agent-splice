@@ -86,6 +86,29 @@ public sealed class MetadataPersistenceFailureTests
         await pending;
     }
 
+    [Fact]
+    public void A_clock_that_stepped_backwards_produces_no_persistence_measurement()
+    {
+        // Zero is a measurement: it says the write completed instantaneously. Recording one with
+        // provenance Measured, and an end preceding its own start, is evidence that contradicts
+        // itself — so an impossibly ordered interval yields no row at all, exactly as it does in the
+        // recorder's duration builder and the gateway's histogram guard (FR-TRACE-006, FR-OBS-004).
+        var queuedAt = Origin;
+        var completedAt = Origin.AddSeconds(-5);
+
+        Assert.Null(MetadataPersistenceService.PersistenceDurationFor(Queued(queuedAt), completedAt));
+
+        // The ordinary direction still produces one, so the guard is not simply switching it off.
+        var measured = MetadataPersistenceService.PersistenceDurationFor(
+            Queued(queuedAt),
+            Origin.AddMilliseconds(40));
+
+        Assert.NotNull(measured);
+        Assert.Equal(40d, measured.Value, precision: 3);
+    }
+
+    private static QueuedExchangeRecord Queued(DateTimeOffset queuedAt) => new(Record(), queuedAt);
+
     private static ExchangeRecord Record()
     {
         var exchangeId = ExchangeId.New();

@@ -43,6 +43,26 @@ discharges the Stage 1C consequence ADR 0008 recorded.
   `agentsplice.persistence` a live span source. Saturation and a rejected write are different problems
   with different fixes, and one undifferentiated count would send an operator adding queue capacity to
   a database refusing every write.
+- Closed three channels through which caller-chosen text reached the store with content capture
+  disabled. A structural summary was bounded in length and count, and that had been treated as making
+  it safe; it is not. A client picks the value of `role` and the name of every JSON property it sends,
+  and a runtime picks the value of `finish_reason`, so truncating those bounded how much caller text
+  was retained and nothing else. Roles and finish reasons are now matched against a closed vocabulary
+  and bucketed when they do not match; unknown field names are hashed, so an operator can still ask
+  whether a field was forwarded without the name itself being stored. The existing privacy test missed
+  all three because it put its sentinels in `content`, which the gateway never reads — the new one
+  puts them in every field AgentSplice actually records, and fails against a reintroduced copy of the
+  defect.
+- Removed a fault channel found in the same place: the field-name helper *threw* on a control
+  character, so a hostile `role` turned client input into a failed request.
+- Stopped every persisted row claiming that nothing was retained. `ExchangeRecorder.Accept` opens each
+  exchange as `Disabled` and cannot know better, so the row carried that through while holding
+  summaries, observations, and measurements. The store stamps `MetadataOnly`, because the store is
+  what retained — including for records that have no `CompletionExchange` to carry the state at all.
+- Stopped a backwards clock producing a `persistence.duration` of zero with `Measured` provenance and
+  an end preceding its own start. An impossibly ordered interval now yields no measurement, as it
+  already did in the recorder's duration builder and the gateway's histogram guard; the boundaries
+  stay, so the anomaly is still diagnosable.
 - Made `MeasurementNames.PersistenceDuration` producible. It had been declared since Stage 1A with
   nothing able to emit it. The store now writes it queue-to-durable per exchange, rather than as the
   batch's write time — a batch covers many exchanges, and attributing its duration to each would

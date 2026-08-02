@@ -60,7 +60,12 @@ Sanitization occurs before persistence, not after.
 
 - Metric labels must be bounded.
 - Span attributes must not contain arbitrary content.
-- Safe structural summaries must not reconstruct sensitive payloads accidentally.
+- Safe structural summaries must not reconstruct sensitive payloads accidentally. Bounding a value's
+  length and count is not enough on its own: a client chooses the value of `role` and the name of any
+  JSON property it sends, and a runtime chooses the value of `finish_reason`, so truncating those
+  bounds how much caller-chosen text is retained and nothing else. Every string a summary holds is
+  therefore either drawn from a closed protocol vocabulary and bucketed when it does not match, or
+  hashed. See `SafeVocabulary`.
 - Errors must not expose upstream credentials, connection strings, or raw response bodies.
 - Unknown values remain unknown rather than being derived from sensitive content without policy.
 

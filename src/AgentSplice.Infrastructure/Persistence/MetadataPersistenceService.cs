@@ -3,6 +3,7 @@ using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Observability;
 using AgentSplice.Domain.Identifiers;
 using AgentSplice.Domain.Measurements;
+using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Observations;
 using AgentSplice.Infrastructure.Persistence.Rows;
 using Microsoft.EntityFrameworkCore;
@@ -154,7 +155,10 @@ public sealed class MetadataPersistenceService : BackgroundService
 
             foreach (var queued in batch)
             {
-                var row = ExchangeRowMapper.ToRow(queued.Record);
+                // MetadataOnly, decided here because here is where it becomes true. The row is about
+                // to hold structural metadata and no content, which is precisely what the state says
+                // (FR-TRACE-010, FR-DATA-005).
+                var row = ExchangeRowMapper.ToRow(queued.Record, ContentRetentionState.MetadataOnly);
                 row.Observations.Add(Boundary(row, ObservationType.MetadataQueued, queued.QueuedAt));
                 context.Exchanges.Add(row);
             }
@@ -204,7 +208,10 @@ public sealed class MetadataPersistenceService : BackgroundService
                     Source = (int)ObservationSource.Gateway,
                 });
 
-                context.Measurements.Add(PersistenceDuration(queued, completedAt));
+                if (PersistenceDuration(queued, completedAt) is { } duration)
+                {
+                    context.Measurements.Add(duration);
+                }
             }
 
             await context.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
@@ -232,22 +239,41 @@ public sealed class MetadataPersistenceService : BackgroundService
     /// what an operator is asking about when a store falls behind, and is reconstructible from the
     /// stored timeline by anyone who wants to check it.
     ///
-    /// Clamped at zero rather than dropped when the clock has stepped backwards mid-batch: both
-    /// readings come from the same injected clock, so a negative interval here is a host-clock
-    /// anomaly, and the timeline keeps it visible in the boundaries themselves.
+    /// Absent, not zero, when the host clock stepped backwards between the two readings. Zero is a
+    /// measurement: it says the write completed instantaneously. Writing one with provenance
+    /// <see cref="MeasurementProvenance.Measured"/> and an end that precedes its own start would be
+    /// evidence that contradicts itself, and the rule everywhere else in this codebase — the recorder's
+    /// duration builder, the gateway's histogram guard — is that an impossibly ordered interval yields
+    /// no measurement at all (FR-TRACE-006, FR-OBS-004). The two boundaries stay, so the anomaly is
+    /// still diagnosable from the timeline.
     /// </remarks>
-    private static ExchangeMeasurementRow PersistenceDuration(
+    /// <summary>Exposes <see cref="PersistenceDuration"/> to the tests that assert the clock guard.</summary>
+    /// <remarks>
+    /// A clock that steps backwards mid-batch cannot be produced through a database, and a test that
+    /// tried would be asserting SQLite's behaviour rather than this rule.
+    /// </remarks>
+    internal static ExchangeMeasurementRow? PersistenceDurationFor(
+        QueuedExchangeRecord queued,
+        DateTimeOffset completedAt) =>
+        PersistenceDuration(queued, completedAt);
+
+    private static ExchangeMeasurementRow? PersistenceDuration(
         QueuedExchangeRecord queued,
         DateTimeOffset completedAt)
     {
         var elapsed = completedAt - queued.QueuedAt;
+
+        if (elapsed < TimeSpan.Zero)
+        {
+            return null;
+        }
 
         return new ExchangeMeasurementRow
         {
             MeasurementId = MeasurementId.New().Value,
             ExchangeId = queued.Record.ExchangeId.Value,
             Name = MeasurementNames.PersistenceDuration,
-            Value = elapsed < TimeSpan.Zero ? 0d : elapsed.TotalMilliseconds,
+            Value = elapsed.TotalMilliseconds,
             Unit = (int)MeasurementUnit.Milliseconds,
             Provenance = (int)MeasurementProvenance.Measured,
             StartedAtTicks = queued.QueuedAt.UtcTicks,

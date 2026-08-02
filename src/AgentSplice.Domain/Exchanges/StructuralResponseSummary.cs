@@ -6,18 +6,16 @@ namespace AgentSplice.Domain.Exchanges;
 /// A privacy-safe description of what a runtime returned (docs/SPECIFICATION.md FR-TRACE-003).
 /// </summary>
 /// <remarks>
-/// Finish reasons are protocol tokens, not model output, so they are recorded verbatim.
+/// Finish reasons are protocol tokens rather than model output, but the runtime chooses the string,
+/// so they are matched against <see cref="SafeVocabulary.FinishReasons"/> rather than recorded
+/// verbatim. A runtime that returned generated text in that field would otherwise have it stored with
+/// content capture disabled, and docs/THREAT_MODEL.md treats a malicious upstream as in scope.
+///
 /// <see cref="NativeToolCallCount"/> counts structured tool calls the runtime emitted as protocol
 /// data; Stage 1 never derives it from prose, per FR-CHAT-014.
 /// </remarks>
 public sealed record StructuralResponseSummary
 {
-    /// <summary>Maximum number of recorded finish reasons.</summary>
-    public const int MaxFinishReasons = 16;
-
-    /// <summary>Maximum recorded length of a finish reason token.</summary>
-    public const int MaxFinishReasonLength = 64;
-
     private StructuralResponseSummary()
     {
     }
@@ -25,7 +23,13 @@ public sealed record StructuralResponseSummary
     /// <summary>Number of choices in the response.</summary>
     public int ChoiceCount { get; private init; }
 
-    /// <summary>Finish reason tokens observed, in first-seen order.</summary>
+    /// <summary>
+    /// Finish reasons observed, in first-seen order, keyed by <see cref="SafeVocabulary.FinishReasons"/>.
+    /// </summary>
+    /// <remarks>
+    /// A reason outside the vocabulary appears as <see cref="SafeVocabulary.Unrecognised"/>. That the
+    /// runtime returned something unexpected stays visible; what it returned does not.
+    /// </remarks>
     public IReadOnlyList<string> FinishReasons { get; private init; } = [];
 
     /// <summary>Number of native structured tool calls observed as protocol data.</summary>
@@ -39,13 +43,6 @@ public sealed record StructuralResponseSummary
 
     /// <summary>True when the runtime reported a usage object.</summary>
     public bool UsageReported { get; private init; }
-
-    /// <summary>True when more distinct finish reasons were observed than <see cref="MaxFinishReasons"/>.</summary>
-    /// <remarks>
-    /// Finish reasons are runtime-chosen tokens, so the list is bounded. The flag exists so a
-    /// silently truncated list cannot read as a complete one.
-    /// </remarks>
-    public bool FinishReasonsTruncated { get; private init; }
 
     /// <summary>Creates a validated structural response summary.</summary>
     public static StructuralResponseSummary Create(
@@ -61,13 +58,10 @@ public sealed record StructuralResponseSummary
         ArgumentOutOfRangeException.ThrowIfNegative(responseBodyBytes);
         ArgumentOutOfRangeException.ThrowIfNegative(streamEventCount);
 
-        var reasons = NormaliseFinishReasons(finishReasons);
-
         return new StructuralResponseSummary
         {
             ChoiceCount = choiceCount,
-            FinishReasons = reasons.Reasons,
-            FinishReasonsTruncated = reasons.Truncated,
+            FinishReasons = NormaliseFinishReasons(finishReasons),
             NativeToolCallCount = nativeToolCallCount,
             ResponseBodyBytes = responseBodyBytes,
             StreamEventCount = streamEventCount,
@@ -75,16 +69,22 @@ public sealed record StructuralResponseSummary
         };
     }
 
-    private static (ReadOnlyCollection<string> Reasons, bool Truncated) NormaliseFinishReasons(
-        IEnumerable<string>? finishReasons)
+    /// <summary>
+    /// Maps each reason onto the vocabulary, keeping first-seen order.
+    /// </summary>
+    /// <remarks>
+    /// No count bound and none needed: the vocabulary is closed, so the list cannot exceed its size
+    /// plus one bucket however many distinct strings a runtime returns. The bound and its truncation
+    /// flag were removed rather than kept as unreachable contracts.
+    /// </remarks>
+    private static ReadOnlyCollection<string> NormaliseFinishReasons(IEnumerable<string>? finishReasons)
     {
         if (finishReasons is null)
         {
-            return (ReadOnlyCollection<string>.Empty, false);
+            return ReadOnlyCollection<string>.Empty;
         }
 
         var accumulated = new List<string>();
-        var truncated = false;
 
         foreach (var reason in finishReasons)
         {
@@ -93,25 +93,14 @@ public sealed record StructuralResponseSummary
                 continue;
             }
 
-            var trimmed = reason.Trim();
-            var bounded = trimmed.Length <= MaxFinishReasonLength
-                ? trimmed
-                : trimmed[..MaxFinishReasonLength];
+            var recognised = SafeVocabulary.FinishReason(reason);
 
-            if (accumulated.Contains(bounded, StringComparer.Ordinal))
+            if (!accumulated.Contains(recognised, StringComparer.Ordinal))
             {
-                continue;
+                accumulated.Add(recognised);
             }
-
-            if (accumulated.Count == MaxFinishReasons)
-            {
-                truncated = true;
-                break;
-            }
-
-            accumulated.Add(bounded);
         }
 
-        return (accumulated.AsReadOnly(), truncated);
+        return accumulated.AsReadOnly();
     }
 }
