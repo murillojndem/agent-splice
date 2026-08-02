@@ -72,3 +72,9 @@ dotnet_diagnostic.CA1305.severity = warning
 dotnet_diagnostic.CA1307.severity = warning
 dotnet_diagnostic.CA1310.severity = warning
 dotnet_diagnostic.CA1311.severity = warning
+
+# EF Core scaffolds migrations, and a hand-edit is lost the next time one is generated. The rules
+# waived here are style preferences about the generated call shape, not correctness rules: CA1861
+# fires on the column-name arrays a composite index declares exactly once at startup.
+[src/AgentSplice.Infrastructure/Persistence/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none

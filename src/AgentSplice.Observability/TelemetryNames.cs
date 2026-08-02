@@ -50,13 +50,14 @@ public static class TelemetryNames
     /// A subset of <see cref="Stage1ActivitySources"/>, which mirrors the specification's Stage 1
     /// list. Subscribing to a source nothing writes to would let a dashboard show a permanently
     /// empty panel and read as a capability that exists — the same reason later-stage sources are
-    /// not declared at all. <c>agentsplice.persistence</c> arrives with Stage 1C.
+    /// not declared at all.
     /// </remarks>
     public static FrozenSet<string> LiveActivitySources { get; } = new[]
     {
         ActivitySources.Exchange,
         ActivitySources.ProviderRequest,
         ActivitySources.Stream,
+        ActivitySources.Persistence,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>Instrument names from docs/OBSERVABILITY.md.</summary>
@@ -103,6 +104,9 @@ public static class TelemetryNames
 
         /// <summary>Generation throughput over the observed decode window.</summary>
         public const string GenerationThroughput = "agentsplice.generation.tokens_per_second";
+
+        /// <summary>Exchanges whose evidence did not reach the metadata store.</summary>
+        public const string PersistenceFailures = "agentsplice.persistence.failures";
     }
 
     /// <summary>
@@ -135,6 +139,7 @@ public static class TelemetryNames
         Instruments.StreamEvents,
         Instruments.StreamBytes,
         Instruments.GenerationThroughput,
+        Instruments.PersistenceFailures,
     }.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
@@ -176,6 +181,16 @@ public static class TelemetryNames
         /// costs the existing series no cardinality at all.
         /// </remarks>
         public const string StreamTermination = "agentsplice.stream.termination";
+
+        /// <summary>
+        /// Why evidence was not retained, attached only to the persistence-failure counter.
+        /// </summary>
+        /// <remarks>
+        /// Two values. Saturation and a rejected write are different operational problems with
+        /// different fixes, and a single undifferentiated failure count would send an operator adding
+        /// queue capacity to a store that is refusing every write.
+        /// </remarks>
+        public const string PersistenceFailureReason = "agentsplice.persistence.failure_reason";
     }
 
     /// <summary>Every dimension name this stage may attach.</summary>
@@ -189,5 +204,6 @@ public static class TelemetryNames
         Attributes.UpstreamStatusClass,
         Attributes.ErrorType,
         Attributes.StreamTermination,
+        Attributes.PersistenceFailureReason,
     }.ToFrozenSet(StringComparer.Ordinal);
 }

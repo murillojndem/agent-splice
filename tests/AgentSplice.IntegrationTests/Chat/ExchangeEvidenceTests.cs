@@ -91,9 +91,12 @@ public sealed class ExchangeEvidenceTests
     }
 
     [Fact]
-    public async Task Persistence_boundaries_stay_absent()
+    public async Task Persistence_boundaries_stay_absent_from_the_in_memory_record()
     {
-        // Stage 1A queues nothing, so nothing was queued, persisted, or attempted.
+        // The record is what the gateway hands to the sink, and at that moment none of these three
+        // has happened. The store stamps MetadataQueued and PersistenceCompleted itself, from the
+        // operations that produce them, so they exist only in what was written — reading them back
+        // is the timeline API's job, not this record's.
         var record = await ProxyAsync();
 
         AssertAbsent(

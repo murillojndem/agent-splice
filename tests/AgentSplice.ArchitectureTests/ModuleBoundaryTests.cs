@@ -125,9 +125,22 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
+    public void Only_infrastructure_references_the_persistence_framework()
+    {
+        // docs/ARCHITECTURE.md confines EF Core to Infrastructure. The rule is load-bearing rather
+        // than tidy: the moment a DbSet or a tracked entity is reachable from Application, the store's
+        // shape becomes the domain's shape, and an evidence record starts being defined by what is
+        // convenient to query.
+        foreach (var assembly in AllProductionAssemblies().Where(candidate => candidate != Infrastructure))
+        {
+            AssertNoReferenceTo(assembly, "Microsoft.EntityFrameworkCore", "Microsoft.Data.Sqlite");
+        }
+    }
+
+    [Fact]
     public void No_assembly_references_an_opentelemetry_package()
     {
-        // Stage 1 instruments with System.Diagnostics alone (ADR 0008). Stage 1C replaces the
+        // Stage 1 instruments with System.Diagnostics alone (ADR 0008). Stage 1D replaces the
         // self-registered ActivityListener with the SDK, and must not run both.
         foreach (var assembly in AllProductionAssemblies())
         {

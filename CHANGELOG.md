@@ -4,6 +4,48 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1C, part 1: SQLite metadata store and the write path
+
+Exchanges survive the process. Until now every exchange produced a complete timeline, measurements
+with provenance, and a structural summary, and then handed all of it to a sink that discarded it —
+a gateway whose product is evidence, retaining none.
+
+- Added `AgentSplice.Infrastructure.Persistence`: an EF Core SQLite store with three tables, a bounded
+  in-process queue, and a background writer. EF Core is referenced by `AgentSplice.Infrastructure`
+  alone, which an architecture test now enforces.
+- Rows are separate types from the domain records. `CompletionExchange` is immutable with private
+  `init` setters and value-object identifiers, so mapping it directly would put persistence
+  conventions inside `AgentSplice.Domain`. The separation also closes the gap ADR 0008 left open: a
+  request refused before its envelope was read has no `CompletionExchange`, and the store can record
+  it with a null model and a null streaming preference rather than not recording it at all.
+- The model is provider-neutral — no SQLite type names, no raw SQL, timestamps as UTC ticks — because
+  FR-DATA-003 commits to PostgreSQL through the same contracts and a model that must be rewritten to
+  honour that is not a contract.
+- `RecordAsync` never waits. It calls `TryWrite` and returns, so a slow store cannot become gateway
+  latency; the write itself runs on a background service in short transactions.
+- The persistence boundaries are stamped by whatever produced them. `MetadataQueued` comes from the
+  sink as the record enters the queue, `PersistenceCompleted` from the writer after the commit
+  returned — a second small transaction, because a boundary named "completed" that was stamped inside
+  the transaction it describes is the defect class ADR 0010 exists to prevent. `PersistenceFailed`
+  deliberately has no row: the store that rejected the write is the one it would have to live in, so
+  it is a log event, a counter, and nothing pretending to be evidence.
+- Three defects were found by their own tests before they could ship. `BoundedChannelFullMode.DropWrite`
+  reads like the intent and is not — `TryWrite` returns `true` having discarded the record, so every
+  drop was silent and the counter never moved; the channel now uses `Wait`, under which `TryWrite`
+  refuses and reports. Reading `IConfiguration` at registration time to decide whether to register the
+  store read it half-built, silently disagreeing with the `IOptions` value the rest of the system
+  uses; the decision now happens when a service is resolved. And passing the shutdown token to
+  `SaveChangesAsync` discarded, on every host stop, records that had already left the queue — the wait
+  for more work is cancellable, the write it leads to is not.
+- Added `agentsplice.persistence.failures` with a two-value `failure_reason` dimension, and made
+  `agentsplice.persistence` a live span source. Saturation and a rejected write are different problems
+  with different fixes, and one undifferentiated count would send an operator adding queue capacity to
+  a database refusing every write.
+- Removed `UnimplementedPersistenceNotice`. It existed to say the store had not shipped.
+- Deferred the OpenTelemetry SDK swap from Stage 1C to Stage 1D, in `docs/OBSERVABILITY.md` and the
+  architecture test that referenced it. Until an exporter exists, adopting the SDK adds a dependency
+  and changes nothing an operator can see.
+
 ### Stage 1A/1B correctness review, third pass
 
 One defect, introduced by the previous pass. Recorded in

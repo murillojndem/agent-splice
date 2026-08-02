@@ -28,11 +28,42 @@ public interface IExchangeTelemetry
     /// </remarks>
     IDisposable? StartStream(RuntimeEndpointId runtime, string providerKey);
 
+    /// <summary>Starts the span covering one metadata persistence batch.</summary>
+    /// <remarks>
+    /// A batch rather than an exchange. The writer drains a queue, so the interval that matters is
+    /// how long a write to the store took — an interval no exchange span can contain, because by then
+    /// the client response is long finished.
+    /// </remarks>
+    IDisposable? StartPersistence(int batchSize);
+
     /// <summary>Records the outcome of a finished exchange.</summary>
     void RecordExchange(ExchangeTelemetrySnapshot snapshot);
 
     /// <summary>Records how long a model discovery refresh took.</summary>
     void RecordDiscovery(RuntimeEndpointId runtime, TimeSpan duration);
+
+    /// <summary>Records evidence that was not retained, and why (FR-OBS-002, FR-DATA-009).</summary>
+    /// <param name="reason">The bounded classification of what went wrong.</param>
+    /// <param name="count">How many exchanges were affected.</param>
+    void RecordPersistenceFailure(PersistenceFailureReason reason, int count = 1);
+}
+
+/// <summary>
+/// Why an exchange's evidence did not reach the store.
+/// </summary>
+/// <remarks>
+/// A closed set, because it is a metric dimension (FR-OBS-006). The two members are genuinely
+/// different operational problems and must not be collapsed: saturation means the gateway is
+/// producing evidence faster than the store accepts it and the fix is capacity, while a write failure
+/// means the store rejected what it was given and the fix is the store itself.
+/// </remarks>
+public enum PersistenceFailureReason
+{
+    /// <summary>The bounded metadata queue was full, so the record was dropped rather than awaited.</summary>
+    QueueSaturated = 1,
+
+    /// <summary>The store rejected or could not accept the write.</summary>
+    WriteFailed = 2,
 }
 
 /// <summary>The span covering one exchange.</summary>

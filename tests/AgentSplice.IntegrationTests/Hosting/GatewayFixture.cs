@@ -45,9 +45,6 @@ internal sealed class GatewayFixture : IAsyncDisposable
             ["agentsplice:runtimes:0:discovery:enabled"] = "true",
             ["agentsplice:runtimes:0:discovery:cacheDuration"] = "00:00:30",
 
-            // Nothing in Stage 1A persists, and the tests must not leave a database behind.
-            ["agentsplice:persistence:mode"] = "None",
-            ["agentsplice:persistence:connectionString"] = null,
         };
 
         configure?.Invoke(settings);

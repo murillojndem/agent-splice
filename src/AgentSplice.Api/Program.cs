@@ -2,6 +2,7 @@ using AgentSplice.Api.Endpoints;
 using AgentSplice.Api.Hosting;
 using AgentSplice.Infrastructure.Composition;
 using AgentSplice.Infrastructure.Configuration;
+using AgentSplice.Infrastructure.Persistence;
 using AgentSplice.Observability;
 using AgentSplice.Protocols.OpenAI;
 using AgentSplice.Providers.LmStudio;
@@ -27,6 +28,10 @@ builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MinResponseDataRate =
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddAgentSpliceConfiguration(builder.Configuration);
 builder.Services.AddAgentSpliceRequestPath();
+
+// The metadata store. Whether it is used at all is decided from validated options when a service is
+// resolved, not here: configuration is still being layered while this line runs.
+builder.Services.AddAgentSplicePersistence();
 builder.Services.AddOpenAiCompatibilityProtocol();
 builder.Services.AddLmStudioProvider();
 builder.Services.AddAgentSpliceObservability();

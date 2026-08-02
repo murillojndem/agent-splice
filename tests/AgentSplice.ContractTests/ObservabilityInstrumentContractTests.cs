@@ -77,14 +77,15 @@ public sealed class ObservabilityInstrumentContractTests
     public void Every_activity_source_the_listener_subscribes_to_has_something_that_writes_to_it()
     {
         // A source nothing writes to is a permanently empty panel on a dashboard, which reads as a
-        // capability that exists and produced nothing. Persistence spans arrive with Stage 1C, so
-        // that source is not live yet.
+        // capability that exists and produced nothing. Every Stage 1 source now has a producer:
+        // agentsplice.persistence gained one with the metadata writer.
         Assert.Equal(
             new HashSet<string>(StringComparer.Ordinal)
             {
                 TelemetryNames.ActivitySources.Exchange,
                 TelemetryNames.ActivitySources.ProviderRequest,
                 TelemetryNames.ActivitySources.Stream,
+                TelemetryNames.ActivitySources.Persistence,
             },
             TelemetryNames.LiveActivitySources.ToHashSet(StringComparer.Ordinal));
 

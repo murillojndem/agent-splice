@@ -177,6 +177,7 @@ These are emitted today. The rest of the list above is declared but not yet emit
 - `agentsplice.stream.events`
 - `agentsplice.stream.bytes`
 - `agentsplice.generation.tokens_per_second`
+- `agentsplice.persistence.failures`
 
 The streaming instruments record only what a streamed exchange observed. A buffered exchange contributes no data point rather than a zero: in a series where the value means something, a zero reads as "this happened, and it was none".
 
@@ -200,6 +201,9 @@ The window closes at the protocol terminator, not at transport end, so a runtime
 - `agentsplice.upstream.status_class`
 - `error.type`
 - `agentsplice.stream.termination`
+- `agentsplice.persistence.failure_reason`
+
+`agentsplice.persistence.failure_reason` is attached only to `agentsplice.persistence.failures` and has two values. `QueueSaturated` means the gateway produced evidence faster than the store accepted it and the fix is capacity; `WriteFailed` means the store rejected what it was given and the fix is the store. A single undifferentiated failure count would send an operator adding queue capacity to a database that is refusing every write.
 
 `agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx` — and is what success and failure are classified from. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
 
@@ -209,9 +213,11 @@ There is deliberately no model dimension. A model identifier is client-supplied 
 
 ### Tracing
 
-Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1C replaces that listener with the SDK and must not run both.
+Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1D replaces that listener with the SDK and must not run both; until an exporter exists, adopting the SDK would add a dependency and change nothing an operator can see.
 
-Three sources are live: `agentsplice.exchange`, `agentsplice.provider.request`, and `agentsplice.stream`. The provider span covers opening the upstream response alone; the stream span covers the transfer that follows. Keeping them apart is what separates "the runtime took a long time to answer" from "the runtime produced a long answer". `agentsplice.persistence` is declared but has no producer until Stage 1C, and the listener does not subscribe to it: a source nothing writes to is a permanently empty panel that reads as a capability which produced nothing.
+All four Stage 1 sources are live: `agentsplice.exchange`, `agentsplice.provider.request`, `agentsplice.stream`, and `agentsplice.persistence`. The provider span covers opening the upstream response alone; the stream span covers the transfer that follows. Keeping them apart is what separates "the runtime took a long time to answer" from "the runtime produced a long answer". The persistence span covers one write batch, which is an interval no exchange span can contain: by the time it runs the client response is long finished.
+
+The listener subscribes to a source only once something writes to it, because a source nothing writes to is a permanently empty panel that reads as a capability which produced nothing.
 
 ## Structured logs
 

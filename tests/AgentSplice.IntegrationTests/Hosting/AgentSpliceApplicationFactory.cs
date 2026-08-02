@@ -20,6 +20,13 @@ namespace AgentSplice.IntegrationTests.Hosting;
 /// </remarks>
 internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Program>
 {
+    private static readonly Dictionary<string, string?> EphemeralPersistence =
+        new(StringComparer.Ordinal)
+        {
+            ["agentsplice:persistence:mode"] = "None",
+            ["agentsplice:persistence:connectionString"] = null,
+        };
+
     private readonly IReadOnlyDictionary<string, string?> overrides;
     private readonly Action<IServiceCollection>? configureServices;
 
@@ -36,8 +43,15 @@ internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Prog
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseEnvironment("Test");
-        builder.ConfigureAppConfiguration(
-            (_, configuration) => configuration.AddInMemoryCollection(overrides));
+        builder.ConfigureAppConfiguration((_, configuration) =>
+        {
+            // Applied under the caller's overrides, so a test that wants a store still gets one.
+            // Without it every test that boots the host would inherit the shipped SQLite default and
+            // create a database file in the test output directory — shared between test classes that
+            // run in parallel, and left behind afterwards.
+            configuration.AddInMemoryCollection(EphemeralPersistence);
+            configuration.AddInMemoryCollection(overrides);
+        });
 
         if (configureServices is { } configure)
         {

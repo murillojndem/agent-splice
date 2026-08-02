@@ -11,7 +11,8 @@ namespace AgentSplice.Application.Diagnostics;
 /// whatever was watching.
 ///
 /// Ranges are grouped so a reader can tell at a glance which part of the system spoke: 1000 for the
-/// request path, 1100 for routing and discovery, 1200 for hosting.
+/// request path, 1100 for routing and discovery, 1200 for hosting, 1300 for persistence and
+/// retention.
 /// </remarks>
 public static class GatewayEventIds
 {
@@ -36,6 +37,15 @@ public static class GatewayEventIds
     /// <summary>A fault escaped the request pipeline entirely.</summary>
     public static EventId UnhandledPipelineFault { get; } = new(1201, nameof(UnhandledPipelineFault));
 
-    /// <summary>A persistence mode is configured that this build does not implement.</summary>
-    public static EventId PersistenceNotImplemented { get; } = new(1202, nameof(PersistenceNotImplemented));
+    /// <summary>The bounded metadata queue was full, so an exchange's evidence was dropped.</summary>
+    public static EventId MetadataQueueSaturated { get; } = new(1301, nameof(MetadataQueueSaturated));
+
+    /// <summary>Writing a batch of exchange metadata to the store failed.</summary>
+    public static EventId MetadataPersistenceFailed { get; } = new(1302, nameof(MetadataPersistenceFailed));
+
+    /// <summary>A retention sweep finished; the message carries what it removed.</summary>
+    public static EventId RetentionSweepCompleted { get; } = new(1303, nameof(RetentionSweepCompleted));
+
+    /// <summary>A retention sweep could not complete.</summary>
+    public static EventId RetentionSweepFailed { get; } = new(1304, nameof(RetentionSweepFailed));
 }

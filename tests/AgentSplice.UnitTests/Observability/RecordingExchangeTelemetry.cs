@@ -18,16 +18,23 @@ internal sealed class RecordingExchangeTelemetry : IExchangeTelemetry
 
     internal List<ExchangeTelemetrySnapshot> Exchanges { get; } = [];
 
+    internal List<(PersistenceFailureReason Reason, int Count)> PersistenceFailures { get; } = [];
+
     public IExchangeTrace StartExchange() => new NoTrace();
 
     public IDisposable? StartProviderRequest(RuntimeEndpointId runtime, string providerKey) => null;
 
     public IDisposable? StartStream(RuntimeEndpointId runtime, string providerKey) => null;
 
+    public IDisposable? StartPersistence(int batchSize) => null;
+
     public void RecordExchange(ExchangeTelemetrySnapshot snapshot) => Exchanges.Add(snapshot);
 
     public void RecordDiscovery(RuntimeEndpointId runtime, TimeSpan duration) =>
         Discoveries.Add((runtime, duration));
+
+    public void RecordPersistenceFailure(PersistenceFailureReason reason, int count = 1) =>
+        PersistenceFailures.Add((reason, count));
 
     private sealed class NoTrace : IExchangeTrace
     {

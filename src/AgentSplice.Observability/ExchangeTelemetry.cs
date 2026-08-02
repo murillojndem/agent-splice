@@ -18,6 +18,7 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     private readonly ActivitySource exchangeSource = new(TelemetryNames.ActivitySources.Exchange);
     private readonly ActivitySource providerSource = new(TelemetryNames.ActivitySources.ProviderRequest);
     private readonly ActivitySource streamSource = new(TelemetryNames.ActivitySources.Stream);
+    private readonly ActivitySource persistenceSource = new(TelemetryNames.ActivitySources.Persistence);
     private readonly Meter meter = new(TelemetryNames.Meter);
 
     private readonly Counter<long> exchanges;
@@ -34,6 +35,7 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     private readonly Histogram<long> streamEvents;
     private readonly Histogram<long> streamBytes;
     private readonly Histogram<double> generationThroughput;
+    private readonly Counter<long> persistenceFailures;
 
     /// <summary>Creates the instruments.</summary>
     /// <param name="listener">
@@ -114,6 +116,11 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
             TelemetryNames.Instruments.GenerationThroughput,
             unit: "{token}/s",
             description: "Generation throughput over the observed decode window, from the first semantic event to upstream completion.");
+
+        persistenceFailures = meter.CreateCounter<long>(
+            TelemetryNames.Instruments.PersistenceFailures,
+            unit: "{exchange}",
+            description: "Exchanges whose evidence did not reach the metadata store.");
     }
 
     /// <inheritdoc />
@@ -148,6 +155,20 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
 
         activity?.SetTag(TelemetryNames.Attributes.RuntimeId, runtime.Value);
         activity?.SetTag(TelemetryNames.Attributes.ProviderType, providerKey);
+
+        return activity;
+    }
+
+    /// <inheritdoc />
+    public IDisposable? StartPersistence(int batchSize)
+    {
+        var activity = persistenceSource.StartActivity(
+            TelemetryNames.ActivitySources.Persistence,
+            ActivityKind.Internal);
+
+        // A count, not identifiers. Which exchanges were in the batch is in the store; how many were
+        // in it is what a span can carry without becoming unbounded.
+        activity?.SetTag("agentsplice.persistence.batch_size", batchSize);
 
         return activity;
     }
@@ -243,11 +264,24 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
             new KeyValuePair<string, object?>(TelemetryNames.Attributes.RuntimeId, runtime.Value));
 
     /// <inheritdoc />
+    public void RecordPersistenceFailure(PersistenceFailureReason reason, int count = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+
+        persistenceFailures.Add(
+            count,
+            new KeyValuePair<string, object?>(
+                TelemetryNames.Attributes.PersistenceFailureReason,
+                reason.ToString()));
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         exchangeSource.Dispose();
         providerSource.Dispose();
         streamSource.Dispose();
+        persistenceSource.Dispose();
         meter.Dispose();
     }
 

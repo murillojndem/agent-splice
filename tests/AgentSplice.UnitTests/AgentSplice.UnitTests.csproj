@@ -18,6 +18,12 @@
       between the first byte and the last on demand. A stubbed handler and a controllable clock can.
     -->
     <ProjectReference Include="..\..\src\AgentSplice.Providers.LmStudio\AgentSplice.Providers.LmStudio.csproj" />
+    <!--
+      The row mapper turns a request's evidence into what is stored, and every one of its rules is
+      about a value that must stay absent rather than become a zero. Asserting that through a
+      database would test SQLite; asserting it here tests the rule.
+    -->
+    <ProjectReference Include="..\..\src\AgentSplice.Infrastructure\AgentSplice.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
