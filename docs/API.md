@@ -102,6 +102,8 @@ Headers must not contain prompt content, tool arguments, credentials, arbitrary 
 ## Stage 1 administrative endpoints
 
 ```http
+GET /health/live
+GET /health/ready
 GET /api/v1/system
 GET /api/v1/health/runtimes
 GET /api/v1/runtimes
@@ -125,6 +127,22 @@ An exchange identifier that does not parse and one that is not retained both ans
 indistinguishable to a caller who cannot see the store, and separating them would tell anyone probing
 the surface which of their guesses were well-formed. An exchange expired by retention answers the same
 way, which is what it is.
+
+`/health/live` and `/health/ready` sit outside `/api/v1` because they serve an orchestrator rather
+than a dashboard. Liveness touches nothing and answers `204`: a probe that consulted a runtime would
+restart the gateway whenever the model server was slow, turning a diagnosable outage into a crash loop
+(FR-HEALTH-002). Readiness answers `200`, or `503` when `agentsplice:health:requireReachableRuntime`
+is on and no enabled runtime has answered. That flag is off by default, because a gateway whose
+runtime is down is still correctly configured and is still the component able to report the outage.
+
+`/api/v1/health/runtimes` derives health from the same discovery the request path uses rather than
+probing separately. A second prober would double the load on every runtime and could disagree with
+what routing sees, and a health page that says a runtime is fine while completions to it fail is a
+page an operator will believe. A runtime nothing has consulted — discovery disabled, or never yet
+refreshed — reports `unknown` with no `checkedAt` rather than `healthy`.
+
+`/api/v1/models` reports `created` as absent when nothing reported one, where `/v1/models` emits `0`.
+The zero is a compatibility substitution the OpenAI schema forces and belongs to that envelope alone.
 
 `timeline` and `observations` return the same data in Stage 1. The timeline is already every
 observation in sequence order — nothing collapses or de-duplicates it — so making them differ would

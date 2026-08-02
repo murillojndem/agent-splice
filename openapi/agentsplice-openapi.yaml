@@ -104,6 +104,38 @@ paths:
                 type: object
                 additionalProperties: true
 
+  /health/live:
+    get:
+      tags: [System]
+      operationId: getLiveness
+      description: >-
+        Process liveness. Touches no runtime and no database, so a slow model server can never make
+        an orchestrator restart a healthy gateway (FR-HEALTH-002).
+      responses:
+        '204':
+          description: The process is running and able to answer.
+
+  /health/ready:
+    get:
+      tags: [System]
+      operationId: getReadiness
+      description: >-
+        Readiness. Answers 503 only when agentsplice:health:requireReachableRuntime is enabled and no
+        enabled runtime has answered; that flag is off by default.
+      responses:
+        '200':
+          description: Ready to serve
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+
   /api/v1/system:
     get:
       tags: [System]
@@ -414,17 +446,32 @@ components:
           type: array
           items: { type: string }
         contentRetentionEnabled: { type: boolean }
+        metadataRetentionEnabled: { type: boolean }
+
+    Readiness:
+      type: object
+      required: [ready, requiresReachableRuntime, reachableRuntimes, enabledRuntimes]
+      properties:
+        ready: { type: boolean }
+        requiresReachableRuntime: { type: boolean }
+        reachableRuntimes: { type: integer, minimum: 0 }
+        enabledRuntimes: { type: integer, minimum: 0 }
 
     RuntimeHealth:
       type: object
-      required: [runtimeId, status, checkedAt]
+      required: [runtimeId, status]
       properties:
         runtimeId: { type: string }
         status:
           type: string
           enum: [healthy, unreachable, authentication_failed, incompatible_response, no_models, unknown]
-        checkedAt: { type: string, format: date-time }
-        safeDetails: { type: object, additionalProperties: true }
+        checkedAt:
+          type: string
+          format: date-time
+          description: >-
+            When the last discovery attempt happened. Absent for a runtime nothing has consulted,
+            whose status is then "unknown" rather than healthy.
+        servedFromStaleCache: { type: boolean }
 
     RuntimeSummary:
       type: object
@@ -444,7 +491,7 @@ components:
 
     CatalogModel:
       type: object
-      required: [clientModelId, runtimeId, source, reachable]
+      required: [clientModelId, runtimeId, source]
       properties:
         clientModelId: { type: string }
         runtimeId: { type: string }
@@ -454,8 +501,11 @@ components:
           type: string
           enum: [configured_alias, pass_through, discovered]
         reachable:
-          type: boolean
-          description: Whether the owning runtime answered the most recent discovery attempt.
+          type: [boolean, 'null']
+          description: >-
+            Whether the owning runtime answered the most recent discovery attempt. Null when there has
+            not been one — a runtime with discovery disabled is still fully usable through its
+            aliases, so false would read as unreachable and true would be a claim from no evidence.
         capabilityProvenance:
           type: string
           enum: [unknown, configured, discovered, probed, inferred]

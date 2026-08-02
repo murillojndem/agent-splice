@@ -40,6 +40,7 @@ public static class PersistenceRegistration
 
         services.AddSingleton<IAdministrativeEnvelopeWriter, AdministrativeJsonWriter>();
         services.AddSingleton<ExchangeQueryService>();
+        services.AddSingleton<DiagnosticsService>();
 
         services.AddSingleton<QueuedExchangeRecordSink>();
 

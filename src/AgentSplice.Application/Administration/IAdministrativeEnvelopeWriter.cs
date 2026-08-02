@@ -21,4 +21,19 @@ public interface IAdministrativeEnvelopeWriter
 
     /// <summary>Writes a timeline.</summary>
     ReadOnlyMemory<byte> Write(IReadOnlyList<TimelineObservationView> observations);
+
+    /// <summary>Writes build and module information.</summary>
+    ReadOnlyMemory<byte> Write(SystemInfoView system);
+
+    /// <summary>Writes the configured runtimes.</summary>
+    ReadOnlyMemory<byte> Write(IReadOnlyList<RuntimeSummaryView> runtimes);
+
+    /// <summary>Writes the administrative model catalogue.</summary>
+    ReadOnlyMemory<byte> Write(IReadOnlyList<CatalogModelView> models);
+
+    /// <summary>Writes runtime health.</summary>
+    ReadOnlyMemory<byte> Write(IReadOnlyList<RuntimeHealthView> health);
+
+    /// <summary>Writes the readiness answer.</summary>
+    ReadOnlyMemory<byte> Write(ReadinessView readiness);
 }

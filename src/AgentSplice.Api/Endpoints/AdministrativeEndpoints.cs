@@ -20,12 +20,89 @@ internal static class AdministrativeEndpoints
     {
         var api = app.MapGroup("/api/v1");
 
+        api.MapGet("/system", GetSystem);
+        api.MapGet("/runtimes", ListRuntimes);
+        api.MapGet("/models", ListModelsAsync);
+        api.MapGet("/health/runtimes", ListRuntimeHealthAsync);
+
         api.MapGet("/exchanges", ListExchangesAsync);
         api.MapGet("/exchanges/{exchangeId}", GetExchangeAsync);
         api.MapGet("/exchanges/{exchangeId}/timeline", GetTimelineAsync);
         api.MapGet("/exchanges/{exchangeId}/observations", GetObservationsAsync);
 
+        // Outside /api/v1 on purpose: these are for an orchestrator or a container healthcheck, not
+        // for a dashboard, and they answer before any administrative authorization applies. Liveness
+        // in particular must never depend on a credential — a probe that fails closed would restart
+        // a healthy process over a misconfigured token (FR-HEALTH-001, FR-HEALTH-002).
+        app.MapGet("/health/live", GetLiveness);
+        app.MapGet("/health/ready", GetReadinessAsync);
+
         return app;
+    }
+
+    /// <summary>
+    /// Liveness: the process is running and can answer.
+    /// </summary>
+    /// <remarks>
+    /// Touches nothing. FR-HEALTH-002 forbids depending on upstream availability, and the reason is
+    /// operational rather than pedantic: a liveness probe that consulted a runtime would restart the
+    /// gateway every time the model server was slow, turning a diagnosable outage into a crash loop.
+    /// </remarks>
+    private static IResult GetLiveness() => Results.NoContent();
+
+    private static async Task GetReadinessAsync(
+        HttpContext context,
+        [FromServices] DiagnosticsService diagnostics)
+    {
+        var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+        var response = await diagnostics
+            .DescribeReadinessAsync(requestId, context.RequestAborted)
+            .ConfigureAwait(false);
+
+        await GatewayResponseWriter.WriteAsync(context, response, context.RequestAborted).ConfigureAwait(false);
+    }
+
+    private static async Task GetSystem(HttpContext context, [FromServices] DiagnosticsService diagnostics)
+    {
+        var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+        await GatewayResponseWriter
+            .WriteAsync(context, diagnostics.Describe(requestId), context.RequestAborted)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ListRuntimes(HttpContext context, [FromServices] DiagnosticsService diagnostics)
+    {
+        var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+        await GatewayResponseWriter
+            .WriteAsync(context, diagnostics.ListRuntimes(requestId), context.RequestAborted)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task ListModelsAsync(HttpContext context, [FromServices] DiagnosticsService diagnostics)
+    {
+        var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+        var response = await diagnostics
+            .ListModelsAsync(requestId, context.RequestAborted)
+            .ConfigureAwait(false);
+
+        await GatewayResponseWriter.WriteAsync(context, response, context.RequestAborted).ConfigureAwait(false);
+    }
+
+    private static async Task ListRuntimeHealthAsync(
+        HttpContext context,
+        [FromServices] DiagnosticsService diagnostics)
+    {
+        var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
+
+        var response = await diagnostics
+            .ListRuntimeHealthAsync(requestId, context.RequestAborted)
+            .ConfigureAwait(false);
+
+        await GatewayResponseWriter.WriteAsync(context, response, context.RequestAborted).ConfigureAwait(false);
     }
 
     private static async Task ListExchangesAsync(

@@ -33,6 +33,9 @@ public sealed class AgentSpliceOptions
     /// <summary>Diagnostic detail settings.</summary>
     public DiagnosticsOptions Diagnostics { get; set; } = new();
 
+    /// <summary>Liveness and readiness policy.</summary>
+    public HealthOptions Health { get; set; } = new();
+
     /// <summary>Configured model runtimes.</summary>
     public IList<RuntimeEndpointOptions> Runtimes { get; set; } = new List<RuntimeEndpointOptions>();
 

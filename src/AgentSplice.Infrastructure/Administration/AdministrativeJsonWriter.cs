@@ -139,6 +139,157 @@ internal sealed class AdministrativeJsonWriter : IAdministrativeEnvelopeWriter
         });
     }
 
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> Write(SystemInfoView system)
+    {
+        ArgumentNullException.ThrowIfNull(system);
+
+        return Build(writer =>
+        {
+            writer.WriteStartObject();
+            writer.WriteString("version", system.Version);
+            writer.WriteString("stage", system.Stage);
+
+            writer.WriteStartArray("enabledModules");
+
+            foreach (var module in system.EnabledModules)
+            {
+                writer.WriteStringValue(module);
+            }
+
+            writer.WriteEndArray();
+            writer.WriteBoolean("contentRetentionEnabled", system.ContentRetentionEnabled);
+            writer.WriteBoolean("metadataRetentionEnabled", system.MetadataRetentionEnabled);
+            writer.WriteEndObject();
+        });
+    }
+
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> Write(IReadOnlyList<RuntimeSummaryView> runtimes)
+    {
+        ArgumentNullException.ThrowIfNull(runtimes);
+
+        return Build(writer =>
+        {
+            writer.WriteStartArray();
+
+            foreach (var runtime in runtimes)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("runtimeId", runtime.RuntimeId);
+                writer.WriteString("provider", runtime.Provider);
+                writer.WriteString("baseUrl", runtime.BaseUrl);
+
+                // The name of a variable, never its value. Present-and-null says "this runtime uses
+                // no credential", which is a different fact from "it uses one we will not name".
+                if (runtime.ApiKeyEnvironmentVariable is { } variable)
+                {
+                    writer.WriteString("apiKeyEnvironmentVariable", variable);
+                }
+                else
+                {
+                    writer.WriteNull("apiKeyEnvironmentVariable");
+                }
+
+                writer.WriteBoolean("enabled", runtime.Enabled);
+                writer.WriteBoolean("discoveryEnabled", runtime.DiscoveryEnabled);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        });
+    }
+
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> Write(IReadOnlyList<CatalogModelView> models)
+    {
+        ArgumentNullException.ThrowIfNull(models);
+
+        return Build(writer =>
+        {
+            writer.WriteStartArray();
+
+            foreach (var model in models)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("clientModelId", model.ClientModelId);
+                writer.WriteString("runtimeId", model.RuntimeId);
+                writer.WriteString("upstreamModelId", model.UpstreamModelId);
+                WriteOptionalString(writer, "aliasId", model.AliasId);
+                writer.WriteString("source", EnumWireNames.ToSnakeCase(model.Source));
+                if (model.Reachable is { } reachable)
+                {
+                    writer.WriteBoolean("reachable", reachable);
+                }
+                else
+                {
+                    writer.WriteNull("reachable");
+                }
+                writer.WriteString(
+                    "capabilityProvenance",
+                    EnumWireNames.ToSnakeCase(model.CapabilityProvenance));
+
+                // Absent rather than zero. /v1/models emits zero because the OpenAI schema demands a
+                // present integer; that substitution belongs to the compatibility envelope alone, and
+                // this is the surface that reports the honest absence (FR-DASH-006).
+                if (model.Created is { } created)
+                {
+                    writer.WriteNumber("created", created);
+                }
+
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        });
+    }
+
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> Write(IReadOnlyList<RuntimeHealthView> health)
+    {
+        ArgumentNullException.ThrowIfNull(health);
+
+        return Build(writer =>
+        {
+            writer.WriteStartArray();
+
+            foreach (var runtime in health)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("runtimeId", runtime.RuntimeId);
+                writer.WriteString("status", EnumWireNames.ToSnakeCase(runtime.Status));
+
+                // Absent when nothing has consulted this runtime. A health surface that invented a
+                // timestamp would make "never checked" indistinguishable from "checked and fine".
+                if (runtime.CheckedAt is { } checkedAt)
+                {
+                    writer.WriteString("checkedAt", checkedAt);
+                }
+
+                writer.WriteBoolean("servedFromStaleCache", runtime.ServedFromStaleCache);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        });
+    }
+
+    /// <inheritdoc />
+    public ReadOnlyMemory<byte> Write(ReadinessView readiness)
+    {
+        ArgumentNullException.ThrowIfNull(readiness);
+
+        return Build(writer =>
+        {
+            writer.WriteStartObject();
+            writer.WriteBoolean("ready", readiness.Ready);
+            writer.WriteBoolean("requiresReachableRuntime", readiness.RequiresReachableRuntime);
+            writer.WriteNumber("reachableRuntimes", readiness.ReachableRuntimes);
+            writer.WriteNumber("enabledRuntimes", readiness.EnabledRuntimes);
+            writer.WriteEndObject();
+        });
+    }
+
     private static void WriteSummary(Utf8JsonWriter writer, ExchangeSummaryView summary)
     {
         writer.WriteStartObject();
