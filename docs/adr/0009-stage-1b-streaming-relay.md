@@ -1,6 +1,6 @@
 # ADR 0009 — Stage 1B streaming relay and timeline
 
-- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md)
+- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md) and, for decision 12, by [ADR 0013](0013-stage-1c-metadata-store.md)
 - Date: 2026-07-30
 - Related: ADR 0006 (durable core), ADR 0007 (Stage 0 toolchain), ADR 0008 (Stage 1A transparent request path)
 
@@ -216,6 +216,11 @@ give an exporter a consumer.
 Stage 1B still pays the debt that mattered: `agentsplice.stream` has a real `ActivitySource`, and a
 contract test now asserts that every source the listener subscribes to has something that writes to
 it. `agentsplice.persistence` stays declared but unsubscribed until 1C.
+
+**Superseded by [ADR 0013](0013-stage-1c-metadata-store.md) decision 11.** Persistence shipped and the
+reasoning above did not survive it: what the SDK adds is an exporter, and none is configured until
+packaging. The deferral now names Stage 1D. `agentsplice.persistence` became live in 1C anyway,
+because the metadata writer produces spans on it.
 
 ### 13. `AgentSplice.PerformanceTests` was not created
 

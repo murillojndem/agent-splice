@@ -104,8 +104,20 @@ the package without a version in the project file.
 
 ## Database
 
-SQLite is sufficient for local development. The PostgreSQL Compose profile is a planning scaffold;
-persistence itself arrives with Stage 1C.
+SQLite is the shipped store and is sufficient for local development. `agentsplice:persistence:mode`
+accepts `Sqlite` or `None`; the PostgreSQL Compose profile remains a planning scaffold, because
+FR-DATA-003 commits to PostgreSQL through the same contracts but no provider ships yet.
+
+The schema is versioned with EF Core migrations, applied at startup before anything reads or writes.
+To change it, edit the row types or `AgentSpliceDbContext`, then:
+
+```powershell
+dotnet ef migrations add <Name> --project src/AgentSplice.Infrastructure --output-dir Persistence/Migrations
+```
+
+`Microsoft.EntityFrameworkCore.Design` is referenced with `PrivateAssets="all"` for that command
+alone: it is a build-time dependency and never ships. Keep the model provider-neutral — no SQLite
+type names, no raw SQL, timestamps as UTC ticks — or the PostgreSQL commitment becomes a rewrite.
 
 ## Branching
 

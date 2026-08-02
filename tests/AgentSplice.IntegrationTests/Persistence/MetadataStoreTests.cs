@@ -121,6 +121,38 @@ public sealed class MetadataStoreTests
     }
 
     [Fact]
+    public async Task The_persistence_delay_is_measured_by_the_store_that_produced_it()
+    {
+        // The one measurement the exchange record cannot carry: it is frozen before the write, and
+        // the interval does not exist until afterwards. Declared in MeasurementNames since Stage 1A
+        // and unproducible until now, which is the shape of contract this repository has had to
+        // correct before.
+        using var store = new TemporaryMetadataStore();
+
+        await ProxyAsync(store);
+        await SingleExchangeAsync(store);
+
+        var persistence = await WaitForAsync(
+            store,
+            async context => await context.Measurements
+                .Where(measurement => measurement.Name == MeasurementNames.PersistenceDuration)
+                .ToListAsync(),
+            found => found.Count > 0);
+
+        var measured = Assert.Single(persistence);
+
+        Assert.Equal((int)MeasurementProvenance.Measured, measured.Provenance);
+        Assert.Equal((int)MeasurementUnit.Milliseconds, measured.Unit);
+        Assert.True(measured.Value >= 0d);
+
+        // Queue-to-durable, so both ends of the interval are recorded and a reader can check the
+        // number against the two boundaries rather than taking it on trust.
+        Assert.NotNull(measured.StartedAtTicks);
+        Assert.NotNull(measured.EndedAtTicks);
+        Assert.True(measured.EndedAtTicks >= measured.StartedAtTicks);
+    }
+
+    [Fact]
     public async Task No_prompt_or_response_content_reaches_the_store()
     {
         // The single assertion this whole module exists to keep true. Metadata has to stay useful

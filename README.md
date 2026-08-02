@@ -82,11 +82,13 @@ found in three review passes over 1A and 1B are corrected in
 [ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md), and
 [ADR 0012](docs/adr/0012-classification-independent-of-relayability.md).
 
-**Stage 1C — Metadata persistence and minimal dashboard is next.** There is no database and no
-dashboard yet: evidence is built per request and handed to a sink that discards it, so nothing
-survives the process. There are no administrative APIs for traces or exchanges, and no OpenTelemetry
-SDK or exporter is referenced. Replay, conformance orchestration, evaluation, protocol translation,
-and compatibility adapters all belong to later milestones.
+**Stage 1C — Metadata persistence and administrative APIs is in progress.** Exchanges are now written
+to a local SQLite store through a bounded queue and a background writer, so evidence survives the
+process; `agentsplice:persistence:mode: None` keeps purely ephemeral operation available. Still to
+come in this stage: retention sweeps, the `/api/v1` administrative surface that reads the store, and
+the minimal dashboard. There is no OpenTelemetry exporter yet — spans and metrics are emitted through
+`System.Diagnostics` and the SDK arrives with Stage 1D. Replay, conformance orchestration, evaluation,
+protocol translation, and compatibility adapters all belong to later milestones.
 
 No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
 compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
@@ -118,7 +120,7 @@ GET  /v1/models
 POST /v1/chat/completions      # non-streaming and SSE
 ```
 
-Planned administrative APIs expose health, traces/exchanges, timeline metadata, and runtime diagnostics under `/api/v1`. They arrive with Stage 1C, alongside the persistence they read from. Content retention is disabled by default and nothing is retained at all today.
+Planned administrative APIs expose health, traces/exchanges, timeline metadata, and runtime diagnostics under `/api/v1`. The persistence they read from now exists; the endpoints themselves arrive later in Stage 1C. Content retention remains disabled by default: what is stored is structural metadata — counts, shapes, timings, and field names — and never prompts, model output, tool arguments, or credentials.
 
 ## Documentation
 

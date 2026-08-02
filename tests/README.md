@@ -25,4 +25,5 @@ Stages 2 and 3, although the Stage 1 contract fixtures become their foundation.
 `docs/TESTING.md` lists the required Stage 1 fixture families. The fake upstream can already produce
 every SSE shape they need. The families that depend on a request path — transparent forwarding
 assertions, timeout phase attribution, metadata persistence failure, and "no prompt or response in
-default logs" — are written by the Stage 1A to 1C slices that introduce those code paths.
+default logs" — are written by the Stage 1A to 1C slices that introduce those code paths. All four
+now exist; what remains for Stage 1C is the administrative API surface and its contract fixtures.

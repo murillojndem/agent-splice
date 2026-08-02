@@ -8,7 +8,9 @@ All notable changes will be documented here.
 
 Exchanges survive the process. Until now every exchange produced a complete timeline, measurements
 with provenance, and a structural summary, and then handed all of it to a sink that discarded it —
-a gateway whose product is evidence, retaining none.
+a gateway whose product is evidence, retaining none. Recorded in
+[ADR 0013](docs/adr/0013-stage-1c-metadata-store.md), which supersedes decision 12 of ADR 0009 and
+discharges the Stage 1C consequence ADR 0008 recorded.
 
 - Added `AgentSplice.Infrastructure.Persistence`: an EF Core SQLite store with three tables, a bounded
   in-process queue, and a background writer. EF Core is referenced by `AgentSplice.Infrastructure`
@@ -41,6 +43,14 @@ a gateway whose product is evidence, retaining none.
   `agentsplice.persistence` a live span source. Saturation and a rejected write are different problems
   with different fixes, and one undifferentiated count would send an operator adding queue capacity to
   a database refusing every write.
+- Made `MeasurementNames.PersistenceDuration` producible. It had been declared since Stage 1A with
+  nothing able to emit it. The store now writes it queue-to-durable per exchange, rather than as the
+  batch's write time — a batch covers many exchanges, and attributing its duration to each would
+  report one number N times and overstate every one.
+- Added the persistence-failure fixture family `docs/TESTING.md` recorded as still owed by Stage 1B.
+  It asserts the policy rather than a broken file: a refusing context factory, and the failure logged
+  with a stable event ID, counted per exchange lost rather than per batch, dropped rather than
+  retried, with the writer still draining and nothing reaching the caller.
 - Removed `UnimplementedPersistenceNotice`. It existed to say the store had not shipped.
 - Deferred the OpenTelemetry SDK swap from Stage 1C to Stage 1D, in `docs/OBSERVABILITY.md` and the
   architecture test that referenced it. Until an exporter exists, adopting the SDK adds a dependency

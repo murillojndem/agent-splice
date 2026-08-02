@@ -1,6 +1,8 @@
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Observability;
+using AgentSplice.Domain.Identifiers;
+using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 using AgentSplice.Infrastructure.Persistence.Rows;
 using Microsoft.EntityFrameworkCore;
@@ -192,7 +194,7 @@ public sealed class MetadataPersistenceService : BackgroundService
             {
                 context.Observations.Add(new ExchangeObservationRow
                 {
-                    ObservationId = Guid.NewGuid(),
+                    ObservationId = ObservationId.New().Value,
                     ExchangeId = queued.Record.ExchangeId.Value,
 
                     // One past MetadataQueued, which the first transaction appended.
@@ -201,6 +203,8 @@ public sealed class MetadataPersistenceService : BackgroundService
                     TimestampTicks = completedAt.UtcTicks,
                     Source = (int)ObservationSource.Gateway,
                 });
+
+                context.Measurements.Add(PersistenceDuration(queued, completedAt));
             }
 
             await context.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
@@ -215,13 +219,49 @@ public sealed class MetadataPersistenceService : BackgroundService
         }
     }
 
+    /// <summary>
+    /// How long this exchange's evidence spent between being queued and being durable.
+    /// </summary>
+    /// <remarks>
+    /// The interval `docs/OBSERVABILITY.md` calls persistence delay, and the one that makes
+    /// <see cref="MeasurementNames.PersistenceDuration"/> producible rather than merely declared.
+    ///
+    /// Derived from the two boundaries this exchange actually has, not from how long the batch write
+    /// took. A batch covers many exchanges, so attributing its whole duration to each one would report
+    /// the same number N times and overstate every one of them; queue-to-durable is per exchange, is
+    /// what an operator is asking about when a store falls behind, and is reconstructible from the
+    /// stored timeline by anyone who wants to check it.
+    ///
+    /// Clamped at zero rather than dropped when the clock has stepped backwards mid-batch: both
+    /// readings come from the same injected clock, so a negative interval here is a host-clock
+    /// anomaly, and the timeline keeps it visible in the boundaries themselves.
+    /// </remarks>
+    private static ExchangeMeasurementRow PersistenceDuration(
+        QueuedExchangeRecord queued,
+        DateTimeOffset completedAt)
+    {
+        var elapsed = completedAt - queued.QueuedAt;
+
+        return new ExchangeMeasurementRow
+        {
+            MeasurementId = MeasurementId.New().Value,
+            ExchangeId = queued.Record.ExchangeId.Value,
+            Name = MeasurementNames.PersistenceDuration,
+            Value = elapsed < TimeSpan.Zero ? 0d : elapsed.TotalMilliseconds,
+            Unit = (int)MeasurementUnit.Milliseconds,
+            Provenance = (int)MeasurementProvenance.Measured,
+            StartedAtTicks = queued.QueuedAt.UtcTicks,
+            EndedAtTicks = completedAt.UtcTicks,
+        };
+    }
+
     private static ExchangeObservationRow Boundary(
         ExchangeRow row,
         ObservationType type,
         DateTimeOffset timestamp) =>
         new()
         {
-            ObservationId = Guid.NewGuid(),
+            ObservationId = ObservationId.New().Value,
             ExchangeId = row.ExchangeId,
             Sequence = row.Observations.Count,
             Type = (int)type,

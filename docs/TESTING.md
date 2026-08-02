@@ -149,7 +149,22 @@ JSON, premature EOF, `[DONE]`, the usage terminal chunk, a duplicate terminal ev
 disconnect. Each is asserted twice — once against the frame reader in isolation, and once end to end
 through the gateway with an independent client-side parser.
 
-Still owed: persistence-failure behaviour (Stage 1C).
+## Delivered by Stage 1C, part 1
+
+Persistence-failure behaviour, which Stage 1B recorded as still owed. It is asserted through a context
+factory that refuses rather than a real database made to fail: breaking a file mid-run is
+timing-dependent and platform-specific, while the property under test is the policy — the failure is
+logged with a stable event ID, counted per exchange lost rather than per batch, the batch is dropped
+rather than retried, the writer keeps draining, and nothing reaches the caller that produced the
+evidence.
+
+Alongside it: the row mapper's absence rules (an unobserved boundary produces no row, unreported usage
+stays null rather than becoming zero, an estimate is never stored as measured), queue saturation
+counted rather than silently dropped, and end-to-end assertions that a real proxied request reaches a
+real SQLite file with no prompt or response content anywhere in it.
+
+PostgreSQL Testcontainers are not used yet, because no PostgreSQL provider ships. They arrive with the
+provider, and the SQLite tests stay regardless.
 
 ### Added by the Stage 1A/1B correctness reviews
 
