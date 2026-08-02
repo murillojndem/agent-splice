@@ -7,7 +7,8 @@
 - Docker Desktop or a compatible Docker Engine
 - Git
 - PowerShell 7 recommended on Windows
-- Node.js and pnpm only when the dashboard exists
+- Node.js 22 and pnpm 10, for the dashboard in `web/AgentSplice.Dashboard`. The gateway builds and
+  tests without them; the dashboard is optional (FR-DASH-002) and gated by its own CI job.
 
 Check the SDK:
 
