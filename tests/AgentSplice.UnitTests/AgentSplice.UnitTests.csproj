@@ -24,6 +24,12 @@
       database would test SQLite; asserting it here tests the rule.
     -->
     <ProjectReference Include="..\..\src\AgentSplice.Infrastructure\AgentSplice.Infrastructure.csproj" />
+    <!--
+      Where an OTLP endpoint sends each signal is string arithmetic with one silent failure mode — a
+      path that lands on the collector's root and is answered 404 by nothing anyone watches — so it is
+      pinned here case by case rather than inferred from one successful export.
+    -->
+    <ProjectReference Include="..\..\src\AgentSplice.Observability\AgentSplice.Observability.csproj" />
   </ItemGroup>
 
   <ItemGroup>

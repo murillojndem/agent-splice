@@ -974,6 +974,13 @@ agentsplice:
   capture:
     metadataEnabled: true
     contentEnabled: false
+  telemetry:
+    otlp:
+      # Off by default and never pointed anywhere implicitly; OTEL_EXPORTER_OTLP_ENDPOINT is ignored.
+      # The endpoint is the receiver's base address (ADR 0014).
+      enabled: false
+      endpoint: http://127.0.0.1:4318
+      protocol: HttpProtobuf
   adapters:
     enabled: false
 ```

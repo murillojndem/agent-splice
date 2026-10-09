@@ -118,7 +118,7 @@ honest — a field it needs has to be a field the contract declares.
 Deferred from this stage:
 
 - the OpenTelemetry SDK, moved to Stage 1D by ADR 0013: what it adds is an exporter, and none is
-  configured until packaging.
+  configured until packaging. Delivered in Stage 1D by ADR 0014.
 
 Exit criteria:
 
@@ -128,6 +128,10 @@ Exit criteria:
 
 ### Stage 1D — Local packaging and first public alpha
 
+Status: in progress. The OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an
+optional Compose collector, are done (ADR 0014); the rest of the list below is not.
+
+- OpenTelemetry SDK and OTLP exporter, off by default (done);
 - Docker image;
 - Compose example using `host.docker.internal` for LM Studio;
 - direct-process setup;

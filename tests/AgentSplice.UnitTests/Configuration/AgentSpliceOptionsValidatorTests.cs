@@ -454,6 +454,127 @@ public sealed class AgentSpliceOptionsValidatorTests
     }
 
     [Fact]
+    public void Enabling_telemetry_export_without_an_endpoint_fails()
+    {
+        // Never defaulted to the SDK's localhost, and never taken from OTEL_EXPORTER_OTLP_ENDPOINT.
+        var options = Valid();
+        options.Telemetry.Otlp.Enabled = true;
+
+        AssertFailure(options, "agentsplice:telemetry:otlp:endpoint is required");
+    }
+
+    [Theory]
+    [InlineData(TelemetryExportProtocol.HttpProtobuf, "http://127.0.0.1:4318")]
+    [InlineData(TelemetryExportProtocol.HttpProtobuf, "https://collector.internal/otlp/")]
+    [InlineData(TelemetryExportProtocol.Grpc, "http://otel-collector:4317")]
+    [InlineData(TelemetryExportProtocol.Grpc, "http://otel-collector:4317/")]
+    public void An_enabled_export_with_a_receiver_address_passes(TelemetryExportProtocol protocol, string endpoint)
+    {
+        var options = Valid();
+        options.Telemetry.Otlp.Enabled = true;
+        options.Telemetry.Otlp.Protocol = protocol;
+        options.Telemetry.Otlp.Endpoint = endpoint;
+
+        var result = Validate(options);
+
+        Assert.True(result.Succeeded, string.Join("; ", result.Failures ?? []));
+    }
+
+    [Theory]
+    [InlineData("not a url")]
+    [InlineData("127.0.0.1:4318")]
+    [InlineData("udp://127.0.0.1:4318")]
+    public void A_telemetry_endpoint_must_be_an_absolute_http_url(string endpoint)
+    {
+        var options = Valid();
+        options.Telemetry.Otlp.Endpoint = endpoint;
+
+        AssertFailure(options, "absolute http or https URL");
+    }
+
+    [Fact]
+    public void A_telemetry_endpoint_is_validated_even_while_export_is_off()
+    {
+        // Refused by the deployment that wrote it, not by the one that later flips the switch.
+        var options = Valid();
+        options.Telemetry.Otlp.Enabled = false;
+        options.Telemetry.Otlp.Endpoint = "not a url";
+
+        AssertFailure(options, "absolute http or https URL");
+    }
+
+    [Fact]
+    public void A_telemetry_endpoint_must_not_embed_credentials()
+    {
+        // The endpoint is logged when export starts.
+        var options = Valid();
+        options.Telemetry.Otlp.Endpoint = "http://user:secret@127.0.0.1:4318";
+
+        AssertFailure(options, "must not embed credentials");
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:4318/?token=abc")]
+    [InlineData("http://127.0.0.1:4318/#fragment")]
+    public void A_telemetry_endpoint_must_not_carry_a_query_or_fragment(string endpoint)
+    {
+        var options = Valid();
+        options.Telemetry.Otlp.Endpoint = endpoint;
+
+        AssertFailure(options, "must not carry a query or fragment");
+    }
+
+    [Theory]
+    [InlineData("http://127.0.0.1:4318/v1/traces")]
+    [InlineData("http://127.0.0.1:4318/v1/metrics/")]
+    [InlineData("http://127.0.0.1:4318/otlp/V1/LOGS")]
+    public void An_http_telemetry_endpoint_must_name_the_receiver_not_a_signal(string endpoint)
+    {
+        // Pasting a signal URL would export to /v1/traces/v1/traces, and an exporter's 404 reaches
+        // nothing an operator watches.
+        var options = Valid();
+        options.Telemetry.Otlp.Endpoint = endpoint;
+
+        AssertFailure(options, "names a signal path");
+    }
+
+    [Fact]
+    public void No_telemetry_endpoint_failure_repeats_an_embedded_credential()
+    {
+        // A signal path and a credential in one endpoint trip two rules. The credential rule refuses
+        // without quoting; the signal-path rule must not quote the whole endpoint either, or the
+        // startup error carries the secret the first rule was protecting.
+        var options = Valid();
+        options.Telemetry.Otlp.Endpoint = "http://user:SENTINEL-OTLP-SECRET@127.0.0.1:4318/v1/traces";
+
+        var result = Validate(options);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Failures ?? [], failure => failure.Contains("must not embed credentials", StringComparison.Ordinal));
+        Assert.Contains(result.Failures ?? [], failure => failure.Contains("names a signal path", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.Failures ?? [], failure => failure.Contains("SENTINEL-OTLP-SECRET", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_grpc_telemetry_endpoint_must_not_carry_a_path()
+    {
+        var options = Valid();
+        options.Telemetry.Otlp.Protocol = TelemetryExportProtocol.Grpc;
+        options.Telemetry.Otlp.Endpoint = "http://127.0.0.1:4317/otlp";
+
+        AssertFailure(options, "must not carry a path when the protocol is 'Grpc'");
+    }
+
+    [Fact]
+    public void An_unrecognised_telemetry_protocol_fails()
+    {
+        var options = Valid();
+        options.Telemetry.Otlp.Protocol = (TelemetryExportProtocol)42;
+
+        AssertFailure(options, "agentsplice:telemetry:otlp:protocol is not a recognised protocol");
+    }
+
+    [Fact]
     public void Every_failure_is_reported_rather_than_only_the_first()
     {
         var options = Valid();

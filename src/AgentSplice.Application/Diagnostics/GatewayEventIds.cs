@@ -37,6 +37,9 @@ public static class GatewayEventIds
     /// <summary>A fault escaped the request pipeline entirely.</summary>
     public static EventId UnhandledPipelineFault { get; } = new(1201, nameof(UnhandledPipelineFault));
 
+    /// <summary>Traces and metrics are being exported; the message names the transport and destination.</summary>
+    public static EventId TelemetryExportEnabled { get; } = new(1202, nameof(TelemetryExportEnabled));
+
     /// <summary>The bounded metadata queue was full, so an exchange's evidence was dropped.</summary>
     public static EventId MetadataQueueSaturated { get; } = new(1301, nameof(MetadataQueueSaturated));
 

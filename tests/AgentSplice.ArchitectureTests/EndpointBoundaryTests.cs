@@ -57,6 +57,16 @@ public sealed class EndpointBoundaryTests
     }
 
     [Fact]
+    public void The_api_does_not_configure_telemetry_itself()
+    {
+        // The composition root asks the observability module for telemetry and nothing more. An
+        // exporter or instrumentation added here would sit outside the module whose tests prove what
+        // is exported, and outside the rule confining OpenTelemetry to it — which, like the EF Core
+        // rule, excludes the API and so needs this direction stated separately.
+        AssertApiDoesNotDependOn("OpenTelemetry", "System.Diagnostics.ActivityListener");
+    }
+
+    [Fact]
     public void The_api_does_not_frame_or_interpret_a_stream()
     {
         // The transport writes bytes and flushes them. Deciding where an event ends, what it means,

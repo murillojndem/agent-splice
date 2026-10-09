@@ -30,6 +30,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         ValidateAdapters(options, failures);
         ValidateLimits(options, failures);
         ValidateCompatibility(options, failures);
+        ValidateTelemetry(options, failures);
 
         var enabledRuntimeIds = ValidateRuntimes(options, failures);
         ValidateAliases(options, enabledRuntimeIds.All, failures);
@@ -245,6 +246,93 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         {
             failures.Add(
                 "agentsplice:compatibility:unsupportedFields is not a recognised mode. 'Adapted' is a Stage 4 capability and is not implemented.");
+        }
+    }
+
+    /// <summary>
+    /// Validates OTLP export.
+    /// </summary>
+    /// <remarks>
+    /// A configured endpoint is validated whether or not export is on, the same way a disabled
+    /// runtime's base URL is: a value that would be refused the moment someone flips the switch is
+    /// better refused now, by the deployment that wrote it.
+    ///
+    /// Every endpoint rule guards against the same failure — telemetry sent somewhere other than
+    /// where the operator believes, with nothing on the request path to notice. An exporter that
+    /// cannot reach its collector fails silently by design, because it must never fail an exchange.
+    /// </remarks>
+    private static void ValidateTelemetry(AgentSpliceOptions options, List<string> failures)
+    {
+        const string Prefix = "agentsplice:telemetry:otlp";
+
+        var otlp = options.Telemetry.Otlp;
+
+        if (!Enum.IsDefined(otlp.Protocol))
+        {
+            failures.Add(FormattableString.Invariant($"{Prefix}:protocol is not a recognised protocol. Use 'HttpProtobuf' or 'Grpc'."));
+        }
+
+        if (string.IsNullOrWhiteSpace(otlp.Endpoint))
+        {
+            // Never defaulted, and never taken from OTEL_EXPORTER_OTLP_ENDPOINT. Where evidence goes
+            // is chosen, not inherited from the SDK's localhost default or from another tool's
+            // environment.
+            if (otlp.Enabled)
+            {
+                failures.Add(
+                    FormattableString.Invariant(
+                        $"{Prefix}:endpoint is required when {Prefix}:enabled is true. It is never defaulted and never read from OTEL_EXPORTER_OTLP_ENDPOINT, because where telemetry goes is a decision."));
+            }
+
+            return;
+        }
+
+        if (!TryParseHttpUri(otlp.Endpoint, out var endpoint))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"{Prefix}:endpoint '{otlp.Endpoint}' must be an absolute http or https URL."));
+            return;
+        }
+
+        // Rejected rather than redacted, as for a runtime's base URL. The endpoint is logged when
+        // export starts, so a credential embedded in it would be written to the default log.
+        if (!string.IsNullOrEmpty(endpoint.UserInfo))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"{Prefix}:endpoint must not embed credentials. A collector that requires them is given headers through OTEL_EXPORTER_OTLP_HEADERS, which the gateway never reads or logs."));
+        }
+
+        if (!string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"{Prefix}:endpoint must not carry a query or fragment; signal paths are appended to it and neither would survive."));
+        }
+
+        var path = endpoint.AbsolutePath.TrimEnd('/');
+
+        if (otlp.Protocol == TelemetryExportProtocol.Grpc && path.Length > 0)
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"{Prefix}:endpoint must not carry a path when the protocol is 'Grpc'; gRPC addresses a service on the receiver, not a URL path."));
+        }
+
+        // The mistake this catches is pasting a signal URL where the receiver's base address
+        // belongs. It would export to /v1/traces/v1/traces, the collector would answer 404, and
+        // because export failures never reach the request path nothing would say so. The message
+        // quotes the path alone: this rule can fire beside the credentials rule above, and the whole
+        // endpoint would carry the credential into the startup error.
+        if (otlp.Protocol == TelemetryExportProtocol.HttpProtobuf
+            && (path.EndsWith("/v1/traces", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith("/v1/metrics", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith("/v1/logs", StringComparison.OrdinalIgnoreCase)))
+        {
+            failures.Add(
+                FormattableString.Invariant(
+                    $"{Prefix}:endpoint names a signal path ('{endpoint.AbsolutePath}'). Give the receiver's base address; AgentSplice appends v1/traces and v1/metrics itself."));
         }
     }
 

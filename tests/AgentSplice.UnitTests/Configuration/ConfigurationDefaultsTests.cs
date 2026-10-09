@@ -137,6 +137,26 @@ public sealed class ConfigurationDefaultsTests
     }
 
     [Fact]
+    public void Telemetry_export_is_disabled_and_has_no_destination_by_default()
+    {
+        // Exported telemetry describes every exchange. Sending that off the process is a decision, so
+        // a deployment that never mentioned export exports nothing, and one that turns it on must say
+        // where (ADR 0014).
+        var otlp = new AgentSpliceOptions().Telemetry.Otlp;
+
+        Assert.False(otlp.Enabled);
+        Assert.Null(otlp.Endpoint);
+    }
+
+    [Fact]
+    public void Telemetry_is_exported_over_http_protobuf_unless_told_otherwise()
+    {
+        // The OpenTelemetry specification's recommended default, and not the .NET SDK's: the SDK
+        // defaults to gRPC, which is why this is stated rather than inherited.
+        Assert.Equal(TelemetryExportProtocol.HttpProtobuf, new OtlpExportOptions().Protocol);
+    }
+
+    [Fact]
     public void The_configuration_section_name_is_stable()
     {
         Assert.Equal("agentsplice", AgentSpliceOptions.SectionName);

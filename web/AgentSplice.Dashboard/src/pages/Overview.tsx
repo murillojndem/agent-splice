@@ -45,6 +45,12 @@ export function Overview() {
               {info.contentRetentionEnabled ? 'retained' : 'never stored'}
             </dd>
           </div>
+          <div>
+            <dt>Spans and metrics</dt>
+            <dd data-testid="telemetry-export">
+              {info.telemetryExportEnabled ? 'exported over OTLP' : 'not exported'}
+            </dd>
+          </div>
         </dl>
 
         <p className="note">

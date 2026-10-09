@@ -29,6 +29,9 @@ internal sealed class GatewayFixture : IAsyncDisposable
 
     internal HttpClient Client { get; }
 
+    /// <summary>The host's services, for the few tests that must reach past HTTP — such as flushing telemetry.</summary>
+    internal IServiceProvider Services => factory.Services;
+
     internal static async Task<GatewayFixture> StartAsync(
         Action<Dictionary<string, string?>>? configure = null,
         Action<IServiceCollection>? configureServices = null)

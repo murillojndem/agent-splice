@@ -131,6 +131,31 @@ Running directly rather than in a container needs none of this — the default b
 no token is configured, so `/api/v1` serves local callers and startup refuses any binding that would
 change that.
 
+### Seeing what AgentSplice exports
+
+Traces and metrics are exported over OTLP only when asked to. The Compose file carries a collector
+that prints what it receives, reachable on the Compose network only:
+
+```bash
+# in .env
+AGENTSPLICE__TELEMETRY__OTLP__ENABLED=true
+
+docker compose --profile otel up --build
+docker compose logs -f otel-collector
+```
+
+Running directly, point the gateway at any OTLP receiver — for example the same collector image run
+with its HTTP port published on loopback:
+
+```bash
+AGENTSPLICE__TELEMETRY__OTLP__ENABLED=true \
+AGENTSPLICE__TELEMETRY__OTLP__ENDPOINT=http://127.0.0.1:4318 \
+dotnet run --project src/AgentSplice.Api
+```
+
+Spans arrive within about five seconds of an exchange and metrics within a minute. Setting
+`OTEL_EXPORTER_OTLP_ENDPOINT` does nothing; see `docs/OBSERVABILITY.md` "OpenTelemetry export".
+
 ## Adding a package
 
 Versions are centrally managed. Add a `PackageVersion` to `Directory.Packages.props`, then reference

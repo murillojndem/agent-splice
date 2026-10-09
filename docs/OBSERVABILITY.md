@@ -213,11 +213,11 @@ There is deliberately no model dimension. A model identifier is client-supplied 
 
 ### Tracing
 
-Spans are emitted through `System.Diagnostics.ActivitySource`; no OpenTelemetry SDK is referenced, and an architecture test enforces that. Because nothing else subscribes to the `agentsplice.*` sources, AgentSplice registers its own `ActivityListener` and forces the W3C identifier format — without it `StartActivity` returns null, every span is absent, and `x-agentsplice-trace-id` can never be populated. Stage 1D replaces that listener with the SDK and must not run both; until an exporter exists, adopting the SDK would add a dependency and change nothing an operator can see.
+Spans are emitted through `System.Diagnostics.ActivitySource`, and the OpenTelemetry SDK is the only subscriber (ADR 0014). It runs whether or not anything is exported, because a source nobody listens to makes `StartActivity` return null — every span would be absent and `x-agentsplice-trace-id` could never be populated. The SDK replaced a hand-registered `ActivityListener` rather than joining it, and an architecture test fails if one returns. The W3C identifier format is forced explicitly, and every exchange is sampled: `AlwaysOnSampler`, not the SDK's parent-based default, so a client that propagates a trace context marked unsampled cannot discard the spans for its own exchange.
 
 All four Stage 1 sources are live: `agentsplice.exchange`, `agentsplice.provider.request`, `agentsplice.stream`, and `agentsplice.persistence`. The provider span covers opening the upstream response alone; the stream span covers the transfer that follows. Keeping them apart is what separates "the runtime took a long time to answer" from "the runtime produced a long answer". The persistence span covers one write batch, which is an interval no exchange span can contain: by the time it runs the client response is long finished.
 
-The listener subscribes to a source only once something writes to it, because a source nothing writes to is a permanently empty panel that reads as a capability which produced nothing.
+The SDK subscribes to a source only once something writes to it, because a source nothing writes to is a permanently empty panel that reads as a capability which produced nothing.
 
 ## Structured logs
 
@@ -267,3 +267,49 @@ Log ingestion is optional, version-specific, and isolated from request correctne
 ## OpenTelemetry export
 
 AgentSplice should follow current OpenTelemetry GenAI semantic conventions where they cleanly map, using AgentSplice-prefixed attributes for concepts not standardized. Semantic-convention version changes must be reviewed and tested rather than adopted silently.
+
+### Turning it on
+
+Traces and metrics are exported over OTLP when, and only when, an operator turns export on (ADR 0014):
+
+```yaml
+agentsplice:
+  telemetry:
+    otlp:
+      enabled: true
+      endpoint: http://127.0.0.1:4318   # the receiver's base address
+      protocol: HttpProtobuf            # default; or Grpc, conventionally on 4317
+```
+
+- **Off by default, and never defaulted to a destination.** Enabling export without an endpoint fails startup rather than sending to the SDK's `localhost` default. `/api/v1/system` reports `telemetryExportEnabled`.
+- **The endpoint is the receiver's base address.** For `HttpProtobuf`, AgentSplice appends `v1/traces` and `v1/metrics` after any path it already has, so a collector behind a proxy at `/otlp` receives spans at `/otlp/v1/traces`. For `Grpc` it carries no path. Startup refuses an endpoint with credentials, a query, a fragment, or a signal path in place of the base address.
+- **`OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL` have no effect.** A variable left over from another tool is not consent to export a description of every exchange. The SDK's other standard variables still apply: `OTEL_EXPORTER_OTLP_HEADERS` is how a collector credential is supplied without entering AgentSplice's configuration or log, and `OTEL_EXPORTER_OTLP_TIMEOUT` bounds each export.
+- **Starting export is logged once**, as event `1202 TelemetryExportEnabled`, naming the transport and destination.
+
+### What is exported
+
+- The four live activity sources and the `AgentSplice` meter — the instruments and bounded dimensions listed above, which the spans carry as attributes, plus `agentsplice.persistence.batch_size` on the persistence span: a count of exchanges in one write, never which ones. No prompt, model output, tool argument, model identifier, request identifier, or credential; an integration test searches every exported payload for each of them.
+- Resource attributes `service.name=agentsplice`, `service.version` (the build's informational version), and a generated `service.instance.id`.
+- **Not logs.** The log pipeline is not routed through OpenTelemetry. **Not framework spans.** ASP.NET Core and `HttpClient` instrumentation are not enabled, so health probes and administrative requests produce no spans.
+
+Spans leave on the SDK's five-second batch schedule; metrics on its default sixty-second interval.
+
+### When the collector is unreachable
+
+Export runs on the SDK's own threads with a bounded queue, and it never affects an exchange: a collector that is down, slow, or refusing costs a failed export and nothing else. The price is that the failure is quiet. The SDK reports exporter errors through its `OpenTelemetry-Exporter-OpenTelemetryProtocol` event source, not through the gateway log, so a failing export is visible only with SDK self-diagnostics enabled. Surfacing it in the gateway's own log is follow-up work.
+
+### Known limitation: the exchange span's parent
+
+ASP.NET Core creates an activity for every request, and `agentsplice.exchange` starts as its child. That activity is not exported, so a backend shows the exchange span with a parent it never received. The trace identifier is unaffected — `x-agentsplice-trace-id` finds the exchange in the backend — but a client's propagated span links to it only through the missing one.
+
+### Local collector
+
+The Compose file carries an optional collector that prints what it receives:
+
+```powershell
+# .env: AGENTSPLICE__TELEMETRY__OTLP__ENABLED=true
+docker compose --profile otel up
+docker compose logs -f otel-collector
+```
+
+It listens on the Compose network only and publishes no port on the host. `config/otel-collector.yaml` is a starting point: add an exporter for a backend to keep the data.

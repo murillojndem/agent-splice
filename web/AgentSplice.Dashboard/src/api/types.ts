@@ -88,6 +88,7 @@ export interface SystemInfo {
   enabledModules: string[];
   contentRetentionEnabled: boolean;
   metadataRetentionEnabled: boolean;
+  telemetryExportEnabled: boolean;
 }
 
 export interface RuntimeSummary {

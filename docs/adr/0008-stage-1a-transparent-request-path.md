@@ -174,6 +174,9 @@ identifier format — without it `StartActivity` returns null, every span is abs
 Stage 1B replaces the listener with the SDK and must not run both: two listeners on one source sample
 every activity twice.
 
+**Deferred twice and implemented by [ADR 0014](0014-stage-1d-opentelemetry-export.md)** in Stage 1D,
+where the SDK replaced the listener rather than joining it.
+
 Only the instruments this stage can honestly emit are declared. Every streaming instrument, the
 first-byte and first-event timings, and both throughput instruments are absent, because a
 non-streamed exchange offers no boundary to measure them against and a zero would read as "this

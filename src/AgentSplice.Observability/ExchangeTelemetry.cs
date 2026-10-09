@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using AgentSplice.Application.Observability;
 using AgentSplice.Domain.Identifiers;
+using OpenTelemetry.Trace;
 
 namespace AgentSplice.Observability;
 
@@ -9,9 +10,9 @@ namespace AgentSplice.Observability;
 /// Emits AgentSplice's spans and metrics through <c>System.Diagnostics</c>.
 /// </summary>
 /// <remarks>
-/// No OpenTelemetry SDK is referenced in this stage, which an architecture test enforces. The
-/// primitives here are the ones the SDK itself consumes, so adopting it later is a matter of adding
-/// an exporter rather than rewriting instrumentation.
+/// Instrumentation uses the <c>System.Diagnostics</c> primitives alone; the OpenTelemetry SDK is the
+/// subscriber and, when configured, the exporter (ADR 0014). Nothing here knows whether anything is
+/// exported, which is what keeps export from being able to change what is recorded.
 /// </remarks>
 public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
 {
@@ -38,14 +39,22 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     private readonly Counter<long> persistenceFailures;
 
     /// <summary>Creates the instruments.</summary>
-    /// <param name="listener">
-    /// Required, not merely available. Without a listener subscribed to the AgentSplice sources
-    /// every <c>StartActivity</c> returns null, so taking it as a dependency makes the ordering a
-    /// compile-time fact instead of a registration convention.
+    /// <param name="tracerProvider">
+    /// Required, not merely available. Resolving it builds the SDK's listener on the AgentSplice
+    /// sources, and without that every <c>StartActivity</c> returns null — so taking it as a
+    /// dependency makes "spans exist before the first one is started" a compile-time fact instead of
+    /// a registration convention.
     /// </param>
-    public ExchangeTelemetry(AgentSpliceActivityListener listener)
+    public ExchangeTelemetry(TracerProvider tracerProvider)
     {
-        ArgumentNullException.ThrowIfNull(listener);
+        ArgumentNullException.ThrowIfNull(tracerProvider);
+
+        // Forced rather than left to the SDK, which happens to set it too. TraceId accepts only a
+        // 32-character lowercase hexadecimal value; under the legacy hierarchical format the
+        // identifier would not parse, and x-agentsplice-trace-id would silently disappear on exactly
+        // the deployments nobody had looked at.
+        Activity.DefaultIdFormat = ActivityIdFormat.W3C;
+        Activity.ForceDefaultIdFormat = true;
 
         exchanges = meter.CreateCounter<long>(
             TelemetryNames.Instruments.Exchanges,

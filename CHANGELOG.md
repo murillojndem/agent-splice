@@ -4,6 +4,47 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 1: the OpenTelemetry SDK and OTLP export
+
+The SDK deferred since Stage 1A arrives with the exporter that justifies it (ADR 0014, FR-OBS-001,
+FR-OBS-002). Spans and metrics can now leave the process; by default they still do not.
+
+- The OpenTelemetry SDK replaces the hand-registered `ActivityListener` as the only subscriber to the
+  `agentsplice.*` sources, and runs whether or not anything is exported, because
+  `x-agentsplice-trace-id` needs the span either way. Every exchange is still sampled:
+  `AlwaysOnSampler`, not the SDK's parent-based default, so a client's unsampled `traceparent` cannot
+  discard spans for its own exchange.
+- `agentsplice:telemetry:otlp` turns on OTLP export of traces and metrics, over `HttpProtobuf`
+  (default) or `Grpc`. It is off by default and the destination is never defaulted; enabling it
+  without an endpoint fails startup. The endpoint is validated even while export is off, and one that
+  embeds credentials, carries a query or fragment, or names `/v1/traces` where the receiver's base
+  address belongs is refused.
+- `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_PROTOCOL` have no effect. A variable left over
+  from another tool must not decide where a description of every exchange goes; an integration test
+  points both at a live receiver and asserts nothing arrives. `OTEL_EXPORTER_OTLP_HEADERS` still
+  works, and is how a collector credential stays out of AgentSplice's configuration.
+- Proven against a real receiver over both transports — gRPC over cleartext HTTP/2 included — and
+  against every sentinel the log-redaction suite uses plus the model identifier: no prompt, output,
+  tool argument, model, client request identifier, or credential appears in any exported byte.
+- Export never affects an exchange: an unreachable collector costs a failed export on a background
+  thread. The cost is that such a failure is reported only through the SDK's own event source; the
+  gateway announces that export started (event `1202 TelemetryExportEnabled`) but not that it is
+  failing.
+- `/api/v1/system` reports `telemetryExportEnabled` beside the two retention flags, and the dashboard's
+  Overview shows it. The destination is not reported.
+- An optional `otel-collector` Compose service (`--profile otel`, `otel/opentelemetry-collector:0.162.0`)
+  receives both transports on the Compose network, publishes nothing on the host, and prints what it
+  receives. `.env.example` loses the `OTEL_EXPORTER_OTLP_ENDPOINT` line nothing had ever read.
+- Logs are not exported and no framework instrumentation is enabled; tests fail if an OpenTelemetry
+  logger provider appears or if anything outside `AgentSplice.Observability` references the SDK.
+- Known limitation: the exchange span's parent is ASP.NET Core's request activity, which is not
+  exported, so backends show the exchange span with a missing parent. The trace identifier is
+  unaffected.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a model identifier
+written onto a span, export that ignored the `enabled` switch, and the hand-registered listener
+restored beside the SDK.
+
 ### Stage 1C, part 6: the minimal dashboard
 
 Stage 1C's last piece, and the first consumer of the API the previous parts published. `web/AgentSplice.Dashboard`

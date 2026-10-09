@@ -32,6 +32,26 @@ public sealed class DiagnosticsApiTests
         // factory runs ephemeral.
         Assert.False(system.GetProperty("contentRetentionEnabled").GetBoolean());
         Assert.False(system.GetProperty("metadataRetentionEnabled").GetBoolean());
+        Assert.False(system.GetProperty("telemetryExportEnabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task System_information_says_telemetry_leaves_the_process_without_saying_where()
+    {
+        // The destination is operator configuration and stays there; the fact of export is what sits
+        // beside the retention flags, because it is a third copy of what each exchange looked like.
+        const string Endpoint = "http://collector.invalid:4318/";
+
+        await using var fixture = await GatewayFixture.StartAsync(settings =>
+        {
+            settings["agentsplice:telemetry:otlp:enabled"] = "true";
+            settings["agentsplice:telemetry:otlp:endpoint"] = Endpoint;
+        });
+
+        var system = await ReadAsync(fixture, "/api/v1/system");
+
+        Assert.True(system.GetProperty("telemetryExportEnabled").GetBoolean());
+        Assert.DoesNotContain("collector.invalid", system.GetRawText(), StringComparison.Ordinal);
     }
 
     [Fact]

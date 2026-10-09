@@ -138,13 +138,31 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
-    public void No_assembly_references_an_opentelemetry_package()
+    public void Only_the_observability_module_references_opentelemetry()
     {
-        // Stage 1 instruments with System.Diagnostics alone (ADR 0008). Stage 1D replaces the
-        // self-registered ActivityListener with the SDK, and must not run both.
-        foreach (var assembly in AllProductionAssemblies())
+        // ADR 0014. The request path records through IExchangeTelemetry and instruments with
+        // System.Diagnostics primitives; the SDK is a subscriber and an exporter, and confining it
+        // keeps "what is recorded" independent of "whether and where it is exported".
+        foreach (var assembly in AllProductionAssemblies().Where(candidate => candidate != Observability))
         {
             AssertNoReferenceTo(assembly, "OpenTelemetry");
+        }
+    }
+
+    [Fact]
+    public void No_production_assembly_registers_its_own_activity_listener()
+    {
+        // The SDK replaced a hand-registered listener and must not run beside one (ADR 0014): two
+        // listeners on one source both take part in every sampling decision, and the one that does
+        // not export would be a second, silent opinion on which spans exist.
+        foreach (var assembly in AllProductionAssemblies())
+        {
+            var result = Types.InAssembly(assembly)
+                .Should()
+                .NotHaveDependencyOn("System.Diagnostics.ActivityListener")
+                .GetResult();
+
+            Assert.True(result.IsSuccessful, Describe(result));
         }
     }
 

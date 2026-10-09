@@ -25,6 +25,16 @@ public sealed record SystemInfoView
 
     /// <summary>Whether exchange metadata is retained at all (FR-DATA-001).</summary>
     public required bool MetadataRetentionEnabled { get; init; }
+
+    /// <summary>
+    /// Whether spans and metrics leave the process over OTLP.
+    /// </summary>
+    /// <remarks>
+    /// A boolean and not the destination. Where telemetry goes is configuration an operator already
+    /// holds; that it goes anywhere is the fact a reviewer of the deployment needs beside the two
+    /// retention flags, because exported telemetry is a third copy of what each exchange looked like.
+    /// </remarks>
+    public required bool TelemetryExportEnabled { get; init; }
 }
 
 /// <summary>One configured runtime with its connection detail redacted (openapi <c>RuntimeSummary</c>).</summary>

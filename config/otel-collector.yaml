@@ -1,0 +1,32 @@
+# OpenTelemetry Collector configuration for the optional "otel" Compose profile.
+#
+# It receives what AgentSplice exports and prints it to the collector's own log, so an operator can
+# see exactly which spans, attributes, and metrics leave the gateway before sending them anywhere
+# that keeps them. To keep them, add an exporter for your backend and list it in the pipelines.
+#
+# Both OTLP transports are open so that either agentsplice:telemetry:otlp:protocol works against
+# this file unchanged: HttpProtobuf on 4318 (the default) and Grpc on 4317.
+
+receivers:
+  otlp:
+    protocols:
+      # 0.0.0.0 inside the container, which is reachable only on the Compose network: the service
+      # publishes no port on the host. The collector's own default is localhost, which would refuse
+      # the gateway's container.
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      exporters: [debug]

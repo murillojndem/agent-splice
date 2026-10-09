@@ -591,6 +591,12 @@ components:
           items: { type: string }
         contentRetentionEnabled: { type: boolean }
         metadataRetentionEnabled: { type: boolean }
+        telemetryExportEnabled:
+          type: boolean
+          description: >-
+            Whether spans and metrics are exported over OTLP. The destination is deliberately not
+            reported; that telemetry leaves the process at all is what a reviewer of the deployment
+            needs to know.
 
     Readiness:
       type: object

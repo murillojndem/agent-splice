@@ -99,6 +99,13 @@ Sanitization occurs before persistence, not after.
   a ticket subject, or a path in it. `ExchangeId` is AgentSplice's own identifier, is returned as
   `x-agentsplice-exchange-id`, and is what logs carry. The correlation token is also redacted from
   `IHttpClientFactory` header logging, because AgentSplice forwards it upstream.
+- Telemetry export is a data egress path and is treated as one (ADR 0014). It is off by default, its
+  destination is set only by `agentsplice:telemetry:otlp:endpoint` — never by
+  `OTEL_EXPORTER_OTLP_ENDPOINT` — and an endpoint embedding credentials is refused at startup,
+  because the endpoint is logged when export begins. A collector credential belongs in
+  `OTEL_EXPORTER_OTLP_HEADERS`, which the SDK reads and AgentSplice neither stores nor logs. Exported
+  spans and metrics carry the bounded attributes of `docs/OBSERVABILITY.md` and nothing a client or
+  model chose; logs are not exported.
 - Errors must not expose upstream credentials, connection strings, or raw response bodies.
 - Unknown values remain unknown rather than being derived from sensitive content without policy.
 

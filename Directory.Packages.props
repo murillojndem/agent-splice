@@ -20,6 +20,13 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
     <!-- Design-time only (PrivateAssets="all"): required by "dotnet ef migrations add", never shipped. -->
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11" />
+    <!--
+      Telemetry export, referenced by AgentSplice.Observability alone (ADR 0014); an architecture
+      test enforces it. The OTLP exporter carries its own protobuf serialisation and gRPC framing,
+      so neither Grpc.Net.Client nor Google.Protobuf enters the dependency graph.
+    -->
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
   </ItemGroup>
 
   <!-- Test-only dependencies -->

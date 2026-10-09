@@ -10,9 +10,10 @@ namespace AgentSplice.IntegrationTests.Chat;
 /// Trace correlation across the response surface (FR-OBS-001, docs/API.md "Gateway headers").
 /// </summary>
 /// <remarks>
-/// These would all have passed vacuously before Stage 1A registered its own
-/// <c>ActivityListener</c>: with no listener, <c>StartActivity</c> returns null and the header is
-/// simply absent. That is exactly the failure mode worth pinning.
+/// These would all have passed vacuously before Stage 1A subscribed to its own sources: with no
+/// listener, <c>StartActivity</c> returns null and the header is simply absent. That is exactly the
+/// failure mode worth pinning, and it is why the OpenTelemetry SDK that now subscribes runs with
+/// export off (ADR 0014).
 /// </remarks>
 public sealed class TraceCorrelationTests
 {

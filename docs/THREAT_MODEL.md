@@ -25,6 +25,7 @@
 7. Replay worker to target runtime.
 8. Evaluation orchestrator to disposable execution environment.
 9. Exported issue bundle to external recipients.
+10. AgentSplice to an OpenTelemetry collector.
 
 ## Threats and mitigations
 
@@ -51,6 +52,12 @@ Mitigations: administrative configuration only, URI validation, target allowlist
 Threat: logs, traces, metrics, dashboard, replay, or issue bundles expose private content.
 
 Mitigations: metadata-only default, bounded attributes, content authorization, sanitization, retention, export review, automated leakage tests.
+
+### Telemetry sent somewhere unintended
+
+Threat: spans and metrics — a description of every exchange, though no content — reach a collector the operator did not choose, or leak content through an attribute, or an unreachable collector degrades the request path.
+
+Mitigations: export off by default with no default destination; the standard `OTEL_EXPORTER_OTLP_ENDPOINT` variable ignored so an ambient setting cannot enable or redirect export; endpoint validation refusing credentials, queries, and misplaced signal paths; a startup log line naming the destination; export reported by `/api/v1/system`; bounded attributes only, with an integration test searching every exported byte for prompt, output, tool-argument, model, request-identifier, and credential sentinels; export on background threads with a bounded queue; no log export (ADR 0014).
 
 ### Malicious upstream stream
 
@@ -109,6 +116,7 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 ## Security test cases
 
 - authorization and runtime secrets never appear in logs/traces/artifacts;
+- nothing is exported unless OTLP export is explicitly enabled, and exported spans and metrics carry no content;
 - content retention remains off after upgrade;
 - arbitrary upstream/replay URL is rejected;
 - giant or malformed SSE terminates safely;

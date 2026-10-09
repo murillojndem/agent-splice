@@ -1,12 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Instruments with System.Diagnostics alone. No OpenTelemetry SDK is referenced in Stage 1A, which
-    an architecture test enforces; these are the primitives the SDK itself consumes, so adopting it
-    later adds an exporter rather than rewriting instrumentation (ADR 0008).
+    Instruments with System.Diagnostics and subscribes through the OpenTelemetry SDK, which is the
+    only listener on the AgentSplice sources (ADR 0014). The SDK is confined to this project, which
+    an architecture test enforces: the request path records through IExchangeTelemetry and never
+    sees an OpenTelemetry type.
   -->
   <PropertyGroup>
-    <Description>AgentSplice observability names and instrumentation.</Description>
+    <Description>AgentSplice observability names, instrumentation, and OTLP export.</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +16,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
   </ItemGroup>
 
 </Project>

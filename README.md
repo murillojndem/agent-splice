@@ -82,13 +82,18 @@ found in three review passes over 1A and 1B are corrected in
 [ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md), and
 [ADR 0012](docs/adr/0012-classification-independent-of-relayability.md).
 
-**Stage 1C — Metadata persistence and administrative APIs is in progress.** Exchanges are now written
-to a local SQLite store through a bounded queue and a background writer, so evidence survives the
-process; `agentsplice:persistence:mode: None` keeps purely ephemeral operation available. Still to
-come in this stage: retention sweeps, the `/api/v1` administrative surface that reads the store, and
-the minimal dashboard. There is no OpenTelemetry exporter yet — spans and metrics are emitted through
-`System.Diagnostics` and the SDK arrives with Stage 1D. Replay, conformance orchestration, evaluation,
-protocol translation, and compatibility adapters all belong to later milestones.
+**Stage 1C — Metadata persistence, administrative APIs, and the minimal dashboard is complete.**
+Exchanges are written to a local SQLite store through a bounded queue and a background writer, swept
+by retention, and served by the authenticated `/api/v1` surface and the dashboard that reads it;
+`agentsplice:persistence:mode: None` keeps purely ephemeral operation available.
+
+**Stage 1D — Local packaging and first public alpha is in progress.** The OpenTelemetry SDK now
+subscribes to AgentSplice's spans and metrics, and `agentsplice:telemetry:otlp` exports them over OTLP
+— off by default, never pointed anywhere implicitly, and with an optional collector in the Compose
+file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). Packaging, the release workflow,
+sample client configurations, and the first dated trace report are still to come. Replay, conformance
+orchestration, evaluation, protocol translation, and compatibility adapters all belong to later
+milestones.
 
 No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
 compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
@@ -98,8 +103,9 @@ See [Development guide](docs/DEVELOPMENT.md) to build and test.
 ## Stack
 
 In use today: ASP.NET Core 8 and C# 12, System.Text.Json, Server-Sent Events, `System.Diagnostics`
-spans and metrics, xUnit with architecture, contract, and integration suites. The rest is proposed
-and arrives with the stage that needs it.
+spans and metrics with the OpenTelemetry SDK and an opt-in OTLP exporter, SQLite, React, TypeScript,
+and Vite for the dashboard, and xUnit with architecture, contract, and integration suites. The rest is
+proposed and arrives with the stage that needs it.
 
 - ASP.NET Core 8 and C# 12
 - System.Text.Json

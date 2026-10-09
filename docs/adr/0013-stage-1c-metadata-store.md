@@ -280,6 +280,9 @@ operator can observe.
 produces spans on it — the requirement was that no source be subscribed to without a producer, and
 that is now satisfied by the producer rather than by the SDK.
 
+**Implemented by [ADR 0014](0014-stage-1d-opentelemetry-export.md).** The SDK replaced the listener in
+Stage 1D, with OTLP export off by default.
+
 ## Consequences
 
 - `AgentSplice.Infrastructure` is the only project referencing EF Core, enforced by an architecture

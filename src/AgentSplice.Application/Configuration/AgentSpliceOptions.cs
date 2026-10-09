@@ -39,6 +39,9 @@ public sealed class AgentSpliceOptions
     /// <summary>Who may read the administrative surface.</summary>
     public AdministrationOptions Administration { get; set; } = new();
 
+    /// <summary>Whether and where spans and metrics are exported.</summary>
+    public TelemetryOptions Telemetry { get; set; } = new();
+
     /// <summary>Configured model runtimes.</summary>
     public IList<RuntimeEndpointOptions> Runtimes { get; set; } = new List<RuntimeEndpointOptions>();
 

@@ -57,6 +57,7 @@ public sealed class DiagnosticsService
             ContentRetentionEnabled = options.Value.Capture.ContentEnabled,
             MetadataRetentionEnabled = options.Value.Persistence.Mode != PersistenceMode.None
                 && options.Value.Capture.MetadataEnabled,
+            TelemetryExportEnabled = options.Value.Telemetry.Otlp.Enabled,
         };
 
         return GatewayResponse.Success(200, writer.MediaType, writer.Write(view), requestId);

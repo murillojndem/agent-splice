@@ -160,6 +160,7 @@ internal sealed class AdministrativeJsonWriter : IAdministrativeEnvelopeWriter
             writer.WriteEndArray();
             writer.WriteBoolean("contentRetentionEnabled", system.ContentRetentionEnabled);
             writer.WriteBoolean("metadataRetentionEnabled", system.MetadataRetentionEnabled);
+            writer.WriteBoolean("telemetryExportEnabled", system.TelemetryExportEnabled);
             writer.WriteEndObject();
         });
     }

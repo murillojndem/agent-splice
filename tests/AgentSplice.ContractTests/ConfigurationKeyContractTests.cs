@@ -173,6 +173,87 @@ public sealed class ConfigurationKeyContractTests
     }
 
     [Fact]
+    public void The_shipped_settings_keep_telemetry_export_off()
+    {
+        // Exported telemetry describes every exchange; sending it off the process is a decision the
+        // operator makes, never one a fresh install has already made (ADR 0014).
+        var otlp = ShippedSettings()
+            .RootElement
+            .GetProperty("agentsplice")
+            .GetProperty("telemetry")
+            .GetProperty("otlp");
+
+        Assert.False(otlp.GetProperty("enabled").GetBoolean());
+    }
+
+    [Fact]
+    public void The_compose_file_keeps_telemetry_export_off_by_default()
+    {
+        var compose = RepositoryPaths.ReadText("docker-compose.yml");
+
+        Assert.Contains(
+            "AGENTSPLICE__TELEMETRY__OTLP__ENABLED: ${AGENTSPLICE__TELEMETRY__OTLP__ENABLED:-false}",
+            compose,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_deployment_files_do_not_offer_an_endpoint_variable_the_gateway_ignores()
+    {
+        // The example file once set OTEL_EXPORTER_OTLP_ENDPOINT, which nothing read. It reads as a
+        // working setting and would now be doubly wrong: the gateway deliberately ignores it, so an
+        // operator following the example would believe export was pointed somewhere it was not.
+        foreach (var line in RepositoryPaths.ReadText(".env.example").Split('\n'))
+        {
+            Assert.False(
+                line.Trim().StartsWith("OTEL_EXPORTER_OTLP_ENDPOINT=", StringComparison.Ordinal),
+                ".env.example sets OTEL_EXPORTER_OTLP_ENDPOINT, which AgentSplice does not read.");
+        }
+
+        Assert.DoesNotContain(ComposeEnvironmentKeys(includeAll: true), key => key == "OTEL_EXPORTER_OTLP_ENDPOINT");
+    }
+
+    [Fact]
+    public void The_compose_collector_is_opt_in_and_publishes_nothing_on_the_host()
+    {
+        var collector = ComposeService("otel-collector");
+
+        var profiles = Assert.IsType<YamlSequenceNode>(collector.Children[new YamlScalarNode("profiles")]);
+        Assert.Contains(profiles.Children.OfType<YamlScalarNode>(), profile => profile.Value == "otel");
+
+        // Reachable on the Compose network only. A published receiver would accept telemetry from
+        // anything on the host's network and put it in the same log as the gateway's.
+        Assert.False(
+            collector.Children.ContainsKey(new YamlScalarNode("ports")),
+            "The collector publishes a port on the host.");
+    }
+
+    [Fact]
+    public void The_compose_default_endpoint_is_one_the_shipped_collector_listens_on()
+    {
+        // The two files are edited separately, and a port that drifted in either would leave export
+        // switched on and every batch refused — which, by design, nothing on the request path reports.
+        var compose = RepositoryPaths.ReadText("docker-compose.yml");
+        Assert.Contains(
+            "AGENTSPLICE__TELEMETRY__OTLP__ENDPOINT: ${AGENTSPLICE__TELEMETRY__OTLP__ENDPOINT:-http://otel-collector:4318}",
+            compose,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "AGENTSPLICE__TELEMETRY__OTLP__PROTOCOL: ${AGENTSPLICE__TELEMETRY__OTLP__PROTOCOL:-HttpProtobuf}",
+            compose,
+            StringComparison.Ordinal);
+
+        var stream = new YamlStream();
+        stream.Load(new StringReader(RepositoryPaths.ReadText("config", "otel-collector.yaml")));
+
+        var protocols = (YamlMappingNode)((YamlMappingNode)((YamlMappingNode)((YamlMappingNode)stream.Documents[0].RootNode)
+            ["receivers"])["otlp"])["protocols"];
+
+        Assert.Equal("0.0.0.0:4318", ((YamlScalarNode)((YamlMappingNode)protocols["http"])["endpoint"]).Value);
+        Assert.Equal("0.0.0.0:4317", ((YamlScalarNode)((YamlMappingNode)protocols["grpc"])["endpoint"]).Value);
+    }
+
+    [Fact]
     public void An_unbindable_key_is_detected_by_the_resolver()
     {
         // Guards the resolver itself: the pre-Stage-0 Compose file used AGENTSPLICE_PERSISTENCE_MODE
@@ -199,12 +280,20 @@ public sealed class ConfigurationKeyContractTests
                 $"{source} sets variables that bind to no setting: {string.Join(", ", unbound)}"));
     }
 
-    private static List<string> ComposeEnvironmentKeys()
+    private static YamlMappingNode ComposeServices()
     {
         var stream = new YamlStream();
         stream.Load(new StringReader(RepositoryPaths.ReadText("docker-compose.yml")));
 
-        var services = (YamlMappingNode)((YamlMappingNode)stream.Documents[0].RootNode)["services"];
+        return (YamlMappingNode)((YamlMappingNode)stream.Documents[0].RootNode)["services"];
+    }
+
+    private static YamlMappingNode ComposeService(string name) =>
+        Assert.IsType<YamlMappingNode>(ComposeServices().Children[new YamlScalarNode(name)]);
+
+    private static List<string> ComposeEnvironmentKeys(bool includeAll = false)
+    {
+        var services = ComposeServices();
         var keys = new List<string>();
 
         foreach (var service in services.Children.Values.OfType<YamlMappingNode>())
@@ -217,9 +306,10 @@ public sealed class ConfigurationKeyContractTests
 
             foreach (var name in mapping.Children.Keys.OfType<YamlScalarNode>())
             {
-                if (name.Value?.StartsWith(Prefix, StringComparison.Ordinal) == true)
+                if (name.Value is { } value
+                    && (includeAll || value.StartsWith(Prefix, StringComparison.Ordinal)))
                 {
-                    keys.Add(name.Value);
+                    keys.Add(value);
                 }
             }
         }
