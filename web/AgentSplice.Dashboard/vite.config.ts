@@ -3,11 +3,23 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
-// The dashboard is served separately from the gateway and talks to it over the documented HTTP API
-// (FR-DASH-002). The dev proxy exists so a developer does not have to disable CORS to look at their
-// own traces; nothing about it is required in production, where the two are configured by URL.
+// The gateway serves this build on its own origin at /dashboard/ (FR-DASH-007, ADR 0015), so the
+// client calls /api/v1 by relative path and there is no CORS and no URL to configure. Two values below
+// are a contract with the gateway, and a test there fails if either drifts:
+//
+// - `base` is written into every asset URL in the built index.html and is the client router's
+//   basename (import.meta.env.BASE_URL), so it must be the path the gateway mounts the build at;
+// - `assetsDir` is where the content-hashed files go, and the only directory the gateway caches as
+//   immutable.
+//
+// The dev server uses the same base, so a deep link means the same thing on 5281 as on the gateway,
+// and its proxy reproduces the single origin: the page and /api answer from one address.
 export default defineConfig({
   plugins: [react()],
+  base: '/dashboard/',
+  build: {
+    assetsDir: 'assets',
+  },
   server: {
     port: 5281,
     proxy: {

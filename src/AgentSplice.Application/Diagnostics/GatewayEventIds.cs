@@ -40,6 +40,12 @@ public static class GatewayEventIds
     /// <summary>Traces and metrics are being exported; the message names the transport and destination.</summary>
     public static EventId TelemetryExportEnabled { get; } = new(1202, nameof(TelemetryExportEnabled));
 
+    /// <summary>The dashboard is being served; the message names the directory it is served from.</summary>
+    public static EventId DashboardServed { get; } = new(1203, nameof(DashboardServed));
+
+    /// <summary>The dashboard is enabled but no build was found; the message names where the gateway looked.</summary>
+    public static EventId DashboardBuildMissing { get; } = new(1204, nameof(DashboardBuildMissing));
+
     /// <summary>The bounded metadata queue was full, so an exchange's evidence was dropped.</summary>
     public static EventId MetadataQueueSaturated { get; } = new(1301, nameof(MetadataQueueSaturated));
 

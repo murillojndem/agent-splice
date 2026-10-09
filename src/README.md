@@ -12,7 +12,7 @@ Bootstrap only the projects required by the active roadmap stage in `docs/ARCHIT
 | `AgentSplice.Protocols.OpenAI` | The OpenAI-compatible protocol: request scanning and alias substitution over raw bytes, response and stream-event interpretation, the error envelope, the model-list writer, and stream media-type matching. |
 | `AgentSplice.Providers.LmStudio` | The LM Studio provider: buffered and streaming upstream calls, bounded body reading, per-phase timeout budgets, connection timing, and transport-failure classification. |
 | `AgentSplice.Observability` | Normative telemetry names, the exchange/provider/stream/persistence activity sources, the live instruments, and the OpenTelemetry SDK that subscribes to them, with opt-in OTLP export. The only project that references OpenTelemetry, which an architecture test enforces. |
-| `AgentSplice.Api` | Composition root and transport glue: the `/v1/models` and `/v1/chat/completions` endpoints, correlation headers, the client response sink, request-body reading, and the concurrency policy. Carries no orchestration logic, which an architecture test enforces. |
+| `AgentSplice.Api` | Composition root and transport glue: the `/v1/models` and `/v1/chat/completions` endpoints, correlation headers, the client response sink, request-body reading, the concurrency policy, and the hosting of the dashboard build at `/dashboard/` with its security headers (ADR 0015). Carries no orchestration logic, which an architecture test enforces. |
 
 The protocol and provider modules stay separate from Domain and Application so that
 `AgentSplice.ArchitectureTests` can assert no vendor-specific type has leaked into the durable core,

@@ -157,6 +157,19 @@ public sealed class ConfigurationDefaultsTests
     }
 
     [Fact]
+    public void The_dashboard_is_served_by_default_from_the_directory_the_image_uses()
+    {
+        // On, because the alpha is installed to be looked at, and served only when a build is present,
+        // so the default costs a gateway run from source nothing. "dashboard" relative to the content
+        // root is /app/dashboard in the image, which is where the Dockerfile copies the build
+        // (ADR 0015; PackagingContractTests pins the two together).
+        var dashboard = new AgentSpliceOptions().Dashboard;
+
+        Assert.True(dashboard.Enabled);
+        Assert.Equal("dashboard", dashboard.RootPath);
+    }
+
+    [Fact]
     public void The_configuration_section_name_is_stable()
     {
         Assert.Equal("agentsplice", AgentSpliceOptions.SectionName);

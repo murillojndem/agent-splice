@@ -38,6 +38,10 @@ builder.Services.AddLmStudioProvider();
 builder.Services.AddAgentSpliceObservability();
 builder.Services.AddCompletionConcurrencyLimit();
 
+// Which dashboard build, if any, is served at /dashboard/. Decided when resolved, like everything
+// else that reads options (ADR 0015).
+builder.Services.AddDashboard();
+
 // Resolved per request by the endpoint filter on the /api/v1 group.
 builder.Services.AddSingleton<AdministrationAuthorization>();
 
@@ -58,6 +62,11 @@ AdministrationBindingGuard.Verify(app.Configuration);
 
 app.UseExceptionHandler();
 app.UseRateLimiter();
+
+// The dashboard on the gateway's own origin, confined to /dashboard so that no other route answers
+// differently because of it; plus a redirect from / while it is served. Nothing at all when it is
+// disabled or no build exists — the gateway is complete without it (FR-DASH-002, ADR 0015).
+app.MapDashboard();
 
 // Model discovery and completions, streamed or buffered.
 app.MapOpenAiCompatibilityEndpoints();

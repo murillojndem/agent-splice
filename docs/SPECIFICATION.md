@@ -588,6 +588,10 @@ Requirement identifiers are stable references for issues, commits, tests, and pu
 
 **FR-DASH-006** Unknown values shall be displayed as unknown, not zero.
 
+**FR-DASH-007** The gateway shall serve the built dashboard from its own origin at `/dashboard/`, so that an installation needs no separate web server or toolchain to open it. Serving it shall change no response outside `/dashboard/` other than `GET` and `HEAD` on `/`, and the gateway shall start and serve every API when no build is present.
+
+**FR-DASH-008** Every dashboard response shall carry a content security policy that admits only same-origin scripts, styles, and connections and forbids framing, and shall forbid content-type sniffing.
+
 ### 7.8 Health and diagnostics
 
 **FR-HEALTH-001** Expose liveness and readiness endpoints.
@@ -981,6 +985,11 @@ agentsplice:
       enabled: false
       endpoint: http://127.0.0.1:4318
       protocol: HttpProtobuf
+  dashboard:
+    # Served at /dashboard/ when a build is found here; relative to the content root, so /app/dashboard
+    # in the container image. A missing build is logged, not refused (ADR 0015).
+    enabled: true
+    rootPath: dashboard
   adapters:
     enabled: false
 ```
@@ -1453,6 +1462,14 @@ Suggested:
 
 The frontend must consume documented APIs; it should not directly query the database.
 
+### 19.4 Delivery
+
+The gateway serves the built dashboard itself, at `/dashboard/` on the same origin as `/api/v1`
+(FR-DASH-007, ADR 0015). There is no second web server, no CORS, and no API URL to configure, and the
+container image builds the dashboard in its own stage, so an installation needs no Node toolchain.
+The gateway builds and runs without the dashboard; without a build it serves nothing at `/dashboard/`
+and says so once at startup.
+
 ---
 
 ## 20. Deployment
@@ -1476,7 +1493,7 @@ Agent client
 ### 20.3 Network defaults
 
 - Bind to loopback by default.
-- Docker example exposes only the gateway port.
+- Docker example exposes only the gateway port, which also serves the dashboard (FR-DASH-007).
 - Database is not exposed publicly by default.
 - Runtime endpoints are operator-configured.
 

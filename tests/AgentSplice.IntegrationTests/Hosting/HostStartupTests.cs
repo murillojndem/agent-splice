@@ -114,6 +114,19 @@ public sealed class HostStartupTests
     }
 
     [Fact]
+    public void A_blank_dashboard_root_path_prevents_startup()
+    {
+        // Resolved against the content root, a blank path would name the content root itself. The
+        // dashboard is resolved before the server starts, so this fails there too (ADR 0015).
+        AssertStartupFails(
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["agentsplice:dashboard:rootPath"] = "",
+            },
+            "agentsplice:dashboard:rootPath must name the directory");
+    }
+
+    [Fact]
     public void An_alias_pointing_at_an_unconfigured_runtime_prevents_startup()
     {
         AssertStartupFails(

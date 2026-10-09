@@ -255,6 +255,8 @@ The evaluation worker must be separately permissioned because it may execute com
 
 The React dashboard consumes documented `/api/v1` endpoints. It does not query the database directly. Initial screens are Overview, Exchanges, Exchange Detail, and Runtimes. Later screens add Replay, Conformance, Evaluations, Compatibility Matrix, Profiles/Adapters, and Settings.
 
+The gateway process serves the built dashboard at `/dashboard/`, on the same origin as `/api/v1`, from a directory of static files beside its content root (ADR 0015). It is a middleware branch confined to that path, so no other route answers differently because of it, and it maps nothing when disabled or when no build is present: the gateway builds, tests, and runs without the dashboard, and the .NET build never invokes Node. The container image builds the dashboard in its own stage.
+
 ## Background processing
 
 Stage 1 background services:

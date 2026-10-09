@@ -90,8 +90,11 @@ by retention, and served by the authenticated `/api/v1` surface and the dashboar
 **Stage 1D — Local packaging and first public alpha is in progress.** The OpenTelemetry SDK now
 subscribes to AgentSplice's spans and metrics, and `agentsplice:telemetry:otlp` exports them over OTLP
 — off by default, never pointed anywhere implicitly, and with an optional collector in the Compose
-file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). Packaging, the release workflow,
-sample client configurations, and the first dated trace report are still to come. Replay, conformance
+file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). The gateway now serves the
+dashboard itself at `/dashboard/`, and the container image builds it in, so an installation needs no
+Node toolchain to open it ([ADR 0015](docs/adr/0015-stage-1d-gateway-serves-the-dashboard.md)).
+Publishing the image, the release workflow, sample client configurations, and the first dated trace
+report are still to come. Replay, conformance
 orchestration, evaluation, protocol translation, and compatibility adapters all belong to later
 milestones.
 
@@ -126,7 +129,16 @@ GET  /v1/models
 POST /v1/chat/completions      # non-streaming and SSE
 ```
 
-Planned administrative APIs expose health, traces/exchanges, timeline metadata, and runtime diagnostics under `/api/v1`. The persistence they read from now exists; the endpoints themselves arrive later in Stage 1C. Content retention remains disabled by default: what is stored is structural metadata — counts, shapes, timings, and field names — and never prompts, model output, tool arguments, or credentials.
+The administrative APIs under `/api/v1` expose health, exchanges, timeline metadata, and runtime diagnostics, and `/health/live` and `/health/ready` serve orchestrators ([API notes](docs/API.md)). Content retention remains disabled by default: what is stored is structural metadata — counts, shapes, timings, and field names — and never prompts, model output, tool arguments, or credentials.
+
+The dashboard is served by the gateway at `http://127.0.0.1:5280/dashboard/`, and `/` redirects there, whenever a build is present — always in the container image. With Docker:
+
+```bash
+cp .env.example .env
+echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
+docker compose up --build
+# open http://127.0.0.1:5280/ and paste the token from .env into the dashboard's token field
+```
 
 ## Documentation
 

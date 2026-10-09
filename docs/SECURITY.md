@@ -31,6 +31,27 @@
   headers at `Trace`, so without redaction the runtime's bearer token reaches any enabled sink.
 - Treat dashboard and administrative APIs as sensitive even in local deployments.
 
+## Dashboard
+
+The gateway serves the dashboard build at `/dashboard/` on its own origin (ADR 0015):
+
+- **Same origin as `/api/v1`, no CORS.** The dashboard calls the administrative API by relative path
+  and sends the token as a bearer header held in memory, never a cookie, so no other site can ride on
+  an operator's session.
+- **The page is public; the evidence is not.** The shell and its assets are served without the
+  administrative token: they are the same code for everyone and hold no evidence. Every `/api/v1` call
+  the page makes is subject to the token rule below, unchanged.
+- **A strict content security policy on every dashboard response.** Only same-origin script, style,
+  and connections; no inline script, no `eval`, no framing (`frame-ancestors 'none'` and
+  `X-Frame-Options: DENY`), plus `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+  The page renders strings clients and runtimes chose while holding the token, so a rendering mistake
+  must not become script (FR-DASH-008).
+- **`agentsplice:dashboard:rootPath` is trusted to the operator.** Every file beneath it with a known
+  content type is served, dot-prefixed and hidden files excepted, so it must name the build and nothing
+  else. A directory without `index.html` and an `assets` directory is not treated as a build.
+- **It can be turned off.** `agentsplice:dashboard:enabled: false` serves nothing at `/dashboard/` and
+  leaves `/` a 404, for a deployment that ships the build but wants no browser-facing surface.
+
 ## Authentication
 
 Stage 1 supports a static bearer token for the administrative API. Only a secret reference is stored:

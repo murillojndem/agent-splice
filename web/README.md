@@ -12,6 +12,28 @@ needs has to be a field the contract declares.
 It is also optional. The gateway is complete without it, and nothing in the request path knows it
 exists.
 
+## How it is delivered
+
+The gateway serves the build itself, at `/dashboard/` on the same origin as `/api/v1` (FR-DASH-007,
+ADR 0015). That is why the client calls `/api/v1` by relative path: there is no CORS and no API URL to
+configure. The container image builds this project in its own stage and copies `dist` to
+`/app/dashboard`, so someone installing AgentSplice needs no Node toolchain to open it.
+
+Two settings in `vite.config.ts` are a contract with the gateway, and a test on the gateway's side
+fails if either drifts:
+
+- `base: '/dashboard/'` is written into every asset URL of the built `index.html` and is the router's
+  basename (`import.meta.env.BASE_URL`, in `src/Root.tsx`), so it must be where the gateway mounts the
+  build;
+- `build.assetsDir: 'assets'` is where the content-hashed files go, and the only directory the gateway
+  caches as immutable.
+
+The gateway answers every path under `/dashboard/` with `index.html`, except under `/assets/`, so a
+reloaded deep link lands on its screen. Every response there carries a strict content security
+policy — same-origin script, style, and `fetch` only, no inline script, no framing — so the code here
+must not inject `<style>` elements, use `eval`, or load anything from another origin. Styles set from
+React (`style={{ ... }}`) go through the CSSOM and are fine.
+
 ## The rules it exists to keep
 
 Three, and they are the reason the code has as many comments as it does:
@@ -39,15 +61,16 @@ compatibility matrix, and settings arrive with the stages that produce them.
 
 ```bash
 pnpm install
-pnpm dev        # http://127.0.0.1:5281, proxying /api and /health to the gateway on 5280
+pnpm dev        # http://127.0.0.1:5281/dashboard/, proxying /api and /health to the gateway on 5280
 pnpm lint
 pnpm test
-pnpm build
+pnpm build      # dist/, which the gateway serves when pointed at it
 ```
 
-`pnpm dev` proxies to `http://127.0.0.1:5280` so a developer does not have to disable CORS to look at
-their own traces. Nothing about the proxy is required in production, where the two are configured by
-URL.
+`pnpm dev` serves under the same `/dashboard/` base the gateway uses, so a deep link means the same
+thing on both, and its proxy to `http://127.0.0.1:5280` reproduces the single origin the gateway gives
+the build: the page and `/api` answer from one address. To see the gateway serve your build instead,
+see "The dashboard" in `docs/DEVELOPMENT.md`.
 
 ## The administrative token
 

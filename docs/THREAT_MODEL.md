@@ -99,7 +99,25 @@ Mitigations: schema validation, local administrative access, checksums/signature
 
 Threat: model output or fixture content renders as active HTML/script.
 
-Mitigations: text rendering, output encoding, CSP, no raw HTML mode by default, sanitized previews.
+Mitigations: text rendering, output encoding, CSP, no raw HTML mode by default, sanitized previews. The gateway serves the dashboard on the administrative API's origin with a policy on every response that admits only same-origin script, style, and connections and no inline script or `eval`, so a rendering mistake cannot run injected script against the token the page holds in memory (FR-DASH-008, ADR 0015).
+
+### Dashboard framing
+
+Threat: another page loads the dashboard in a frame and overlays it to steer an operator's clicks or read what it shows.
+
+Mitigations: `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every dashboard response. The cost is that an editor's embedded browser that renders in an iframe cannot show the dashboard (ADR 0015).
+
+### Cross-origin requests to a loopback gateway
+
+Threat: a web page the operator visits sends requests to a gateway on `127.0.0.1`. With no administrative token configured, loopback callers are served, so DNS rebinding — a hostile hostname re-resolved to `127.0.0.1` — makes the page same-origin with the gateway and lets it read `/api/v1`. Separately, the ingress does not require a JSON content type, so any page can send a cross-site "simple" `POST` to `/v1/chat/completions` that runs inference and is recorded as an exchange, though it cannot read the answer.
+
+Status: residual, and unchanged by serving the dashboard — an attacker needs only the API, which was reachable the same way before. Mitigations today: configuring an administrative token closes the rebinding read of `/api/v1`, and nothing reads a response cross-origin without CORS, which the gateway never sends. Follow-ups: a Host allowlist for the loopback default, and refusing completion requests that are not `application/json`.
+
+### Dashboard asset tampering
+
+Threat: something able to write to the gateway's files replaces the dashboard's script, which then runs with every operator's token.
+
+Status: residual. In the image the build sits under `/app`, which the process user owns, as it owns the gateway's own assemblies; making the dashboard alone root-owned would protect nothing, because the owner of a directory can replace its contents. Follow-up: a read-only `/app`.
 
 ### Misleading evidence
 
@@ -125,5 +143,8 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - evaluation cannot modify host fixture source outside mounted workspace;
 - database failure does not leak connection strings;
 - dashboard encodes all content;
+- every dashboard response carries a policy forbidding inline script, `eval`, cross-origin connections, and framing;
+- nothing outside the dashboard build directory, and no hidden file in it, is served;
+- serving the dashboard changes no answer outside `/dashboard`;
 - adapter cannot activate outside declared constraints;
 - exported reports include provenance and omit secret values.

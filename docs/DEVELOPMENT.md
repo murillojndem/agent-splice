@@ -8,7 +8,8 @@
 - Git
 - PowerShell 7 recommended on Windows
 - Node.js 22 and pnpm 10, for the dashboard in `web/AgentSplice.Dashboard`. The gateway builds and
-  tests without them; the dashboard is optional (FR-DASH-002) and gated by its own CI job.
+  tests without them; the dashboard is optional (FR-DASH-002) and gated by its own CI job. The
+  container image builds the dashboard in its own stage, so `docker compose up --build` needs neither.
 
 Check the SDK:
 
@@ -75,6 +76,30 @@ dotnet run --project src/AgentSplice.Api
 An invalid configuration fails at startup rather than on the first request, so a startup failure that
 names a setting is the expected behaviour, not a bug.
 
+### The dashboard
+
+The host also serves the dashboard at `http://127.0.0.1:5280/dashboard/`, and `/` redirects there —
+but only when it finds a build, which a fresh clone does not have. Run from source as above, the
+gateway logs event `1204 DashboardBuildMissing` naming where it looked, serves every API, and serves
+nothing at `/dashboard/`. That is expected (FR-DASH-002, ADR 0015).
+
+To have the gateway serve a build of your working tree, build it and point `rootPath` at it.
+`dotnet run` uses the project directory as the content root, so the relative path starts there:
+
+```powershell
+pnpm --dir web/AgentSplice.Dashboard install --frozen-lockfile
+pnpm --dir web/AgentSplice.Dashboard build
+dotnet run --project src/AgentSplice.Api -- --agentsplice:dashboard:rootPath=../../web/AgentSplice.Dashboard/dist
+```
+
+The startup log then says `1203 DashboardServed` with the directory. A published gateway looks in
+`dashboard/` beside its content root, so copy `web/AgentSplice.Dashboard/dist` to `<publish>/dashboard`
+when running `dotnet publish` output directly; the container image does this itself.
+
+For working on the dashboard, `pnpm dev` is faster: it serves `http://127.0.0.1:5281/dashboard/` with
+hot reload and proxies `/api` to the gateway on 5280, which reproduces the single origin
+(`web/README.md`). `agentsplice:dashboard:enabled: false` turns the gateway's copy off entirely.
+
 ## Local runtime
 
 LM Studio commonly listens at `http://127.0.0.1:1234/v1`. When AgentSplice runs in Docker Desktop,
@@ -126,6 +151,16 @@ curl -i -H "Authorization: Bearer $AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5
 
 See `docs/SECURITY.md` for why loopback alone does not authorise: behind a reverse proxy every
 relayed request arrives from `127.0.0.1`.
+
+The image carries the dashboard. Open `http://127.0.0.1:5280/`, which redirects to `/dashboard/`, and
+paste the token into the field at the top of the page: the page itself needs no credential, the
+evidence it shows does, and the page keeps the token in memory only, so a new tab asks again.
+
+CI builds the image and drives it the same way. To run that check against a local container:
+
+```bash
+bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+```
 
 Running directly rather than in a container needs none of this — the default binding is loopback and
 no token is configured, so `/api/v1` serves local callers and startup refuses any binding that would

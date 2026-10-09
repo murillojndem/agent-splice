@@ -4,6 +4,52 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 2: the gateway serves the dashboard
+
+The dashboard ran only under `pnpm dev`, so an alpha installation had no way to open it. The gateway
+now serves the build itself, at `/dashboard/` on its own origin, and the container image builds it in
+(ADR 0015, FR-DASH-007, FR-DASH-008).
+
+- `docker compose up --build` serves the dashboard at `http://127.0.0.1:5280/dashboard/`, and `/`
+  redirects there while it is served. The Dockerfile gains a `node:22-bookworm-slim` stage with a
+  pinned `pnpm` and a frozen lockfile; nothing about installing the image needs Node.
+- Confined to one middleware branch under `/dashboard`. Every client route there is answered with
+  `index.html`, dots included; a missing file under `/assets/` is a 404, never the page; methods other
+  than `GET` and `HEAD` are a 405. No route outside `/dashboard` answers differently, which a test
+  proves by comparing every API answer with a gateway serving no dashboard — and which a root
+  `MapFallbackToFile` fails, turning `GET /v1/chat/completions` from 405 into a 200 page.
+- Every dashboard response carries a content security policy admitting only same-origin script,
+  style, and connections, with no inline script and no framing, plus `nosniff`, `X-Frame-Options:
+  DENY`, and `Referrer-Policy: no-referrer`. Checked against the built bundle in a real browser on all
+  four screens, the waterfall's bars included: no violations. The CSP the threat model listed as a
+  mitigation for dashboard XSS now exists.
+- Hashed files under `/dashboard/assets/` are cached as immutable; the page is revalidated on every
+  load and answers a conditional request with 304.
+- The page needs no credential and holds no evidence; `/api/v1` still requires the token from every
+  caller when one is configured.
+- Optional, as FR-DASH-002 requires. `agentsplice:dashboard:enabled` (default `true`) and
+  `agentsplice:dashboard:rootPath` (default `dashboard`, relative to the content root, so
+  `/app/dashboard` in the image). A directory counts as a build only with `index.html` and an
+  `assets` directory. With no build the gateway starts, serves every API, and logs
+  `1204 DashboardBuildMissing` once with the path it checked; serving logs `1203 DashboardServed`.
+  The .NET build never invokes Node.
+- The dashboard is built with `base: '/dashboard/'` and an explicit `assetsDir`, the router takes its
+  basename from Vite, and the dev server moves to `http://127.0.0.1:5281/dashboard/`. Tests on the
+  gateway's side fail if the mount and the build disagree.
+- `.dockerignore` anchors `node_modules`, `dist`, and the SQLite files at every depth. Without the
+  leading `**/` they matched only at the context root, so a host's `node_modules` — native binaries
+  for the host — would have overwritten the image's own install, and a development `agentsplice.db`
+  holding trace metadata entered the build context.
+- CI gains an `image` job: it builds the image through Compose, as an alpha user would, and runs
+  `.github/scripts/smoke-image.sh` against it — the redirect, the page and its headers, every asset the
+  page names, a deep link, traversal attempts through real Kestrel normalisation, the unchanged API
+  answers — and checks the startup log for 1203 and no 1204. Nothing built the image in CI before.
+- The Dockerfile's stale note that the health endpoints did not exist yet is corrected.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a root fallback, a
+Dockerfile copying the build where the settings do not look, and a root-anchored `.dockerignore`
+pattern.
+
 ### Stage 1D, part 1: the OpenTelemetry SDK and OTLP export
 
 The SDK deferred since Stage 1A arrives with the exporter that justifies it (ADR 0014, FR-OBS-001,

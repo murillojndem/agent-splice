@@ -42,6 +42,9 @@ public sealed class AgentSpliceOptions
     /// <summary>Whether and where spans and metrics are exported.</summary>
     public TelemetryOptions Telemetry { get; set; } = new();
 
+    /// <summary>Whether and from where the built dashboard is served.</summary>
+    public DashboardOptions Dashboard { get; set; } = new();
+
     /// <summary>Configured model runtimes.</summary>
     public IList<RuntimeEndpointOptions> Runtimes { get; set; } = new List<RuntimeEndpointOptions>();
 

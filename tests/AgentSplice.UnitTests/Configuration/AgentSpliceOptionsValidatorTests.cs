@@ -574,6 +574,43 @@ public sealed class AgentSpliceOptionsValidatorTests
         AssertFailure(options, "agentsplice:telemetry:otlp:protocol is not a recognised protocol");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void A_blank_dashboard_root_path_fails(string? rootPath)
+    {
+        // A blank path would resolve to the content root itself, and serve whatever happens to be
+        // there. Turning the dashboard off is what the enabled switch is for.
+        var options = Valid();
+        options.Dashboard.RootPath = rootPath!;
+
+        AssertFailure(options, "agentsplice:dashboard:rootPath must name the directory");
+    }
+
+    [Fact]
+    public void A_dashboard_root_path_is_validated_even_while_the_dashboard_is_disabled()
+    {
+        // As with a disabled export endpoint: a value that would be refused the moment someone flips
+        // the switch is better refused now, by the deployment that wrote it.
+        var options = Valid();
+        options.Dashboard.Enabled = false;
+        options.Dashboard.RootPath = " ";
+
+        AssertFailure(options, "agentsplice:dashboard:rootPath must name the directory");
+    }
+
+    [Fact]
+    public void A_dashboard_root_path_that_does_not_exist_is_not_a_validation_failure()
+    {
+        // A gateway run from source has no build until someone runs pnpm build, and the dashboard is
+        // optional (FR-DASH-002). A missing build is reported when the host starts, not refused here.
+        var options = Valid();
+        options.Dashboard.RootPath = Path.Combine(Path.GetTempPath(), "agentsplice-no-such-dashboard", Guid.NewGuid().ToString("N"));
+
+        Assert.True(Validate(options).Succeeded);
+    }
+
     [Fact]
     public void Every_failure_is_reported_rather_than_only_the_first()
     {

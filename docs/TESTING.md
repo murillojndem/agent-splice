@@ -230,6 +230,28 @@ Two Stage 1B tests asserted the defective behaviour and were rewritten rather th
 
 A test that encodes a defect is worse than a missing test: it makes the defect look deliberate.
 
+## Delivered by Stage 1D, part 2: the dashboard served by the gateway
+
+The serving rules are integration tests against the production host (`tests/AgentSplice.IntegrationTests/Dashboard`),
+and they never depend on a real dashboard build: whether one exists on a machine, and what its hashes
+are, would make them pass or fail by accident. `TemporaryDashboardBuild` writes the shape the gateway
+checks for — `index.html` and an `assets` directory — plus a hidden file inside it and a file beside
+it, each holding a sentinel a response body is searched for. Path traversal goes through
+`TestServer.SendAsync`, because `HttpClient` normalises dot segments before sending.
+
+The central guard compares every answer outside `/dashboard` with the same request to a gateway that
+serves no dashboard, and fails against a root `MapFallbackToFile`. The two build systems' shared facts —
+Vite's `base` and `assetsDir` against the gateway's mount and cached directory, the Dockerfile's copy
+target against the shipped `rootPath`, and `.dockerignore`'s patterns — are file-reading contract
+tests, because a drift in any of them produces an image that starts cleanly and shows a blank page or
+no dashboard at all. The dashboard's own `tests/mount.test.tsx` renders the real root under Vitest,
+which applies the same `base`.
+
+What only the real artifact can prove — that the image carries the dashboard it was built with, under
+real Kestrel path normalisation — is the CI `image` job: it builds the image through Compose and runs
+`.github/scripts/smoke-image.sh` against it. Those measurements come from a container on a CI runner
+or a workstation, not from the fake upstream, and make no performance claim.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

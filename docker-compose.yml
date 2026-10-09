@@ -34,9 +34,15 @@ services:
       AGENTSPLICE__TELEMETRY__OTLP__ENABLED: ${AGENTSPLICE__TELEMETRY__OTLP__ENABLED:-false}
       AGENTSPLICE__TELEMETRY__OTLP__ENDPOINT: ${AGENTSPLICE__TELEMETRY__OTLP__ENDPOINT:-http://otel-collector:4318}
       AGENTSPLICE__TELEMETRY__OTLP__PROTOCOL: ${AGENTSPLICE__TELEMETRY__OTLP__PROTOCOL:-HttpProtobuf}
+      # The dashboard, built into the image and served on the same port at
+      # http://127.0.0.1:5280/dashboard/ (ADR 0015). The page itself needs no credential; the evidence
+      # it shows does, so paste AGENTSPLICE_ADMIN_API_KEY into its token field. Set to false for a
+      # deployment that wants no browser-facing surface.
+      AGENTSPLICE__DASHBOARD__ENABLED: ${AGENTSPLICE__DASHBOARD__ENABLED:-true}
     ports:
       # Bound to loopback on the host. AgentSplice traffic carries prompts and model output, so the
-      # default must not be reachable from the local network (docs/SECURITY.md).
+      # default must not be reachable from the local network (docs/SECURITY.md). The dashboard shares
+      # this port.
       - "127.0.0.1:5280:5280"
     volumes:
       - agentsplice-data:/data

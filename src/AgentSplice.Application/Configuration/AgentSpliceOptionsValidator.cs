@@ -31,6 +31,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         ValidateLimits(options, failures);
         ValidateCompatibility(options, failures);
         ValidateTelemetry(options, failures);
+        ValidateDashboard(options, failures);
 
         var enabledRuntimeIds = ValidateRuntimes(options, failures);
         ValidateAliases(options, enabledRuntimeIds.All, failures);
@@ -246,6 +247,24 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         {
             failures.Add(
                 "agentsplice:compatibility:unsupportedFields is not a recognised mode. 'Adapted' is a Stage 4 capability and is not implemented.");
+        }
+    }
+
+    /// <summary>
+    /// Validates where the dashboard build is looked for.
+    /// </summary>
+    /// <remarks>
+    /// Checked whether or not the dashboard is enabled, for the same reason a disabled export
+    /// endpoint is. Whether the directory exists is deliberately not a startup failure: a gateway run
+    /// from source has no build until someone runs <c>pnpm build</c>, and the dashboard is optional
+    /// (FR-DASH-002). A missing build is reported when the host starts instead (ADR 0015).
+    /// </remarks>
+    private static void ValidateDashboard(AgentSpliceOptions options, List<string> failures)
+    {
+        if (string.IsNullOrWhiteSpace(options.Dashboard.RootPath))
+        {
+            failures.Add(
+                "agentsplice:dashboard:rootPath must name the directory holding the dashboard build. To turn the dashboard off, set agentsplice:dashboard:enabled to false instead.");
         }
     }
 

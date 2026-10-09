@@ -238,6 +238,11 @@ Use stable event IDs and templates. Examples:
 
 Default logs include structural metadata only. Body logging is not a supported shortcut for trace capture.
 
+The dashboard announces itself once at startup, from `AgentSplice.Api.Hosting.DashboardHosting`:
+`1203 DashboardServed` (Information) when a build is served, naming the directory, and
+`1204 DashboardBuildMissing` (Warning) when the dashboard is enabled but no build was found, naming
+the absolute path that was checked. A disabled dashboard logs neither (ADR 0015).
+
 ## Runtime-log ingestion
 
 A later adapter may ingest LM Studio, llama.cpp, Ollama, or backend logs to enrich:
@@ -290,7 +295,7 @@ agentsplice:
 
 - The four live activity sources and the `AgentSplice` meter — the instruments and bounded dimensions listed above, which the spans carry as attributes, plus `agentsplice.persistence.batch_size` on the persistence span: a count of exchanges in one write, never which ones. No prompt, model output, tool argument, model identifier, request identifier, or credential; an integration test searches every exported payload for each of them.
 - Resource attributes `service.name=agentsplice`, `service.version` (the build's informational version), and a generated `service.instance.id`.
-- **Not logs.** The log pipeline is not routed through OpenTelemetry. **Not framework spans.** ASP.NET Core and `HttpClient` instrumentation are not enabled, so health probes and administrative requests produce no spans.
+- **Not logs.** The log pipeline is not routed through OpenTelemetry. **Not framework spans.** ASP.NET Core and `HttpClient` instrumentation are not enabled, so health probes, administrative requests, and requests for the dashboard's files produce no spans.
 
 Spans leave on the SDK's five-second batch schedule; metrics on its default sixty-second interval.
 

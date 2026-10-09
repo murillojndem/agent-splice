@@ -10,23 +10,29 @@
 .idea/
 .vscode/
 
-# Test projects are not part of the published image.
+# Test projects are not part of the published image. Root-level on purpose: the dashboard's own
+# tests/ directory is part of its build, because `pnpm build` type-checks it.
 tests/
 benchmarks/
 
-node_modules/
-dist/
-coverage/
-TestResults/
+# A pattern without a leading **/ matches at the root of the context only, so these are anchored at
+# every depth. The dashboard stage copies web/AgentSplice.Dashboard/: a host node_modules there would
+# overwrite the one the stage installed — with the host's native binaries, which fail the build from
+# a Windows checkout — and a host dist would be stale output. A host *.db under src/ is a development
+# store holding trace metadata, which has no business in an image's build context.
+**/node_modules/
+**/dist/
+**/coverage/
+**/TestResults/
 artifacts/
 
 .env
-*.db
-*.db-shm
-*.db-wal
+**/*.db
+**/*.db-shm
+**/*.db-wal
 /data/
-*.user
-*.suo
+**/*.user
+**/*.suo
 
 Dockerfile
 .dockerignore

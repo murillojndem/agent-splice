@@ -104,3 +104,60 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  image:
+    # The alpha ships as this image, and the image is where the dashboard is built into the gateway
+    # (ADR 0015). Nothing else builds it, which is how two Dockerfile defects once stayed latent since
+    # the projects existed. It goes through Compose because that is the path an alpha user takes.
+    name: image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Choose an administrative token
+        # Compose refuses to start without one, and the smoke test needs it to prove /api/v1 still
+        # requires it. Generated per run and masked, so no token is written into the repository.
+        run: |
+          token="$(openssl rand -hex 32)"
+          echo "::add-mask::$token"
+          echo "AGENTSPLICE_ADMIN_API_KEY=$token" >> "$GITHUB_ENV"
+
+      - name: Build and start
+        run: docker compose up --build --detach agentsplice
+
+      - name: Wait for liveness
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:5280/health/live; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "The gateway did not become live within 60 seconds." >&2
+          exit 1
+
+      - name: Smoke test
+        run: bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+
+      - name: Startup log
+        # Written to a file first: piping `docker compose logs` straight into `grep -q` lets grep exit
+        # early and the writer die of SIGPIPE, which fails the step under the runner's pipefail.
+        # Each pattern matches the simple console formatter and the JSON one.
+        run: |
+          docker compose logs --no-color agentsplice > "$RUNNER_TEMP/agentsplice.log"
+          if ! grep -Eq '\[1203\]|"EventId":1203' "$RUNNER_TEMP/agentsplice.log"; then
+            echo "The image did not announce the dashboard (event 1203)." >&2
+            exit 1
+          fi
+          if grep -Eq '\[1204\]|"EventId":1204' "$RUNNER_TEMP/agentsplice.log"; then
+            echo "The image found no dashboard build (event 1204)." >&2
+            exit 1
+          fi
+
+      - name: Dump the log and stop
+        if: always()
+        run: |
+          docker compose logs --no-color agentsplice || true
+          docker compose down --volumes || true

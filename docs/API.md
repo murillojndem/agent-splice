@@ -7,6 +7,9 @@ AgentSplice exposes two API surfaces:
 1. compatibility endpoints used by agent clients;
 2. AgentSplice administrative endpoints used by the dashboard, replay, conformance, and diagnostics.
 
+It also serves the dashboard itself, at `/dashboard/` on the same origin. That is a browser-facing
+surface, not an API, and is described under [Dashboard](#dashboard-not-an-api).
+
 ## OpenAI-compatible ingress
 
 ### `GET /v1/models`
@@ -98,6 +101,34 @@ x-agentsplice-adapters        # Present only when adapters ran
 ```
 
 Headers must not contain prompt content, tool arguments, credentials, arbitrary model output, or high-cardinality trace details.
+
+## Dashboard (not an API)
+
+When a dashboard build is present, the gateway serves it on its own origin (FR-DASH-007, ADR 0015).
+None of it is in the OpenAPI draft, because none of it is a contract a client programs against: it is
+the page a browser loads, and the page reads `/api/v1` like any other client.
+
+| Request | Answer |
+|---|---|
+| `GET`/`HEAD /` | `302` to `/dashboard/` while the dashboard is served; otherwise `404`, as before |
+| `GET`/`HEAD /dashboard` | `302` to `/dashboard/`, keeping the query |
+| `GET`/`HEAD` a file in the build, such as `/dashboard/assets/index-<hash>.js` | the file; under `/dashboard/assets/`, `Cache-Control: public, max-age=31536000, immutable` |
+| `GET`/`HEAD` anything under `/dashboard/assets/` that does not exist | `404`, never the page |
+| `GET`/`HEAD` any other path under `/dashboard/` | the page (`index.html`), `Cache-Control: no-cache`, with an `ETag` |
+| any other method under `/dashboard` | `405` with `Allow: GET, HEAD` |
+
+- **No credential is needed for the page.** It is the same public code for every caller and holds no
+  evidence; the evidence stays behind `/api/v1` and its token rule, unchanged.
+- **Every response under `/dashboard` carries** `Content-Security-Policy` (same-origin script, style,
+  and connections only; no framing), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and
+  `Referrer-Policy: no-referrer` (FR-DASH-008).
+- **No correlation headers.** These responses are not exchanges, so they carry none of the
+  `x-agentsplice-*` headers above — like `/health/live`, and like the framework's own `404` and `405`.
+- **Nothing else changes.** No route outside `/dashboard` answers differently because the dashboard is
+  served, apart from `/` itself. Disabled (`agentsplice:dashboard:enabled: false`) or with no build at
+  `agentsplice:dashboard:rootPath`, nothing is served at all.
+- **The origin's root only.** The page's asset URLs, its API calls, and the redirects are absolute
+  paths, so a reverse proxy that maps AgentSplice under a path prefix is not supported.
 
 ## Stage 1 administrative endpoints
 
