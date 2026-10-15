@@ -128,13 +128,19 @@ Exit criteria:
 
 ### Stage 1D — Local packaging and first public alpha
 
-Status: in progress. The OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an
-optional Compose collector, are done (ADR 0014), and so is serving the dashboard from the gateway, with
-the image building it and CI building and smoke-testing the image (ADR 0015), and so is the image's
-own health check, which CI waits on (ADR 0016), and so is the direct-process path: a self-contained
-Windows package that needs no Docker and no .NET installation, built and smoke-tested on Windows in CI,
-with every installation path documented in `docs/INSTALLATION.md` (ADR 0017); the rest of the list
-below is not.
+Status: in progress. Done so far:
+
+- the OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an optional Compose
+  collector (ADR 0014);
+- the gateway serving the dashboard, with the image building it and CI building and smoke-testing the
+  image (ADR 0015);
+- the image's own health check, which CI waits on (ADR 0016);
+- the direct-process path: a self-contained Windows package that needs no Docker and no .NET
+  installation, built and smoke-tested on Windows in CI, with every installation path documented in
+  `docs/INSTALLATION.md` (ADR 0017);
+- tagged releases as drafts carrying that package and its digest (ADR 0018).
+
+The rest of the list below is not done.
 
 - OpenTelemetry SDK and OTLP exporter, off by default (done);
 - the gateway serves the built dashboard at `/dashboard/`, built into the Docker image and checked in
@@ -144,7 +150,8 @@ below is not.
 - Compose example using `host.docker.internal` for LM Studio (done);
 - direct-process setup: from source anywhere, and a self-contained Windows package (done);
 - loopback-only defaults, checked against the running package as well as the host (done);
-- release workflow;
+- release workflow: a version tag becomes a reviewed draft pre-release carrying the Windows package
+  (done);
 - sample OpenCode, Cline, and generic client configurations;
 - first dated trace report;
 - documentation and demo capture.

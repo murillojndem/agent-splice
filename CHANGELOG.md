@@ -4,6 +4,37 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 5: tagged releases as reviewed drafts
+
+The Windows package exists to be installed without the SDK, so it has to be downloadable, and a CI
+artifact needs a GitHub sign-in and expires. A version tag now becomes a draft pre-release carrying the
+package and its digest, which a maintainer reviews and publishes (ADR 0018).
+
+- New `.github/workflows/release.yml`, on `v*` tags only. It has three jobs:
+  - `version` checks that the tag names the version the build stamps and that a `LICENSE` file
+    exists;
+  - `ci` runs the whole of `ci.yml`, now callable through `workflow_call`, against the tagged commit;
+  - `publish` downloads the `agentsplice-win-x64` artifact that run built and smoke-tested, verifies
+    it with `sha256sum --check --strict`, and runs
+    `gh release create --draft --prerelease --verify-tag`.
+- Only `publish` holds `contents: write`, and it checks nothing out and installs nothing, so no
+  dependency's install script runs with the token in reach. Everything else, and the workflow's
+  default, is read-only.
+- Nothing is rebuilt for the release: what is published is what CI tested. The image is not pushed to
+  a registry; the notes say to build it from the tag.
+- The first release cannot be cut until a license is chosen and `LICENSE` added, as
+  `LICENSE-CHOICE.md` asks.
+- `docs/DEVELOPMENT.md` gains a "Releasing" section. `docs/SECURITY.md` "Dependency and release
+  security" now states what exists — CI-built drafts, one writing job, digests, pinned inputs — and what
+  does not: dependency automation, SBOM, scanning, signing, attestation. `docs/THREAT_MODEL.md` adds the
+  release pipeline as a trust boundary and a "Release artifact integrity" entry. The roadmap marks the
+  release workflow done.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a release without
+`--draft`, write access granted to the whole workflow, a checkout in the publishing job, and a renamed
+artifact. The workflow itself runs only on a tag, so its first real run is the first release, and that
+run's output is a draft that can be deleted.
+
 ### Stage 1D, part 4: a Windows package that needs no .NET SDK
 
 On Windows without Docker the only route was building from source, and a published executable would

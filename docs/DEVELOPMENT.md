@@ -239,6 +239,25 @@ A package carries the .NET runtime of the SDK that built it, and nothing patches
 afterwards, so a package built locally with an old 8.0 SDK carries an old runtime. Releases are built
 by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version.
 
+## Releasing
+
+A release is a tag, and what it publishes is a draft for a maintainer to review (ADR 0018):
+
+1. Set the version in `Directory.Build.props` (`VersionPrefix` and `VersionSuffix`) and the same value
+   in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ. Move the
+   `Unreleased` entries in `CHANGELOG.md` under a heading for the version.
+2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
+   the tag.
+3. `.github/workflows/release.yml` checks that the tag names the build's version and that a `LICENSE`
+   file exists, runs the whole CI suite against the tag, and creates a **draft pre-release** with the
+   Windows package and `SHA256SUMS` that run built and smoke-tested. Nothing is visible to anyone else
+   yet.
+4. Review the draft — the assets, their digests, the notes — and publish it on GitHub.
+
+The image is not pushed to a registry; a release's image is built from its tag. To retry a failed
+release, delete the draft and the tag, fix the cause, and tag again: `gh release create` refuses a tag
+that already has a release.
+
 ## Adding a package
 
 Versions are centrally managed. Add a `PackageVersion` to `Directory.Packages.props`, then reference

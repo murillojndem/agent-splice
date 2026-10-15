@@ -26,6 +26,7 @@
 8. Evaluation orchestrator to disposable execution environment.
 9. Exported issue bundle to external recipients.
 10. AgentSplice to an OpenTelemetry collector.
+11. Release pipeline to the operator's machine.
 
 ## Threats and mitigations
 
@@ -129,6 +130,14 @@ Threat: the SQLite store, or a backup of it, is read by someone it was not meant
 
 Status: residual. The store is unencrypted and protected by its file system permissions alone: the `/data` volume in the image, and the folder it is created in for the Windows package — beside the executable unless configured elsewhere, a relative path resolved against the content root so that it never lands in whatever directory the process was started from (ADR 0017). Startup names the file (`1305`) so an operator knows what to protect. Retention bounds how long rows stay; it does not reach copies. Follow-up: an encryption decision when content retention exists (`docs/SECURITY.md` "Content retention").
 
+### Release artifact integrity
+
+Threat: an operator downloads a Windows package that is not the one the tagged source builds — replaced on the way, built from something other than the tag, or published by a compromised build step.
+
+Mitigations: the package is built only by CI, from the tag, after the full suite passes, and a tag that does not name the build's version stops the release before anything is built. The release is a draft until a maintainer publishes it. The job that creates it holds the only write token, checks nothing out, and installs nothing; it verifies `SHA256SUMS` before uploading, and the installation guide tells users to verify it after downloading (ADR 0018).
+
+Status: residual. The package is not code signed and no build provenance is attested, and `SHA256SUMS` sits beside the archive it describes, so anyone able to replace a release asset can replace both. GitHub's own record of each asset's digest is the independent check. Follow-ups: signing and attested provenance.
+
 ### Unserviced bundled runtime
 
 Threat: a .NET security fix ships, and installed Windows packages keep running the vulnerable runtime, because a self-contained application carries its own copy and Windows Update does not patch it.
@@ -171,5 +180,6 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - the health probe refuses any target off loopback `http` without sending a request, and exits only 0 or 1;
 - on Windows, backslash forms of a traversal never serve a file outside the dashboard build;
 - the Windows package writes nothing to the directory it is started from, and listens on loopback only;
+- a release is created only as a draft, only by the one job allowed to write, and only after its digests verify;
 - adapter cannot activate outside declared constraints;
 - exported reports include provenance and omit secret values.

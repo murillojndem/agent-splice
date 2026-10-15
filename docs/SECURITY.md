@@ -181,13 +181,30 @@ Text-to-tool recovery is particularly sensitive because it can turn inert text i
 
 ## Dependency and release security
 
+What exists today:
+
+- **Releases are built by CI from the tag, never on a workstation** (ADR 0018). A `v<version>` tag that
+  names the build's version runs the whole CI suite against the tagged commit. The Windows package that
+  run builds and smoke-tests is the one the release carries; nothing is rebuilt for it.
+- **Releases are drafts until a maintainer publishes them.** The workflow creates a draft pre-release,
+  and a person reviews it before it becomes visible.
+- **Write access is confined to one job,** which downloads the package and creates the release. It
+  checks nothing out and installs nothing, so no dependency's install script runs with the token in
+  reach; every job that builds holds read access only.
+- **Digests.** Each release carries `SHA256SUMS`, which the publishing job verifies before creating the
+  release and the installation guide tells users to check. GitHub shows each asset's digest too.
+- **Pinned inputs.** Package versions are central and exact (`Directory.Packages.props`), the dashboard
+  installs from a frozen lockfile with an exact `pnpm`, and the collector image is pinned by version.
+  Base images are pinned by tag, not by digest.
+- **No unreviewed dynamic plugin loading.**
+
+Not yet:
+
 - automated dependency updates with review;
-- pinned container strategy;
 - SBOM generation;
 - vulnerability scanning;
-- signed release artifacts when practical;
-- no unreviewed dynamic plugin loading;
-- provenance for community adapters and profiles.
+- signed release artifacts — the package is not code signed, and no build provenance is attested;
+- provenance for community adapters and profiles, which arrive with the stages that add them.
 
 ## Disclosure
 

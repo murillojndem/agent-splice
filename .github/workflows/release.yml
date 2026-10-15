@@ -1,0 +1,107 @@
+name: Release
+
+# A tag v<version> becomes a draft pre-release carrying the Windows package and its digest (ADR 0018).
+# Nothing is published until a maintainer reviews the draft and publishes it by hand, and the image
+# is not pushed anywhere: it is built from the tagged source.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never shared with CI's group, which the ci job below runs under: a reusable workflow that waits
+  # on its own caller's group never starts.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  version:
+    # The tag must name the version the build stamps, so the release's name, the package's file name,
+    # and what /api/v1/system reports are one value. A tag that disagrees stops here, before anything
+    # is built.
+    name: version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: The tag names the build's version
+        shell: pwsh
+        run: |
+          $version = (dotnet msbuild src/AgentSplice.Api/AgentSplice.Api.csproj -nologo -getProperty:Version | Out-String).Trim()
+          if ("v$version" -cne $env:GITHUB_REF_NAME) {
+            Write-Error "The tag is $env:GITHUB_REF_NAME, but the build's version is $version; tag v$version, or change VersionPrefix and VersionSuffix in Directory.Build.props."
+            exit 1
+          }
+
+      - name: The release carries a license
+        # LICENSE-CHOICE.md leaves the choice of license to the maintainer and asks for the license
+        # text before anything is published. A release without it would publish code nobody may use.
+        run: |
+          if [ ! -f LICENSE ]; then
+            echo "There is no LICENSE file. Add one before tagging a release (LICENSE-CHOICE.md)." >&2
+            exit 1
+          fi
+
+  ci:
+    # The whole CI suite against the tagged commit: both platforms' tests, the dashboard, the image, and
+    # the Windows package, which this run builds, smoke-tests, and uploads.
+    name: ci
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    # The only job that can write to the repository, and it runs nothing it downloaded from a package
+    # registry: no checkout, no restore, no install. It publishes exactly what CI built and checked.
+    name: publish
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: agentsplice-win-x64
+          path: release
+
+      - name: Verify the digests
+        working-directory: release
+        run: sha256sum --check --strict SHA256SUMS
+
+      - name: Create the draft pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > "$RUNNER_TEMP/notes.md" <<EOF
+          An experimental alpha. No compatibility claim is made for any client, model, or runtime; support claims require a dated conformance report (docs/CONFORMANCE.md).
+
+          **Windows.** \`agentsplice-${GITHUB_REF_NAME#v}-win-x64.zip\` runs without Docker or a .NET installation. Check it against \`SHA256SUMS\` before extracting it; the package is not code signed. See docs/INSTALLATION.md.
+
+          **Docker.** The image is not published to a registry. Build it from this tag with \`docker compose up --build --wait\`.
+
+          What changed is in CHANGELOG.md at this tag.
+          EOF
+          gh release create "$GITHUB_REF_NAME" release/*.zip release/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --prerelease \
+            --verify-tag \
+            --title "AgentSplice $GITHUB_REF_NAME (experimental alpha)" \
+            --notes-file "$RUNNER_TEMP/notes.md"

@@ -71,7 +71,8 @@ dashboard, so nothing needs to be installed first.
 ### Download and verify
 
 Download `agentsplice-<version>-win-x64.zip` and `SHA256SUMS` from the repository's GitHub Releases
-page. Every release so far is a pre-release. Until the first one is published, each CI run's
+page. Every release so far is a pre-release, built by CI from its tag and published only after a
+maintainer reviewed it (ADR 0018). Until the first one is published, each CI run's
 `agentsplice-win-x64` artifact holds the same two files, which a signed-in GitHub user can download.
 
 Check the archive against its published digest before opening it:

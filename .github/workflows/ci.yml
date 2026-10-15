@@ -5,11 +5,16 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # The release workflow runs this whole suite against the tag before it publishes anything, and
+  # publishes the Windows package this run uploads (ADR 0018).
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
+  # Literal "ci-", never the workflow's name: called from the release, github.workflow would name the
+  # release, and a group shared with the caller deadlocks it.
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 

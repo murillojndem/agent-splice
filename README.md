@@ -97,9 +97,10 @@ The image reports its own health: it carries a small probe that its `HEALTHCHECK
 `/health/live`, because the runtime base image has no HTTP client to run one with
 ([ADR 0016](docs/adr/0016-stage-1d-the-image-reports-its-health.md)). A self-contained Windows
 package runs without Docker or a .NET installation, from any folder
-([ADR 0017](docs/adr/0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md)). Publishing the
-image, the release workflow, sample client configurations, and the first dated trace report are still
-to come.
+([ADR 0017](docs/adr/0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md)), and a version
+tag turns it into a draft pre-release for a maintainer to review and publish
+([ADR 0018](docs/adr/0018-stage-1d-tagged-releases-as-reviewed-drafts.md)). Publishing the image to a
+registry, sample client configurations, and the first dated trace report are still to come.
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 

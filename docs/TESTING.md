@@ -300,6 +300,21 @@ Windows file system can test. The same script, run against a package published w
 fails before the first request. As with the image, these runs come from a runner or a workstation and
 make no performance claim.
 
+## Delivered by Stage 1D, part 5: tagged releases as reviewed drafts
+
+The release workflow runs only when a tag is pushed, so `ReleaseWorkflowContractTests` reads it on
+every build instead:
+
+- a release is created only with `--draft`, `--prerelease`, and `--verify-tag`;
+- only the publishing job may write, and it checks nothing out and installs nothing;
+- the artifact it publishes is the one `ci.yml`'s `package-windows` job uploads, and `ci.yml` is
+  callable;
+- only a `v*` tag starts it, and the tag is checked against the build's version;
+- the dashboard's `package.json` carries the gateway's version.
+
+Each fails against its reintroduced defect. The workflow itself is proven only by the first real tag,
+whose output is a draft that can be deleted.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.
