@@ -95,7 +95,8 @@ dotnet run --project src/AgentSplice.Api -- --agentsplice:dashboard:rootPath=../
 
 The startup log then says `1203 DashboardServed` with the directory. A published gateway looks in
 `dashboard/` beside its content root, so copy `web/AgentSplice.Dashboard/dist` to `<publish>/dashboard`
-when running `dotnet publish` output directly; the container image does this itself.
+when running `dotnet publish` output directly; the container image and the Windows package
+(`Packaging for Windows` below) do this themselves.
 
 For working on the dashboard, `pnpm dev` is faster: it serves `http://127.0.0.1:5281/dashboard/` with
 hot reload and proxies `/api` to the gateway on 5280, which reproduces the single origin
@@ -174,12 +175,13 @@ unhealthy container.
 CI builds the image and drives it the same way. To run that check against a local container:
 
 ```bash
-bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
 ```
 
-Running directly rather than in a container needs none of this — the default binding is loopback and
-no token is configured, so `/api/v1` serves local callers and startup refuses any binding that would
-change that.
+Running directly rather than in a container — from source, or the Windows package — needs none of
+this: the default binding is loopback and no token is configured, so `/api/v1` serves local callers
+and startup refuses any binding that would change that. `docs/INSTALLATION.md` explains why setting a
+token is still worthwhile there.
 
 ### Seeing what AgentSplice exports
 
@@ -206,6 +208,37 @@ dotnet run --project src/AgentSplice.Api
 Spans arrive within about five seconds of an exchange and metrics within a minute. Setting
 `OTEL_EXPORTER_OTLP_ENDPOINT` does nothing; see `docs/OBSERVABILITY.md` "OpenTelemetry export".
 
+### Packaging for Windows
+
+The Windows package is a self-contained, single-file win-x64 build with the dashboard beside it, for
+machines with no .NET installed (ADR 0017; installing it is in `docs/INSTALLATION.md`). Building it
+needs the .NET 8 SDK, Node 22, and pnpm 10, and PowerShell 7.2 or later:
+
+```powershell
+pwsh -File .github/scripts/package-windows.ps1 -OutputDirectory artifacts/package
+pwsh -File .github/scripts/smoke-windows-package.ps1 -Archive (Get-Item artifacts/package/*.zip).FullName
+```
+
+The first script builds the dashboard, publishes the gateway with
+`src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml`, copies the dashboard to where the
+shipped `rootPath` looks, and writes `agentsplice-<version>-win-x64.zip` and `SHA256SUMS`. Everything
+specific to the package lives in that profile, never in the project file, and a contract test holds
+that line: a runtime identifier or `SelfContained` there would change the container publish and break
+the test projects. The profile also sets the runtime switch that makes the executable's directory the
+content root, so the package finds its settings and dashboard wherever it is started from; no other
+build carries it, so `dotnet run` and the image behave exactly as before.
+
+The second script is what CI's `package-windows` job runs. It verifies the archive against
+`SHA256SUMS`, checks what the package contains, then starts it twice from an empty folder elsewhere:
+once with the shipped defaults, checking the dashboard, `/api/v1` without a token, an exchange read
+back from the store, the store beside the executable, nothing written to the working directory, and a
+listener on loopback only; and once with a token, running `smoke-gateway.sh` through Git Bash. Port
+5280 must be free.
+
+A package carries the .NET runtime of the SDK that built it, and nothing patches that runtime
+afterwards, so a package built locally with an old 8.0 SDK carries an old runtime. Releases are built
+by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version.
+
 ## Adding a package
 
 Versions are centrally managed. Add a `PackageVersion` to `Directory.Packages.props`, then reference
@@ -216,6 +249,13 @@ the package without a version in the project file.
 SQLite is the shipped store and is sufficient for local development. `agentsplice:persistence:mode`
 accepts `Sqlite` or `None`; the PostgreSQL Compose profile remains a planning scaffold, because
 FR-DATA-003 commits to PostgreSQL through the same contracts but no provider ships yet.
+
+A relative `Data Source` is resolved against the content root, as `appsettings.json` and the
+dashboard's `rootPath` are, so the shipped `Data Source=agentsplice.db` is
+`src/AgentSplice.Api/agentsplice.db` under `dotnet run` and the file beside the executable in the
+Windows package (ADR 0017). Absolute paths, `:memory:`, `file:` URIs, and `|DataDirectory|` are used as
+written. The startup log names the file as `1305 MetadataStoreOpened`. The gateway never creates the
+store's directory: a missing or read-only one fails startup with a message naming the file.
 
 The schema is versioned with EF Core migrations, applied at startup before anything reads or writes.
 To change it, edit the row types or `AgentSpliceDbContext`, then:

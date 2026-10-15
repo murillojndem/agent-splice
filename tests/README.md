@@ -9,7 +9,7 @@ Test projects follow `docs/TESTING.md`.
 | `AgentSplice.TestSupport` | Deterministic fake upstream runtime and repository path helpers. Not a test project itself. |
 | `AgentSplice.UnitTests` | Domain rules, timeline absence rules, measurement provenance, configuration validation, privacy defaults. |
 | `AgentSplice.ContractTests` | Error codes, OpenTelemetry names, OpenAPI paths and enums, deployment configuration keys, and the image's health check, each against the document that declares it. |
-| `AgentSplice.IntegrationTests` | Host startup and configuration binding, the fake-upstream fixture itself, the Stage 0 exit criterion that a fake-upstream exchange is representable by the domain model, and the container health probe against a real loopback listener and against the gateway. |
+| `AgentSplice.IntegrationTests` | Host startup and configuration binding, the fake-upstream fixture itself, the Stage 0 exit criterion that a fake-upstream exchange is representable by the domain model, the container health probe against a real loopback listener and against the gateway, and the Windows package's content-root rule, store location, and publish profile. |
 | `AgentSplice.ArchitectureTests` | Module dependency rules, absence of vendor names in the durable core, domain immutability, no static mutable state. |
 
 ## Not yet created

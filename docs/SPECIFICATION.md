@@ -945,6 +945,7 @@ agentsplice:
   defaultRuntimeId: lmstudio-local
   persistence:
     mode: sqlite
+    # A relative Data Source resolves against the content root (ADR 0017).
     connectionString: Data Source=/data/agentsplice.db
   diagnostics:
     storeBodies: false
@@ -1200,6 +1201,8 @@ These are engineering targets, not release claims, until benchmarks exist.
 ### 14.5 Portability
 
 - Windows development supported.
+- Windows installation without Docker or a .NET installation, through a self-contained package
+  (ADR 0017).
 - Linux containers supported.
 - WSL development documented.
 - No CUDA-only assumptions in core code.
@@ -1479,6 +1482,14 @@ and says so once at startup.
 ```text
 Agent client -> localhost AgentSplice -> localhost LM Studio
 ```
+
+The direct process is either `dotnet run` from source, on any platform with the .NET 8 SDK, or the
+Windows package: a self-contained, single-file win-x64 build carrying its own .NET runtime and the
+dashboard, which runs on a machine with no .NET installed (ADR 0017). The package makes the directory
+its executable is in the content root, so it reads its settings and serves its dashboard from beside
+itself wherever it is started from; every other build takes the working directory, as ASP.NET Core
+does. A relative SQLite `Data Source` resolves against the content root in every build. Tagged
+releases publish the package with its SHA-256 digest; `docs/INSTALLATION.md` documents every path.
 
 ### 20.2 Docker Compose
 

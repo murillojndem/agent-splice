@@ -131,7 +131,10 @@ Exit criteria:
 Status: in progress. The OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an
 optional Compose collector, are done (ADR 0014), and so is serving the dashboard from the gateway, with
 the image building it and CI building and smoke-testing the image (ADR 0015), and so is the image's
-own health check, which CI waits on (ADR 0016); the rest of the list below is not.
+own health check, which CI waits on (ADR 0016), and so is the direct-process path: a self-contained
+Windows package that needs no Docker and no .NET installation, built and smoke-tested on Windows in CI,
+with every installation path documented in `docs/INSTALLATION.md` (ADR 0017); the rest of the list
+below is not.
 
 - OpenTelemetry SDK and OTLP exporter, off by default (done);
 - the gateway serves the built dashboard at `/dashboard/`, built into the Docker image and checked in
@@ -139,8 +142,8 @@ own health check, which CI waits on (ADR 0016); the rest of the list below is no
 - Docker image with a health check that needs no HTTP client in the base image (done);
 - Docker image published to a registry;
 - Compose example using `host.docker.internal` for LM Studio (done);
-- direct-process setup;
-- loopback-only defaults;
+- direct-process setup: from source anywhere, and a self-contained Windows package (done);
+- loopback-only defaults, checked against the running package as well as the host (done);
 - release workflow;
 - sample OpenCode, Cline, and generic client configurations;
 - first dated trace report;

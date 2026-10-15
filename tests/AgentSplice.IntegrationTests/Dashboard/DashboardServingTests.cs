@@ -262,6 +262,11 @@ public sealed class DashboardServingTests
             "/dashboard/assets/../../outside.txt",
             "/dashboard/%2e%2e/outside.txt",
             "/dashboard/..%2foutside.txt",
+
+            // What Kestrel hands the pipeline for ..%5c: a backslash, which the router sees as part
+            // of one segment and the Windows file system as a separator (ADR 0017).
+            "/dashboard/..\\outside.txt",
+            "/dashboard/assets/..\\..\\outside.txt",
         ];
 
         foreach (var path in escapes)

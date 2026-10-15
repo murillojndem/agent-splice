@@ -57,4 +57,7 @@ public static class GatewayEventIds
 
     /// <summary>A retention sweep could not complete.</summary>
     public static EventId RetentionSweepFailed { get; } = new(1304, nameof(RetentionSweepFailed));
+
+    /// <summary>The metadata store is open and current; the message names the file it is kept in.</summary>
+    public static EventId MetadataStoreOpened { get; } = new(1305, nameof(MetadataStoreOpened));
 }

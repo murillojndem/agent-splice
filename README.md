@@ -95,8 +95,11 @@ dashboard itself at `/dashboard/`, and the container image builds it in, so an i
 Node toolchain to open it ([ADR 0015](docs/adr/0015-stage-1d-gateway-serves-the-dashboard.md)).
 The image reports its own health: it carries a small probe that its `HEALTHCHECK` runs against
 `/health/live`, because the runtime base image has no HTTP client to run one with
-([ADR 0016](docs/adr/0016-stage-1d-the-image-reports-its-health.md)). Publishing the image, the
-release workflow, sample client configurations, and the first dated trace report are still to come.
+([ADR 0016](docs/adr/0016-stage-1d-the-image-reports-its-health.md)). A self-contained Windows
+package runs without Docker or a .NET installation, from any folder
+([ADR 0017](docs/adr/0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md)). Publishing the
+image, the release workflow, sample client configurations, and the first dated trace report are still
+to come.
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 
@@ -154,8 +157,16 @@ docker compose up --build --wait
 `--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
 shows that status afterwards.
 
+On Windows without Docker, the Windows package needs no .NET installation: download
+`agentsplice-<version>-win-x64.zip` and `SHA256SUMS` from the releases page, check the digest,
+extract it, and run `AgentSplice.Api.exe` from any folder. It listens on loopback, carries the
+dashboard, and keeps its store beside the executable. [Installing AgentSplice](docs/INSTALLATION.md)
+covers all three paths — Docker, the Windows package, and running from source — step by step.
+
 ## Documentation
 
+- [Installing AgentSplice](docs/INSTALLATION.md)
+- [Development guide](docs/DEVELOPMENT.md)
 - [Complete product and engineering specification](docs/SPECIFICATION.md)
 - [Product positioning](docs/PRODUCT_POSITIONING.md)
 - [Architecture](docs/ARCHITECTURE.md)

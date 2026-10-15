@@ -167,6 +167,28 @@ public sealed class HostStartupTests
     }
 
     [Fact]
+    public void A_store_whose_directory_does_not_exist_prevents_startup_naming_the_file()
+    {
+        // SQLite's own message for a missing directory is "unable to open database file", which names
+        // nothing. The gateway does not create the directory — a mistyped path must not quietly grow a
+        // tree — so it fails before readiness and says which file it could not open (NFR 14.2).
+        var store = Path.Combine(
+            Path.GetTempPath(),
+            "agentsplice-missing-" + Guid.NewGuid().ToString("N", System.Globalization.CultureInfo.InvariantCulture),
+            "agentsplice.db");
+
+        AssertStartupFails(
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["agentsplice:persistence:mode"] = "Sqlite",
+                ["agentsplice:persistence:connectionString"] = "Data Source=" + store,
+            },
+            FormattableString.Invariant($"The metadata store '{store}' could not be opened for writing"));
+
+        Assert.False(Directory.Exists(Path.GetDirectoryName(store)), "The gateway must not create the store's directory.");
+    }
+
+    [Fact]
     public void A_valid_alias_chain_does_not_prevent_startup()
     {
         using var factory = new AgentSpliceApplicationFactory(

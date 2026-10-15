@@ -131,7 +131,7 @@ jobs:
         run: docker compose up --build --detach --wait --wait-timeout 120 agentsplice
 
       - name: Smoke test
-        run: bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+        run: bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
 
       - name: Health check
         # What the probe reported, and proof that it can fail: a health check that always passed
@@ -170,9 +170,68 @@ jobs:
             echo "The image found no dashboard build (event 1204)." >&2
             exit 1
           fi
+          # The store the volume holds, named at startup (ADR 0017).
+          if ! grep -Eq '\[1305\]|"EventId":1305' "$RUNNER_TEMP/agentsplice.log" \
+             || ! grep -Fq '/data/agentsplice.db' "$RUNNER_TEMP/agentsplice.log"; then
+            echo "The image did not report its store at /data/agentsplice.db (event 1305)." >&2
+            exit 1
+          fi
 
       - name: Dump the log and stop
         if: always()
         run: |
           docker compose logs --no-color agentsplice || true
           docker compose down --volumes || true
+
+  package-windows:
+    # The Windows package is the other way an alpha user installs AgentSplice, and the one that needs
+    # no Docker and no .NET SDK (ADR 0017). Built and started here on every change, like the image, so
+    # a packaging defect fails a pull request rather than a release. Windows, because the package is a
+    # Windows executable and because only the Windows file system can prove the backslash traversal
+    # checks. The artifact it uploads is what a tagged release publishes.
+    name: package (win-x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # The package carries the runtime of the SDK that builds it, so this is also which .NET 8
+          # patch — and which security fixes — a release ships with.
+          dotnet-version: '8.0.x'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # Exact, as in the Dockerfile: this builds a release artifact.
+          version: 10.30.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/AgentSplice.Dashboard/pnpm-lock.yaml
+
+      - name: Build the package
+        run: ./.github/scripts/package-windows.ps1 -OutputDirectory artifacts/package
+
+      - name: Smoke test the package
+        run: |
+          $archive = Get-ChildItem artifacts/package -Filter 'agentsplice-*-win-x64.zip' | Select-Object -First 1
+          ./.github/scripts/smoke-windows-package.ps1 -Archive $archive.FullName -Bash "$env:ProgramFiles\Git\bin\bash.exe"
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsplice-win-x64
+          path: |
+            artifacts/package/*.zip
+            artifacts/package/SHA256SUMS
+          if-no-files-found: error

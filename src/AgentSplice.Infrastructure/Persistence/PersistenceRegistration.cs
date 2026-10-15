@@ -4,6 +4,7 @@ using AgentSplice.Application.Exchanges;
 using AgentSplice.Infrastructure.Administration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace AgentSplice.Infrastructure.Persistence;
@@ -36,7 +37,7 @@ public static class PersistenceRegistration
         // persistence off nothing ever asks for a context, so no provider is initialised and no
         // database file appears.
         services.AddDbContextFactory<AgentSpliceDbContext>((provider, builder) =>
-            Configure(builder, Options(provider)));
+            Configure(builder, Options(provider), provider.GetRequiredService<IHostEnvironment>().ContentRootPath));
 
         services.AddSingleton<IAdministrativeEnvelopeWriter, AdministrativeJsonWriter>();
         services.AddSingleton<ExchangeQueryService>();
@@ -93,8 +94,12 @@ public static class PersistenceRegistration
     /// The unimplemented-mode branch is written out even though configuration validation rejects
     /// such a mode before readiness. Falling through to SQLite would mean a deployment that asked for
     /// PostgreSQL got a local file and no indication that it had.
+    ///
+    /// A relative store path is resolved against the content root, as every other relative path in
+    /// the settings is, rather than against whichever directory the process was started from
+    /// (<see cref="SqliteStoreLocation"/>, ADR 0017).
     /// </remarks>
-    private static void Configure(DbContextOptionsBuilder builder, AgentSpliceOptions options)
+    private static void Configure(DbContextOptionsBuilder builder, AgentSpliceOptions options, string contentRoot)
     {
         if (!Retains(options))
         {
@@ -109,6 +114,10 @@ public static class PersistenceRegistration
                     $"agentsplice:persistence:mode '{options.Persistence.Mode}' has no provider in this build."));
         }
 
-        builder.UseSqlite(options.Persistence.ConnectionString);
+        var connectionString = options.Persistence.ConnectionString
+            ?? throw new InvalidOperationException(
+                "agentsplice:persistence:connectionString is required when the mode is 'Sqlite'.");
+
+        builder.UseSqlite(SqliteStoreLocation.ResolveAgainst(connectionString, contentRoot));
     }
 }

@@ -4,6 +4,61 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 4: a Windows package that needs no .NET SDK
+
+On Windows without Docker the only route was building from source, and a published executable would
+not have run from anywhere but its own folder: it read its settings from the working directory and,
+even with those found, created its store wherever it was started. There is now a self-contained
+package, built and smoke-tested on Windows in CI, and one guide for every way to install (ADR 0017,
+SPECIFICATION section 22 criterion 13).
+
+- `src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml` publishes a self-contained,
+  single-file win-x64 gateway. It is not trimmed, compressed, or ReadyToRun; `e_sqlite3.dll` and
+  `appsettings.json` sit beside the executable; and it has no IIS assets and no development settings.
+  Nothing package-specific is in the project file, so the container publish and the test projects are
+  unchanged.
+- The profile sets a runtime switch, read by the new `ContentRootDefault`, that makes the executable's
+  directory the content root. The package therefore finds its settings and dashboard wherever it is
+  started from. An explicit `--contentRoot`, `ASPNETCORE_CONTENTROOT`, or `DOTNET_CONTENTROOT` still
+  wins, and every other build gets exactly `CreateBuilder(args)`.
+- **Behaviour change:** a relative SQLite `Data Source` now resolves against the content root, as
+  `appsettings.json` and the dashboard's `rootPath` do, rather than against the working directory.
+  Nothing changes under `dotnet run` or in the image. Absolute paths, `:memory:`, `Mode=Memory`, `file:`
+  URIs, and `|DataDirectory|` are used as written.
+- New event `1305 MetadataStoreOpened` names the store file once it is migrated: the data source,
+  never the connection string. A store whose directory is missing or read-only still fails startup,
+  now with an error naming the file; the gateway still creates no directory.
+- `.github/scripts/package-windows.ps1` builds the dashboard, publishes with the profile, copies the
+  dashboard to where the shipped `rootPath` looks, and writes `agentsplice-<version>-win-x64.zip` and
+  `SHA256SUMS`. `README.txt` in the package names the .NET runtime it carries, which nothing services
+  afterwards.
+- CI's new `package-windows` job on `windows-latest` runs that script and
+  `.github/scripts/smoke-windows-package.ps1`, then uploads the `agentsplice-win-x64` artifact. The
+  smoke script verifies the digest and the package's contents, then starts the package twice from an
+  empty folder elsewhere:
+  - with the defaults, it checks the dashboard, `/api/v1` without a token, a refused request read back
+    from the store, the store beside the executable, nothing written to the working directory, and a
+    listener on `127.0.0.1` only;
+  - with a token, it runs the shared smoke test.
+- `smoke-image.sh` is now `smoke-gateway.sh`, and it gains backslash traversal vectors, as does the
+  in-process traversal test. The image job also checks that 1305 names `/data/agentsplice.db`.
+- New `docs/INSTALLATION.md` covers Docker, the Windows package, and running from source:
+  - verifying the digest and removing the downloaded-file mark;
+  - extracting under the user's own profile, and the SmartScreen and Smart App Control prompts;
+  - setting a token, configuring through arguments and environment variables, and moving the store;
+  - backup, upgrade, uninstall, and troubleshooting.
+- `docs/SECURITY.md` gains a "Local installation" section. `docs/THREAT_MODEL.md` gains "Evidence at
+  rest" and "Unserviced bundled runtime" and extends the install-folder and DNS-rebinding entries to
+  the package. The specification, architecture, development, observability, testing, and roadmap
+  documents describe the package; the roadmap marks direct-process setup and loopback-only defaults
+  done.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a raw `UseSqlite`, a
+content-root override that ignores an explicit one, a switch name that drifts from the gateway's
+constant, and a package published without the switch, which the smoke test catches when the package
+exits before answering. On a development workstation the package was 43.4 MB, and both smoke runs
+passed against it.
+
 ### Stage 1D, part 3: the image reports its health
 
 The image had no `HEALTHCHECK`, because its base ships no HTTP client to run one with, so Docker could

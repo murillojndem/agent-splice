@@ -243,6 +243,13 @@ The dashboard announces itself once at startup, from `AgentSplice.Api.Hosting.Da
 `1204 DashboardBuildMissing` (Warning) when the dashboard is enabled but no build was found, naming
 the absolute path that was checked. A disabled dashboard logs neither (ADR 0015).
 
+The metadata store does the same once it is open and migrated, from
+`AgentSplice.Infrastructure.Persistence.MetadataStoreInitializer`: `1305 MetadataStoreOpened`
+(Information), naming the file. A relative `Data Source` is resolved against the content root, so this
+is where an operator finds out which file that was — beside the executable in the Windows package,
+`/data/agentsplice.db` in the image (ADR 0017). It carries the data source only, never the connection
+string, which may hold a password. A deployment that retains nothing logs no store at all.
+
 ## Runtime-log ingestion
 
 A later adapter may ingest LM Studio, llama.cpp, Ollama, or backend logs to enrich:

@@ -249,8 +249,9 @@ which applies the same `base`.
 
 What only the real artifact can prove — that the image carries the dashboard it was built with, under
 real Kestrel path normalisation — is the CI `image` job: it builds the image through Compose and runs
-`.github/scripts/smoke-image.sh` against it. Those measurements come from a container on a CI runner
-or a workstation, not from the fake upstream, and make no performance claim.
+`.github/scripts/smoke-gateway.sh` (then named `smoke-image.sh`) against it. Those measurements come
+from a container on a CI runner or a workstation, not from the fake upstream, and make no performance
+claim.
 
 ## Delivered by Stage 1D, part 3: the image reports its health
 
@@ -272,6 +273,32 @@ referencing it.
 What only the running image can prove is the CI `image` job: `docker compose up --wait` returns only
 once the image's health check reports healthy, and the job then checks the reported status and that
 the probe exits exactly `1` against a port nothing listens on and against a target it must refuse.
+
+## Delivered by Stage 1D, part 4: a Windows package that needs no .NET SDK
+
+The content-root decision is a pure function of the runtime switch, the host settings, and the
+executable's directory, so `ContentRootDefaultTests` tests it as one: off by default, the executable's
+directory when on, and an explicit content root — on the command line in each form the configuration
+provider accepts, or from the environment — winning even then. The test process is asserted not to
+carry the switch, because every other integration test depends on the ordinary rule.
+
+`SqliteStoreLocationTests` pins which store paths resolve against the content root and which are
+returned as the same string instance: `:memory:`, `Mode=Memory`, `file:` URIs, `|DataDirectory|`,
+absolute paths, and an empty data source. `StoreLocationTests` boots the host with a relative path
+that names different files from the content root and from the working directory — the technique the
+dashboard's `rootPath` test uses — and fails against a raw `UseSqlite`. A missing store directory is a
+startup failure naming the file (`HostStartupTests`). `WindowsPackageContractTests` reads the publish
+profile and fails if the switch's name drifts from the gateway's constant, if any package setting
+moves into the project file, or if a self-contained profile lacks the switch.
+
+What only the real package can prove is the CI `package-windows` job, on `windows-latest`:
+`.github/scripts/smoke-windows-package.ps1` checks the archive against `SHA256SUMS` and what it
+contains, then starts it from an empty folder elsewhere — with the shipped defaults, where it reads
+back a refused request from its store, proving EF Core and the native SQLite library inside the single
+file, and with a token, where it runs `smoke-gateway.sh`, whose backslash traversal vectors only a
+Windows file system can test. The same script, run against a package published without the switch,
+fails before the first request. As with the image, these runs come from a runner or a workstation and
+make no performance claim.
 
 ## Testcontainers
 

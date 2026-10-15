@@ -52,6 +52,28 @@ The gateway serves the dashboard build at `/dashboard/` on its own origin (ADR 0
 - **It can be turned off.** `agentsplice:dashboard:enabled: false` serves nothing at `/dashboard/` and
   leaves `/` a 404, for a deployment that ships the build but wants no browser-facing surface.
 
+## Local installation
+
+The Windows package (ADR 0017, `docs/INSTALLATION.md`) runs as the user who starts it, from a folder
+that user extracted:
+
+- **The folder is trusted like `/app` in the image.** Whoever can write it can replace the executable,
+  its settings, and the dashboard's script. Install it under the user's own profile
+  (`%LOCALAPPDATA%\Programs`), not in a folder every user can write; a folder created directly under
+  `C:\` inherits write access for all authenticated users.
+- **The store holds evidence.** `agentsplice.db` beside the executable, or wherever
+  `agentsplice:persistence:connectionString` points, holds the structural metadata and identifiers
+  this document lists as retained, unencrypted. It is protected by the folder's permissions alone, and
+  so are copies of it.
+- **The default is loopback without a token,** which serves `/api/v1` to every local caller. Setting a
+  token is recommended even so; the installation guide shows how, and the threat model records the
+  browser-based read it closes.
+- **The bundled runtime is not serviced.** A self-contained package carries the .NET runtime it was
+  built with, and Windows Update does not patch it. .NET security fixes reach a package only through a
+  new AgentSplice release; `README.txt` in each package names the runtime version.
+- **The package is not code signed.** Its integrity rests on the SHA-256 digest published beside it
+  and verified as the installation guide describes.
+
 ## Authentication
 
 Stage 1 supports a static bearer token for the administrative API. Only a secret reference is stored:

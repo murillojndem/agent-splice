@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Smoke test for a running AgentSplice container (ADR 0015).
+# Smoke test for a running AgentSplice gateway with an administrative token configured: the container
+# image (ADR 0015) or the Windows package (ADR 0017).
 #
 # The integration tests prove the serving rules against a fixture build in an in-process server. This
-# proves what they cannot: that the image as built carries the dashboard it was built with, that the
-# shell names files the gateway actually serves, that real Kestrel path normalisation keeps the build
-# directory closed, and that serving it changed nothing else.
+# proves what they cannot: that the artifact as built carries the dashboard it was built with, that
+# the shell names files the gateway actually serves, that real Kestrel path normalisation — on Linux
+# in the image, on Windows in the package — keeps the build directory closed, and that serving it
+# changed nothing else.
 #
-# Usage: bash .github/scripts/smoke-image.sh <base-url> <admin-token>
-#   e.g. bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+# Usage: bash .github/scripts/smoke-gateway.sh <base-url> <admin-token>
+#   e.g. bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
 #
 # Every check runs and reports; the script exits non-zero if any failed.
 
 set -euo pipefail
 
-base="${1:?usage: smoke-image.sh <base-url> <admin-token>}"
-token="${2:?usage: smoke-image.sh <base-url> <admin-token>}"
+base="${1:?usage: smoke-gateway.sh <base-url> <admin-token>}"
+token="${2:?usage: smoke-gateway.sh <base-url> <admin-token>}"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -101,9 +103,17 @@ expect_header Content-Type "text/html" "a deep link"
 status="$(request GET /dashboard/assets/missing-0d1e2f.js)"
 expect_status 404 "$status" "GET a missing asset"
 
-# Nothing outside the build directory. appsettings.json sits in /app, one level above the build; its
-# keys must never come back, whatever status the gateway chooses.
-for path in /dashboard/../appsettings.json /dashboard/%2e%2e/appsettings.json /dashboard/..%2fappsettings.json; do
+# Nothing outside the build directory. appsettings.json sits one level above the build — in /app in
+# the image, in the package folder on Windows — and its keys must never come back, whatever status the
+# gateway chooses. The backslash forms matter on Windows, where the file system treats \ as a
+# separator and a path that is one segment to the router can be two to the disk.
+for path in \
+  /dashboard/../appsettings.json \
+  /dashboard/%2e%2e/appsettings.json \
+  /dashboard/..%2fappsettings.json \
+  /dashboard/..%5cappsettings.json \
+  /dashboard/%5c..%5cappsettings.json \
+  /dashboard/assets/..%5c..%5cappsettings.json; do
   status="$(request GET "$path")"
   echo "      GET $path -> $status"
   expect_body_without '"publicBaseUrl"' "GET $path"
