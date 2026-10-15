@@ -124,22 +124,37 @@ jobs:
           echo "::add-mask::$token"
           echo "AGENTSPLICE_ADMIN_API_KEY=$token" >> "$GITHUB_ENV"
 
-      - name: Build and start
-        run: docker compose up --build --detach agentsplice
-
-      - name: Wait for liveness
-        run: |
-          for attempt in $(seq 1 60); do
-            if curl --silent --fail --output /dev/null http://127.0.0.1:5280/health/live; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "The gateway did not become live within 60 seconds." >&2
-          exit 1
+      - name: Build, start, and wait until healthy
+        # --wait returns once the image's own HEALTHCHECK reports healthy (ADR 0016), and fails if it
+        # reports unhealthy or the timeout passes — so the health check the image ships is what
+        # decides that the gateway is up, as it is for `docker compose up --wait` anywhere else.
+        run: docker compose up --build --detach --wait --wait-timeout 120 agentsplice
 
       - name: Smoke test
         run: bash .github/scripts/smoke-image.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+
+      - name: Health check
+        # What the probe reported, and proof that it can fail: a health check that always passed
+        # would satisfy --wait just as well. Against a port nothing listens on, and against a target
+        # it must refuse, it exits exactly 1 — never 2, which Docker reserves.
+        run: |
+          container="$(docker compose ps --quiet agentsplice)"
+          docker inspect --format '{{json .State.Health.Log}}' "$container"
+          status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+          if [ "$status" != "healthy" ]; then
+            echo "The container reports '$status', not healthy." >&2
+            exit 1
+          fi
+          for target in http://127.0.0.1:5999/health/live https://example.com/; do
+            set +e
+            docker compose exec -T agentsplice dotnet /app/probe/AgentSplice.HealthProbe.dll "$target"
+            code=$?
+            set -e
+            if [ "$code" -ne 1 ]; then
+              echo "The probe exited $code against $target; expected 1." >&2
+              exit 1
+            fi
+          done
 
       - name: Startup log
         # Written to a file first: piping `docker compose logs` straight into `grep -q` lets grep exit

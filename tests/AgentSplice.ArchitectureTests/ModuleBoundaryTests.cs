@@ -18,6 +18,8 @@ public sealed class ModuleBoundaryTests
     private static readonly Assembly Application = typeof(AgentSplice.Application.AssemblyMarker).Assembly;
     private static readonly Assembly Infrastructure = typeof(AgentSplice.Infrastructure.AssemblyMarker).Assembly;
     private static readonly Assembly Observability = typeof(AgentSplice.Observability.AssemblyMarker).Assembly;
+    private static readonly Assembly Api = typeof(Program).Assembly;
+    private static readonly Assembly HealthProbe = typeof(AgentSplice.HealthProbe.AssemblyMarker).Assembly;
     private static readonly Assembly ProtocolsOpenAI = typeof(AgentSplice.Protocols.OpenAI.AssemblyMarker).Assembly;
     private static readonly Assembly ProvidersLmStudio = typeof(AgentSplice.Providers.LmStudio.AssemblyMarker).Assembly;
 
@@ -200,6 +202,45 @@ public sealed class ModuleBoundaryTests
     }
 
     [Fact]
+    public void The_health_probe_references_only_the_base_class_library()
+    {
+        // ADR 0016. The probe is told one URL and knows nothing else about the gateway; a reference
+        // to any AgentSplice module or framework package would let it start depending on how the
+        // gateway is built, and would make every probe run load it.
+        var references = HealthProbe.GetReferencedAssemblies()
+            .Select(reference => reference.Name ?? string.Empty)
+            .ToArray();
+
+        Assert.All(references, name => Assert.True(
+            name == "System" || name.StartsWith("System.", StringComparison.Ordinal),
+            FormattableString.Invariant($"AgentSplice.HealthProbe references '{name}', which is not part of the base class library.")));
+
+        AssertNoReferenceTo(
+            HealthProbe,
+            "AgentSplice.Api",
+            "AgentSplice.Application",
+            "AgentSplice.Domain",
+            "AgentSplice.Infrastructure",
+            "AgentSplice.Observability",
+            "AgentSplice.Protocols",
+            "AgentSplice.Providers",
+            "Microsoft.AspNetCore",
+            "Microsoft.EntityFrameworkCore",
+            "Microsoft.Extensions");
+    }
+
+    [Fact]
+    public void No_gateway_assembly_references_the_health_probe()
+    {
+        // The other direction: the probe is a separate command the image runs, not a library the
+        // gateway calls.
+        foreach (var assembly in AllProductionAssemblies().Where(candidate => candidate != HealthProbe).Append(Api))
+        {
+            AssertNoReferenceTo(assembly, "AgentSplice.HealthProbe");
+        }
+    }
+
+    [Fact]
     public void Vendor_specific_naming_is_confined_to_its_own_provider_module()
     {
         var result = Types.InAssembly(ProvidersLmStudio)
@@ -220,6 +261,7 @@ public sealed class ModuleBoundaryTests
         Observability,
         ProtocolsOpenAI,
         ProvidersLmStudio,
+        HealthProbe,
     ];
 
     private static void AssertNoReferenceTo(Assembly assembly, params string[] forbiddenPrefixes)

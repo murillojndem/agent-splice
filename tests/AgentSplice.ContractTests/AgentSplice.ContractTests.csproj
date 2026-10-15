@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentSplice.Application\AgentSplice.Application.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Domain\AgentSplice.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AgentSplice.HealthProbe\AgentSplice.HealthProbe.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Observability\AgentSplice.Observability.csproj" />
     <ProjectReference Include="..\..\src\AgentSplice.Protocols.OpenAI\AgentSplice.Protocols.OpenAI.csproj" />
     <ProjectReference Include="..\AgentSplice.TestSupport\AgentSplice.TestSupport.csproj" />

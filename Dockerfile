@@ -41,13 +41,24 @@ COPY src/AgentSplice.Infrastructure/AgentSplice.Infrastructure.csproj src/AgentS
 COPY src/AgentSplice.Observability/AgentSplice.Observability.csproj src/AgentSplice.Observability/
 COPY src/AgentSplice.Protocols.OpenAI/AgentSplice.Protocols.OpenAI.csproj src/AgentSplice.Protocols.OpenAI/
 COPY src/AgentSplice.Providers.LmStudio/AgentSplice.Providers.LmStudio.csproj src/AgentSplice.Providers.LmStudio/
-RUN dotnet restore src/AgentSplice.Api/AgentSplice.Api.csproj
+# The health probe the image runs as its HEALTHCHECK (ADR 0016). It references nothing, so it is
+# restored on its own; the gateway does not reference it either.
+COPY src/AgentSplice.HealthProbe/AgentSplice.HealthProbe.csproj src/AgentSplice.HealthProbe/
+RUN dotnet restore src/AgentSplice.Api/AgentSplice.Api.csproj \
+ && dotnet restore src/AgentSplice.HealthProbe/AgentSplice.HealthProbe.csproj
 
 COPY src/ src/
 RUN dotnet publish src/AgentSplice.Api/AgentSplice.Api.csproj \
       --configuration Release \
       --no-restore \
       --output /publish
+
+# Published apart from the gateway so that each keeps its own runtimeconfig: the probe runs with
+# workstation GC, the gateway with server GC.
+RUN dotnet publish src/AgentSplice.HealthProbe/AgentSplice.HealthProbe.csproj \
+      --configuration Release \
+      --no-restore \
+      --output /publish-probe
 
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
@@ -67,6 +78,11 @@ COPY --from=build /publish ./
 # directory can replace what is in it.
 COPY --from=dashboard /dashboard/dist ./dashboard/
 
+# The health probe, beside the gateway rather than inside its directory, so that neither's
+# runtimeconfig.json or deps.json can shadow the other's. Under /app like everything else, for the
+# same ownership reason as the dashboard.
+COPY --from=build /publish-probe ./probe/
+
 # /data holds the SQLite metadata store. The image runs as the non-root user shipped in the .NET 8
 # base image, so the volume mount point must be writable by it.
 RUN mkdir -p /data && chown -R app:app /data /app
@@ -74,6 +90,17 @@ USER app
 
 EXPOSE 5280
 
-# No HEALTHCHECK: the aspnet base image ships no HTTP client to run one with. Probe /health/live and
-# /health/ready from outside the container instead (FR-HEALTH-001).
+# The aspnet base image ships no HTTP client — no curl, no wget — so the image carries its own probe
+# (ADR 0016). Exec form, because a shell form needs /bin/sh, which a chiseled image does not have.
+# Liveness, not readiness: liveness touches no runtime, so LM Studio being down never makes the
+# gateway unhealthy (FR-HEALTH-002). The probe gives up after 3 s, inside Docker's 5 s, so a stalled
+# gateway is reported with a reason rather than killed silently. Docker acts on the result only by
+# reporting it — `docker compose up --wait` and `depends_on: condition: service_healthy` wait for it;
+# outside Swarm nothing restarts an unhealthy container.
+#
+# The port here is the one ASPNETCORE_URLS names above; a deployment that changes it must override
+# the health check too, which a contract test keeps true of what this repository ships.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
+    CMD ["dotnet", "/app/probe/AgentSplice.HealthProbe.dll", "http://127.0.0.1:5280/health/live"]
+
 ENTRYPOINT ["dotnet", "AgentSplice.Api.dll"]

@@ -13,6 +13,7 @@ Bootstrap only the projects required by the active roadmap stage in `docs/ARCHIT
 | `AgentSplice.Providers.LmStudio` | The LM Studio provider: buffered and streaming upstream calls, bounded body reading, per-phase timeout budgets, connection timing, and transport-failure classification. |
 | `AgentSplice.Observability` | Normative telemetry names, the exchange/provider/stream/persistence activity sources, the live instruments, and the OpenTelemetry SDK that subscribes to them, with opt-in OTLP export. The only project that references OpenTelemetry, which an architecture test enforces. |
 | `AgentSplice.Api` | Composition root and transport glue: the `/v1/models` and `/v1/chat/completions` endpoints, correlation headers, the client response sink, request-body reading, the concurrency policy, and the hosting of the dashboard build at `/dashboard/` with its security headers (ADR 0015). Carries no orchestration logic, which an architecture test enforces. |
+| `AgentSplice.HealthProbe` | The container image's health check (ADR 0016): one `GET` against the loopback liveness URL it is given, exiting 0 on any 2xx and 1 otherwise. Not part of the gateway — it references only the base class library and nothing references it, which an architecture test enforces. |
 
 The protocol and provider modules stay separate from Domain and Application so that
 `AgentSplice.ArchitectureTests` can assert no vendor-specific type has leaked into the durable core,

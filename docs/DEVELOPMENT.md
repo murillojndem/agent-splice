@@ -51,6 +51,7 @@ src/
   AgentSplice.Providers.LmStudio  LM Studio provider adapter
   AgentSplice.Observability       OpenTelemetry names and instrumentation
   AgentSplice.Api                 composition root and host
+  AgentSplice.HealthProbe         the container image's health check; references nothing
 
 tests/
   AgentSplice.TestSupport         deterministic fake upstream and repository path helpers
@@ -131,7 +132,7 @@ Compose requires an administrative token and refuses to start without one:
 cp .env.example .env
 # choose your own value and put it in .env
 echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
-docker compose up --build
+docker compose up --build --wait
 ```
 
 Omitting it fails at `docker compose config` with a message naming the variable. That is deliberate:
@@ -155,6 +156,20 @@ relayed request arrives from `127.0.0.1`.
 The image carries the dashboard. Open `http://127.0.0.1:5280/`, which redirects to `/dashboard/`, and
 paste the token into the field at the top of the page: the page itself needs no credential, the
 evidence it shows does, and the page keeps the token in memory only, so a new tab asks again.
+
+The image also reports its own health (ADR 0016). Its `HEALTHCHECK` runs
+`AgentSplice.HealthProbe`, which asks `GET /health/live` and exits 0 or 1; `--wait` above returns once
+that reports healthy, and fails if it reports unhealthy. To see the status and what the probe said:
+
+```bash
+docker compose ps agentsplice                                   # STATUS ... (healthy)
+docker inspect --format '{{json .State.Health}}' "$(docker compose ps --quiet agentsplice)"
+```
+
+The check probes port 5280 inside the container, the port `ASPNETCORE_URLS` names. A deployment that
+moves the gateway to another container port must override `healthcheck.test` to match; the host side
+of the port mapping does not matter. Docker only reports health: outside Swarm nothing restarts an
+unhealthy container.
 
 CI builds the image and drives it the same way. To run that check against a local container:
 

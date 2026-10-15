@@ -1490,6 +1490,13 @@ Agent client
    -> OpenTelemetry Collector (optional)
 ```
 
+The image reports its own health. Its `HEALTHCHECK` runs a probe the image carries, because the
+runtime base image has no HTTP client, against `GET /health/live` on the container's loopback; the
+probe exits 0 on any 2xx and 1 otherwise, and gives up before Docker's own timeout would kill it
+(ADR 0016). Liveness rather than readiness, so a runtime outage never marks the gateway unhealthy
+(FR-HEALTH-002). Health gates `docker compose up --wait` and `depends_on: condition: service_healthy`;
+outside Swarm, Docker restarts nothing because of it.
+
 ### 20.3 Network defaults
 
 - Bind to loopback by default.

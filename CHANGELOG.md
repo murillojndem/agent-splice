@@ -4,6 +4,42 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 3: the image reports its health
+
+The image had no `HEALTHCHECK`, because its base ships no HTTP client to run one with, so Docker could
+say only that the container was running and nothing could wait for the gateway to be up. The image now
+carries its own probe and reports health from it (ADR 0016, FR-HEALTH-001, FR-HEALTH-002).
+
+- New `src/AgentSplice.HealthProbe`: a console application that references only the base class
+  library. It sends one `GET` to the loopback liveness URL it is given and exits `0` on any 2xx and `1`
+  otherwise — a non-2xx status, a refused connection, or no answer within three seconds. It never exits
+  `2`, which Docker reserves. It refuses any target that is not an `http` URL on a loopback IP literal,
+  `localhost` included, without sending anything; uses no proxy; follows no redirect; never reads the
+  body; and writes one line per run, which Docker keeps in `docker inspect`.
+- The Dockerfile publishes it to `/app/probe/` with workstation GC, apart from the gateway, and declares
+  `HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3` in exec
+  form against `http://127.0.0.1:5280/health/live`. Liveness, never readiness, so LM Studio being down
+  never marks the gateway unhealthy. `docker compose up --wait` now returns once the gateway is healthy,
+  and `docker compose ps` shows it. Outside Swarm Docker restarts nothing on an unhealthy container, and
+  AgentSplice adds no policy that would.
+- The Compose file declares no health check of its own, and says that one must be added to match if
+  the container port ever moves off 5280.
+- CI's `image` job starts the stack with `docker compose up --build --wait` instead of a `curl` loop on
+  the runner, then checks the reported status and that the probe exits exactly `1` against a dead port
+  and against a target it must refuse.
+- The README and the development guide use `--wait`, and the README gains a PowerShell equivalent of
+  its token setup.
+- `docs/API.md`, `docs/OBSERVABILITY.md`, `docs/ARCHITECTURE.md`, `docs/SPECIFICATION.md` §20.2,
+  `docs/TESTING.md`, and `docs/THREAT_MODEL.md` (a new "Container health probe" entry) describe the check.
+  The roadmap splits "Docker image, published" into the image with a health check, done, and publishing
+  it to a registry, still open, and marks the Compose example using `host.docker.internal` done, which
+  it has been since Stage 0.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a `curl` health check,
+a `localhost` target, port 8080, `/health/ready`, a two-second Docker timeout, the probe copied
+somewhere the check does not look, a Compose override, a probe that demands exactly `200`, one that asks
+with `HEAD`, and one that accepts `localhost`.
+
 ### Stage 1D, part 2: the gateway serves the dashboard
 
 The dashboard ran only under `pnpm dev`, so an alpha installation had no way to open it. The gateway

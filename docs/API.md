@@ -197,6 +197,12 @@ restart the gateway whenever the model server was slow, turning a diagnosable ou
 enabled runtime has answered. That flag is off by default, because a gateway whose runtime is down is
 still correctly configured and is still the component able to report the outage.
 
+The container image's own health check asks liveness, never readiness, so LM Studio being down never
+marks the container unhealthy (ADR 0016). It is `AgentSplice.HealthProbe`, which the image carries
+because its base has no HTTP client: one `GET`, any 2xx counts as live, anything else — or no answer
+within three seconds — as not. It asks with `GET` because both probes answer `HEAD` with `405`, and it
+accepts any 2xx because liveness answers `204`.
+
 **With the flag off, readiness performs no runtime I/O at all** — no discovery refresh, no upstream
 connection, no timeout to wait out — and `reachableRuntimes` is absent rather than zero, because zero
 would report that every runtime was found unreachable by a check that never ran. Evaluating health

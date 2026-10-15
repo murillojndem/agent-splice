@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The container image's health check (ADR 0016). The runtime image ships no HTTP client, so the
+    image carries this one: it asks the gateway's liveness endpoint once and exits 0 or 1.
+
+    It references no AgentSplice project and no package, which an architecture test enforces, so it
+    cannot drift into knowing anything about the gateway beyond the one URL it is given. Docker runs
+    it every few seconds, so it starts lean: workstation, non-concurrent GC rather than the server GC
+    the gateway's Web SDK default selects, which would create a heap and a collector thread per core
+    for a process that lives for one request.
+  -->
+  <PropertyGroup>
+    <Description>AgentSplice container health probe: one GET against the gateway's liveness endpoint.</Description>
+    <OutputType>Exe</OutputType>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Always run as `dotnet AgentSplice.HealthProbe.dll`; a native launcher would only add a file. -->
+    <UseAppHost>false</UseAppHost>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

@@ -295,7 +295,7 @@ agentsplice:
 
 - The four live activity sources and the `AgentSplice` meter — the instruments and bounded dimensions listed above, which the spans carry as attributes, plus `agentsplice.persistence.batch_size` on the persistence span: a count of exchanges in one write, never which ones. No prompt, model output, tool argument, model identifier, request identifier, or credential; an integration test searches every exported payload for each of them.
 - Resource attributes `service.name=agentsplice`, `service.version` (the build's informational version), and a generated `service.instance.id`.
-- **Not logs.** The log pipeline is not routed through OpenTelemetry. **Not framework spans.** ASP.NET Core and `HttpClient` instrumentation are not enabled, so health probes, administrative requests, and requests for the dashboard's files produce no spans.
+- **Not logs.** The log pipeline is not routed through OpenTelemetry. **Not framework spans.** ASP.NET Core and `HttpClient` instrumentation are not enabled, so health probes, administrative requests, and requests for the dashboard's files produce no spans. That includes the container image's own health check (ADR 0016), which asks `/health/live` every thirty seconds: the gateway logs nothing for it at the shipped levels and exports nothing for it. What the probe reported — one line per run, with the status and how long the answer took — is kept by Docker, in `docker inspect`'s `State.Health.Log`, not by AgentSplice.
 
 Spans leave on the SDK's five-second batch schedule; metrics on its default sixty-second interval.
 

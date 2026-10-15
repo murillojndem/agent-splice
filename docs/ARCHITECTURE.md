@@ -64,6 +64,7 @@ src/
   AgentSplice.Protocols.OpenAI
   AgentSplice.Providers.LmStudio
   AgentSplice.Observability
+  AgentSplice.HealthProbe          # the container image's health check (ADR 0016)
 
   # Added in later stages
   AgentSplice.Replay
@@ -106,6 +107,9 @@ Projects may be consolidated if the initial repository becomes fragmented, but l
 - Evaluation depends on scenario/run abstractions and isolated execution ports.
 - Compatibility adapters depend on explicit adapter contracts and must not be referenced by Domain.
 - API composes modules and contains no transformation or evaluation logic.
+- The health probe references only the base class library, and nothing references it. It is a
+  separate command the container image runs, told one loopback URL, not part of the gateway
+  (ADR 0016).
 
 ## Stage 1 primary request flow
 

@@ -93,10 +93,12 @@ subscribes to AgentSplice's spans and metrics, and `agentsplice:telemetry:otlp` 
 file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). The gateway now serves the
 dashboard itself at `/dashboard/`, and the container image builds it in, so an installation needs no
 Node toolchain to open it ([ADR 0015](docs/adr/0015-stage-1d-gateway-serves-the-dashboard.md)).
-Publishing the image, the release workflow, sample client configurations, and the first dated trace
-report are still to come. Replay, conformance
-orchestration, evaluation, protocol translation, and compatibility adapters all belong to later
-milestones.
+The image reports its own health: it carries a small probe that its `HEALTHCHECK` runs against
+`/health/live`, because the runtime base image has no HTTP client to run one with
+([ADR 0016](docs/adr/0016-stage-1d-the-image-reports-its-health.md)). Publishing the image, the
+release workflow, sample client configurations, and the first dated trace report are still to come.
+Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
+belong to later milestones.
 
 No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
 compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
@@ -136,9 +138,21 @@ The dashboard is served by the gateway at `http://127.0.0.1:5280/dashboard/`, an
 ```bash
 cp .env.example .env
 echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
-docker compose up --build
+docker compose up --build --wait
 # open http://127.0.0.1:5280/ and paste the token from .env into the dashboard's token field
 ```
+
+The same in PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+$bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+Add-Content .env ("AGENTSPLICE_ADMIN_API_KEY=" + (($bytes | ForEach-Object { $_.ToString('x2') }) -join ''))
+docker compose up --build --wait
+```
+
+`--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
+shows that status afterwards.
 
 ## Documentation
 

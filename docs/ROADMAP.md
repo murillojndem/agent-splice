@@ -130,14 +130,15 @@ Exit criteria:
 
 Status: in progress. The OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an
 optional Compose collector, are done (ADR 0014), and so is serving the dashboard from the gateway, with
-the image building it and CI building and smoke-testing the image (ADR 0015); the rest of the list
-below is not.
+the image building it and CI building and smoke-testing the image (ADR 0015), and so is the image's
+own health check, which CI waits on (ADR 0016); the rest of the list below is not.
 
 - OpenTelemetry SDK and OTLP exporter, off by default (done);
 - the gateway serves the built dashboard at `/dashboard/`, built into the Docker image and checked in
   CI, so an installation needs no Node toolchain to open it (done);
-- Docker image, published;
-- Compose example using `host.docker.internal` for LM Studio;
+- Docker image with a health check that needs no HTTP client in the base image (done);
+- Docker image published to a registry;
+- Compose example using `host.docker.internal` for LM Studio (done);
 - direct-process setup;
 - loopback-only defaults;
 - release workflow;

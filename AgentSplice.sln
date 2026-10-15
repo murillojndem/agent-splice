@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSplice.ArchitectureTes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSplice.IntegrationTests", "tests\AgentSplice.IntegrationTests\AgentSplice.IntegrationTests.csproj", "{10938F16-3EAB-4E75-A881-48D878C5ADDE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentSplice.HealthProbe", "src\AgentSplice.HealthProbe\AgentSplice.HealthProbe.csproj", "{7F36AB82-D375-4FEC-B142-BB1B99A60BAD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -88,6 +90,10 @@ Global
 		{10938F16-3EAB-4E75-A881-48D878C5ADDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{10938F16-3EAB-4E75-A881-48D878C5ADDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{10938F16-3EAB-4E75-A881-48D878C5ADDE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7F36AB82-D375-4FEC-B142-BB1B99A60BAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7F36AB82-D375-4FEC-B142-BB1B99A60BAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7F36AB82-D375-4FEC-B142-BB1B99A60BAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7F36AB82-D375-4FEC-B142-BB1B99A60BAD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{AE936C88-1CA4-4211-814B-757410C86984} = {BCB7A01A-B619-4985-836B-845F69360575}
@@ -102,5 +108,6 @@ Global
 		{9A96B866-D197-4EB3-AB2E-855194B40B84} = {3FC81774-2C6C-42FD-8157-4FEDF4832BAA}
 		{9537377E-51A6-4ACB-9881-41CE679D8A5D} = {3FC81774-2C6C-42FD-8157-4FEDF4832BAA}
 		{10938F16-3EAB-4E75-A881-48D878C5ADDE} = {3FC81774-2C6C-42FD-8157-4FEDF4832BAA}
+		{7F36AB82-D375-4FEC-B142-BB1B99A60BAD} = {BCB7A01A-B619-4985-836B-845F69360575}
 	EndGlobalSection
 EndGlobal

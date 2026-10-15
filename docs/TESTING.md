@@ -252,6 +252,27 @@ real Kestrel path normalisation — is the CI `image` job: it builds the image t
 `.github/scripts/smoke-image.sh` against it. Those measurements come from a container on a CI runner
 or a workstation, not from the fake upstream, and make no performance claim.
 
+## Delivered by Stage 1D, part 3: the image reports its health
+
+The probe is tested in `tests/AgentSplice.IntegrationTests/HealthProbe` against a real loopback
+Kestrel listener — the fake upstream — wherever the property is about the transport: a refused
+connection, a redirect it must not follow, a stall. Its three-second budget runs on an injected
+`FakeTimeProvider`, so the stall is expired by advancing the clock rather than by waiting it out. One
+test runs it against the gateway itself through `TestServer`: liveness answers `204` and `HEAD` with
+`405`, so a probe that demanded exactly `200`, or asked with `HEAD`, would report a healthy gateway as
+unhealthy while every scripted check still passed.
+
+The Dockerfile's `HEALTHCHECK` is pinned by file-reading contract tests
+(`ImageHealthCheckContractTests`): exec form, liveness not readiness, a target the probe's own parser
+accepts, the port the image's `ASPNETCORE_URLS`, `EXPOSE`, and Compose all name, the path the image
+copies the probe to, a probe budget shorter than Docker's `--timeout`, and no Compose override. An
+architecture test holds the probe to the base class library and keeps every gateway assembly from
+referencing it.
+
+What only the running image can prove is the CI `image` job: `docker compose up --wait` returns only
+once the image's health check reports healthy, and the job then checks the reported status and that
+the probe exits exactly `1` against a port nothing listens on and against a target it must refuse.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

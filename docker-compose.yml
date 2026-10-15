@@ -4,6 +4,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # No healthcheck here on purpose: the image's own HEALTHCHECK applies (ADR 0016), so
+    # `docker compose up --wait` and `docker compose ps` report it. It probes port 5280, the port
+    # ASPNETCORE_URLS names below; change one and you must override healthcheck.test to match.
     # Configuration keys use the double-underscore form that
     # Microsoft.Extensions.Configuration maps onto the agentsplice section, so a Compose override and
     # an appsettings.json value address exactly the same setting.

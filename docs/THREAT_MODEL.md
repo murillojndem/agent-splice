@@ -119,6 +119,12 @@ Threat: something able to write to the gateway's files replaces the dashboard's 
 
 Status: residual. In the image the build sits under `/app`, which the process user owns, as it owns the gateway's own assemblies; making the dashboard alone root-owned would protect nothing, because the owner of a directory can replace its contents. Follow-up: a read-only `/app`.
 
+### Container health probe
+
+Threat: the image's health check becomes a way to reach something other than the gateway — a request to another host, a proxy, or a redirect target — or a way to report health that is not the gateway's.
+
+Mitigations: the probe takes its one target from the image configuration, never from a request, and refuses anything but an `http` URL whose host is a loopback IP literal — no name resolution, no user information. It uses no proxy, follows no redirect, reads the status line and headers only, and gives up after three seconds. It references only the base class library, nothing references it, and it runs as the image's non-root user under `/app`, so replacing it requires the same write access that replacing the gateway does. Its one line of output names a status or a failure class and never echoes a target it refused (ADR 0016).
+
 ### Misleading evidence
 
 Threat: estimates are presented as measurements, unsupported runs are omitted, or a report overgeneralizes from one environment.
@@ -146,5 +152,6 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - every dashboard response carries a policy forbidding inline script, `eval`, cross-origin connections, and framing;
 - nothing outside the dashboard build directory, and no hidden file in it, is served;
 - serving the dashboard changes no answer outside `/dashboard`;
+- the health probe refuses any target off loopback `http` without sending a request, and exits only 0 or 1;
 - adapter cannot activate outside declared constraints;
 - exported reports include provenance and omit secret values.
