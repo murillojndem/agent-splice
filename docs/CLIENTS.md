@@ -238,7 +238,8 @@ them with the finished answer for a non-streaming request, so `responseHeaders` 
 generation, and at once for a stream, so a long prompt is processed against `idleStream` instead.
 
 Each timeout phase is a setting of the runtime, and each must stay no longer than `total`. On the
-Windows package's command line, for example — from source, the same arguments follow
+Windows package's command line, for example — the Linux package's takes the same arguments, and from
+source they follow
 `dotnet run --project src/AgentSplice.Api --`:
 
 ```powershell

@@ -1,8 +1,8 @@
 name: Release
 
-# A tag v<version> becomes a draft pre-release carrying the Windows package and its digest (ADR 0018).
-# Nothing is published until a maintainer reviews the draft and publishes it by hand, and the image
-# is not pushed anywhere: it is built from the tagged source.
+# A tag v<version> becomes a draft pre-release carrying the Windows and Linux packages and one
+# SHA256SUMS for both (ADR 0018, ADR 0021). Nothing is published until a maintainer reviews the draft
+# and publishes it by hand, and the image is not pushed anywhere: it is built from the tagged source.
 
 on:
   push:
@@ -61,7 +61,7 @@ jobs:
 
   ci:
     # The whole CI suite against the tagged commit: both platforms' tests, the dashboard, the image, and
-    # the Windows package, which this run builds, smoke-tests, and uploads.
+    # both packages, which this run builds, smoke-tests, and assembles into the release's assets.
     name: ci
     needs: version
     uses: ./.github/workflows/ci.yml
@@ -70,7 +70,9 @@ jobs:
 
   publish:
     # The only job that can write to the repository, and it runs nothing it downloaded from a package
-    # registry: no checkout, no restore, no install. It publishes exactly what CI built and checked.
+    # registry: no checkout, no restore, no install. It publishes exactly what CI built and checked: the
+    # artifact release-assets uploaded, taken by the ID that job reported, so an artifact another job
+    # re-uploaded under the same name is never what it publishes.
     name: publish
     needs: ci
     runs-on: ubuntu-latest
@@ -78,30 +80,55 @@ jobs:
       contents: write
 
     steps:
-      - name: Download the Windows package
+      - name: Download the release assets
         uses: actions/download-artifact@v4
         with:
-          name: agentsplice-win-x64
+          artifact-ids: ${{ needs.ci.outputs.release-artifact-id }}
           path: release
 
-      - name: Verify the digests
-        working-directory: release
-        run: sha256sum --check --strict SHA256SUMS
+      - name: Verify the digests, and that the assets are exactly this tag's
+        run: |
+          # Downloaded by ID, the files can land in a folder named for the artifact below the path.
+          mapfile -t sums < <(find release -maxdepth 2 -type f -name SHA256SUMS)
+          if [ "${#sums[@]}" -ne 1 ]; then
+            echo "The release assets hold no single SHA256SUMS." >&2
+            exit 1
+          fi
+          assets="$(dirname "${sums[0]}")"
+          cd "$assets"
+          sha256sum --check --strict SHA256SUMS
+          # SHA256SUMS lists exactly this tag's archives, one per platform, and the folder holds nothing
+          # else; the draft is then made of what it lists, so its assets and its digests cannot drift.
+          version="${GITHUB_REF_NAME#v}"
+          expected="$(printf '%s\n' "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          if [ "$(awk '{print $2}' SHA256SUMS | LC_ALL=C sort)" != "$expected" ] \
+             || [ "$(ls -A | grep -vx SHA256SUMS | LC_ALL=C sort)" != "$expected" ]; then
+            echo "The release assets are not exactly this tag's archives:" >&2
+            ls -A >&2
+            exit 1
+          fi
+          echo "ASSETS=$PWD" >> "$GITHUB_ENV"
 
       - name: Create the draft pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#v}"
+          mapfile -t assets < <(awk -v folder="$ASSETS" '{print folder "/" $2}' "$ASSETS/SHA256SUMS")
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           An experimental alpha. No compatibility claim is made for any client, model, or runtime; support claims require a dated conformance report (docs/CONFORMANCE.md).
 
-          **Windows.** \`agentsplice-${GITHUB_REF_NAME#v}-win-x64.zip\` runs without Docker or a .NET installation. Check it against \`SHA256SUMS\` before extracting it; the package is not code signed. See docs/INSTALLATION.md.
+          **Windows.** \`agentsplice-$version-win-x64.zip\` runs on 64-bit Windows 10 or 11 without Docker or a .NET installation. The package is not code signed. See docs/INSTALLATION.md.
+
+          **Linux.** \`agentsplice-$version-linux-x64.tar.gz\` runs on x64 distributions based on glibc, with OpenSSL, without Docker or a .NET installation. The package is not signed. See docs/INSTALLATION.md.
+
+          **Checking a download.** \`SHA256SUMS\` lists every asset's SHA-256 digest; check the one you downloaded against its line before extracting it, as docs/INSTALLATION.md shows. GitHub shows each asset's digest too.
 
           **Docker.** The image is not published to a registry. Build it from this tag with \`docker compose up --build --wait\`.
 
           What changed is in CHANGELOG.md at this tag.
           EOF
-          gh release create "$GITHUB_REF_NAME" release/*.zip release/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" "$ASSETS/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" \
             --draft \
             --prerelease \

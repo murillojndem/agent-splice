@@ -1,7 +1,8 @@
-#Requires -Version 7.2
+#Requires -Version 7.4
 <#
 .SYNOPSIS
-Smoke test for the Windows package (ADR 0017): it runs with no .NET SDK assumed, from any folder.
+Smoke test for a self-contained package (ADR 0017, ADR 0021): it runs with no .NET SDK assumed, from any
+folder, on the platform it was built for.
 
 .DESCRIPTION
 Verifies the archive against SHA256SUMS the way the installation guide tells a user to, extracts it,
@@ -12,24 +13,30 @@ elsewhere, so that a package which only works from its own directory fails here:
    gets it: liveness, readiness, the dashboard, /api/v1 served to a local caller, an exchange
    recorded in the SQLite store and read back, the store created beside the executable and nothing
    written to the working directory, and a listener on 127.0.0.1 only.
-2. With a token, running the shared gateway smoke test (smoke-gateway.sh) through Git Bash, so the
-   dashboard's serving rules and the traversal checks run under Kestrel on Windows too.
+2. With a token, running the shared gateway smoke test (smoke-gateway.sh), so the dashboard's serving
+   rules and the traversal checks run under Kestrel on the package's own file system too.
+
+The package's name says which platform it is for, and the checks that differ between the two follow
+it: the archive format, the executable's and SQLite's file names, the executable's permission bits on
+Linux, and how the listener is found (Get-NetTCPConnection on Windows, ss on Linux).
 
 Every check runs and reports; the script exits non-zero if any failed. Port 5280 must be free.
 
 .PARAMETER Archive
-The agentsplice-<version>-win-x64.zip that package-windows.ps1 wrote; SHA256SUMS beside it.
+The agentsplice-<version>-win-x64.zip or agentsplice-<version>-linux-x64.tar.gz that package.ps1
+wrote; SHA256SUMS beside it.
 
 .PARAMETER Bash
-Git Bash, for the shared smoke test. On a runner a bare `bash` can resolve to the WSL launcher.
+Bash, for the shared smoke test. On Windows, Git Bash: on a runner a bare `bash` can resolve to the WSL
+launcher.
 
 .EXAMPLE
-pwsh -File .github/scripts/smoke-windows-package.ps1 -Archive artifacts/package/agentsplice-0.2.0-alpha-win-x64.zip
+pwsh -File .github/scripts/smoke-package.ps1 -Archive artifacts/package/agentsplice-0.2.0-alpha-linux-x64.tar.gz
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Archive,
-    [string] $Bash = (Join-Path $env:ProgramFiles 'Git' 'bin' 'bash.exe')
+    [string] $Bash = $(if ($IsWindows) { Join-Path $env:ProgramFiles 'Git' 'bin' 'bash.exe' } else { 'bash' })
 )
 
 Set-StrictMode -Version Latest
@@ -46,13 +53,20 @@ function Check([bool] $Condition, [string] $What) { if ($Condition) { Pass $What
 $archivePath = (Resolve-Path $Archive).Path
 $archiveName = Split-Path -Leaf $archivePath
 
-if ($archiveName -notmatch '^agentsplice-(?<version>.+)-win-x64\.zip$') {
-    throw "'$archiveName' is not named like a Windows package."
+if ($archiveName -notmatch '^agentsplice-(?<version>.+)-(?<rid>win-x64\.zip|linux-x64\.tar\.gz)$') {
+    throw "'$archiveName' is not named like a Windows or a Linux package."
 }
 
 $version = $Matches.version
+$windows = $Matches.rid -eq 'win-x64.zip'
+$rid = if ($windows) { 'win-x64' } else { 'linux-x64' }
 
-# The procedure the installation guide gives a user: Get-FileHash against SHA256SUMS.
+if ($windows -ne [bool]$IsWindows) {
+    throw "'$archiveName' is a $rid package; smoke-test it on the platform it runs on."
+}
+
+# The procedure the installation guide gives a user: the archive's own line in SHA256SUMS, by
+# Get-FileHash on Windows and sha256sum on Linux, which compute the same digest.
 $sums = Join-Path (Split-Path -Parent $archivePath) 'SHA256SUMS'
 $expected = Get-Content $sums |
     ForEach-Object { if ($_ -match "^(?<hash>[0-9a-f]{64})  $([regex]::Escape($archiveName))$") { $Matches.hash } } |
@@ -60,10 +74,16 @@ $expected = Get-Content $sums |
 $actual = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
 Check ($null -ne $expected -and $actual -eq $expected) "the archive matches its line in SHA256SUMS"
 
+if (-not $windows) {
+    # The very command the installation guide gives a Linux user, run where they would run it.
+    $checked = @(& $Bash -c 'cd "$1" && grep -F "  $2" SHA256SUMS | sha256sum --check --strict -' bash (Split-Path -Parent $archivePath) $archiveName 2>&1)
+    Check ($LASTEXITCODE -eq 0 -and ($checked -join "`n") -match "$([regex]::Escape($archiveName)): OK") "the installation guide's sha256sum check passes"
+}
+
 # Under the repository's ignored artifacts directory rather than the temporary directory, whose path
-# on a hosted runner can be an 8.3 short name (RUNNER~1) that the gateway would report in its long
-# form, failing the path comparisons below for no reason to do with the package.
-$work = Join-Path $repository 'artifacts' ("smoke-windows-" + [guid]::NewGuid().ToString('N'))
+# on a hosted Windows runner can be an 8.3 short name (RUNNER~1) that the gateway would report in its
+# long form, failing the path comparisons below for no reason to do with the package.
+$work = Join-Path $repository 'artifacts' ("smoke-$rid-" + [guid]::NewGuid().ToString('N'))
 $extracted = Join-Path $work 'extracted'
 $elsewhere = Join-Path $work 'elsewhere'
 New-Item -ItemType Directory -Force -Path $extracted, $elsewhere | Out-Null
@@ -92,6 +112,26 @@ function Send([string] $Method, [string] $Path, [string] $Body = $null) {
         ContentType = if ($response.Content.Headers.ContentType) { $response.Content.Headers.ContentType.MediaType } else { $null }
         Body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
     }
+}
+
+# Whether anything listens on port 5280, on either platform.
+function Test-PortBusy {
+    @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
+            Where-Object { $_.Port -eq 5280 }).Count -gt 0
+}
+
+# The local addresses a process listens on.
+function Get-Listeners([Diagnostics.Process] $Process) {
+    if ($windows) {
+        return @(Get-NetTCPConnection -State Listen -OwningProcess $Process.Id -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.LocalAddress })
+    }
+
+    # ss -H: no header. Each line is "LISTEN <recv-q> <send-q> <local address:port> <peer> users:((...))",
+    # and -p names the owning process, which ss can see for this user's own processes.
+    $lines = @(& ss -Hltnp | Where-Object { $_ -match "pid=$($Process.Id)," })
+
+    return @($lines | ForEach-Object { (($_ -split '\s+')[3]) -replace ':\d+$', '' })
 }
 
 function Start-Gateway([string] $Name) {
@@ -146,23 +186,76 @@ function Wait-ForLog([string] $Path, [string] $Pattern) {
 
 try {
     # Busy port: a gateway already running would answer every check below instead of the package.
-    if (Get-NetTCPConnection -State Listen -LocalPort 5280 -ErrorAction SilentlyContinue) {
+    if (Test-PortBusy) {
         throw 'Port 5280 is already in use; stop whatever is listening there first.'
     }
 
-    Expand-Archive -Path $archivePath -DestinationPath $extracted
+    if ($windows) {
+        Expand-Archive -Path $archivePath -DestinationPath $extracted
+    }
+    else {
+        # What the archive records, before anything is extracted: every entry owned by 0:0, so it names no
+        # account of the machine that built it, and nothing writable by group or others. The listing's
+        # first column is the mode, the second owner/group.
+        $listing = @(& tar --numeric-owner -tvzf $archivePath)
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar could not list '$archiveName'."
+        }
+
+        Check (-not ($listing | Where-Object { ($_ -split '\s+')[1] -ne '0/0' })) "every entry in the archive is owned by 0:0"
+
+        # Exactly the modes the package script sets: folders rwxr-xr-x, the executable rwxr-xr-x, and
+        # every other file rw-r--r--, whatever modes the build machine left on them.
+        $unexpected = @($listing | Where-Object {
+                $entry = $_ -split '\s+'
+                $expectedMode = if ($entry[-1].EndsWith('/')) { 'drwxr-xr-x' }
+                elseif ($entry[-1] -match '/AgentSplice\.Api$') { '-rwxr-xr-x' }
+                else { '-rw-r--r--' }
+                $entry[0] -ne $expectedMode
+            })
+        Check ($unexpected.Count -eq 0) "folders and the executable are rwxr-xr-x and every other file rw-r--r-- ($($unexpected -join '; '))"
+        Check ([bool]($listing | Where-Object { $_ -match '^-rwxr-xr-x\s.*/AgentSplice\.Api$' })) "the archive records AgentSplice.Api as executable (rwxr-xr-x)"
+
+        # As the installation guide extracts it; tar restores the permission bits the archive records.
+        & tar -xzf $archivePath -C $extracted
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar could not extract '$archiveName'."
+        }
+    }
+
     $top = @(Get-ChildItem -Path $extracted)
-    Check ($top.Count -eq 1 -and $top[0].PSIsContainer -and $top[0].Name -eq "agentsplice-$version-win-x64") "the archive has one top-level folder named for its version"
+    Check ($top.Count -eq 1 -and $top[0].PSIsContainer -and $top[0].Name -eq "agentsplice-$version-$rid") "the archive has one top-level folder named for its version"
 
     $package = $top[0].FullName
-    $exe = Join-Path $package 'AgentSplice.Api.exe'
+    $executableName = if ($windows) { 'AgentSplice.Api.exe' } else { 'AgentSplice.Api' }
+    $sqlite = if ($windows) { 'e_sqlite3.dll' } else { 'libe_sqlite3.so' }
+    $exe = Join-Path $package $executableName
 
-    Check (Test-Path $exe) "the package holds AgentSplice.Api.exe"
-    Check (Test-Path (Join-Path $package 'e_sqlite3.dll')) "SQLite's native library sits beside the executable"
+    Check (Test-Path $exe) "the package holds $executableName"
+
+    if (-not $windows) {
+        $mode = [IO.File]::GetUnixFileMode($exe)
+        Check ($mode.HasFlag([IO.UnixFileMode]::UserExecute)) "$executableName is executable once extracted ($mode)"
+    }
+
+    Check (Test-Path (Join-Path $package $sqlite)) "SQLite's native library sits beside the executable"
     Check (Test-Path (Join-Path $package 'appsettings.json')) "appsettings.json sits beside the executable"
     Check (Test-Path (Join-Path $package 'dashboard' 'index.html')) "the dashboard's page is in dashboard/"
     Check (Test-Path (Join-Path $package 'dashboard' 'assets')) "the dashboard's assets are in dashboard/assets/"
     Check (Test-Path (Join-Path $package 'README.txt')) "the package carries README.txt"
+
+    if (Test-Path (Join-Path $package 'README.txt')) {
+        $readme = [IO.File]::ReadAllText((Join-Path $package 'README.txt'))
+
+        if ($windows) {
+            Check ($readme.Contains("`r`n") -and -not ($readme -match "(?<!`r)`n")) "README.txt has Windows line endings, for Notepad"
+        }
+        else {
+            Check (-not $readme.Contains("`r")) "README.txt has Unix line endings"
+        }
+    }
 
     # What it may be passed on under, and the notices of what it bundles (ADR 0020).
     foreach ($notice in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md')) {
@@ -229,7 +322,8 @@ try {
     Check $recorded "the refused request is read back from the store"
 
     $store = Join-Path $package 'agentsplice.db'
-    Check (Wait-ForLog $log ([regex]::Escape("Content root path: $package"))) "the content root is the package folder, not the working directory"
+    # The whole line, so a sibling folder whose name merely starts with the package's cannot pass for it.
+    Check (Wait-ForLog $log ('(?m)^\s*Content root path: ' + [regex]::Escape($package) + '[\\/]?\r?$')) "the content root is the package folder, not the working directory"
     Check (Wait-ForLog $log '\[1203\]') "the startup log announces the dashboard (1203)"
     Check (Wait-ForLog $log ([regex]::Escape((Join-Path $package 'dashboard')))) "the dashboard is served from the package's dashboard folder"
     Check (-not ((Get-Content -Raw $log) -match '\[1204\]')) "the startup log does not report a missing dashboard (1204)"
@@ -237,8 +331,8 @@ try {
     Check (Test-Path $store) "the store was created beside the executable"
     Check (-not (Get-ChildItem -Force -Path $elsewhere)) "nothing was written to the working directory"
 
-    $listeners = @(Get-NetTCPConnection -State Listen -OwningProcess $gateway.Id -ErrorAction SilentlyContinue)
-    Check ($listeners.Count -ge 1 -and -not ($listeners | Where-Object { $_.LocalAddress -ne '127.0.0.1' })) "the gateway listens on 127.0.0.1 only"
+    $listeners = @(Get-Listeners $gateway)
+    Check ($listeners.Count -ge 1 -and -not ($listeners | Where-Object { $_ -ne '127.0.0.1' })) "the gateway listens on 127.0.0.1 only (it listens on $($listeners -join ', '))"
 
     Stop-Gateway $gateway
 
@@ -289,5 +383,3 @@ if ($script:failures -ne 0) {
     Write-Host "$($script:failures) check(s) failed."
     exit 1
 }
-
-Write-Host 'All checks passed.'

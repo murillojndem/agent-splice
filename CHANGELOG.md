@@ -4,6 +4,69 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 8: a Linux package that needs no .NET installation
+
+On Linux the only direct-process path was building from source. There is now a Linux package beside
+the Windows one: the same self-contained single file, for x64 distributions based on glibc, built and
+smoke-tested on Linux in CI and published by every release (ADR 0021).
+
+- New `src/AgentSplice.Api/Properties/PublishProfiles/linux-x64.pubxml`, the Windows profile's twin:
+  self-contained, single-file, not trimmed, native libraries beside the executable (`libe_sqlite3.so`),
+  no development settings, and the content-root switch.
+- `package-windows.ps1` becomes `package.ps1 -RuntimeIdentifier win-x64|linux-x64`, requiring PowerShell
+  7.4. The Linux package is `agentsplice-<version>-linux-x64.tar.gz`, built on Linux only, with owner and
+  group 0, sorted entries, and modes the script sets rather than keeps — the executable and the folders
+  `rwxr-xr-x`, every other file `rw-r--r--` — because NuGet's files arrive with an execute bit. Its README
+  has Unix line endings and commands, says to keep the folder to its owner with `chmod 700`, and, like
+  the Windows one, says how to start it from any folder and to set a token on a machine other people
+  use. A README links the guide at the release's own tag only when the build is that tag's.
+- `smoke-windows-package.ps1` becomes `smoke-package.ps1`, which holds both packages to the same checks.
+  On Linux it also runs the installation guide's own digest check, reads the archive's listing before
+  extracting it — owners 0:0 and exactly the modes above — checks the execute bit once extracted, and
+  finds the listener with `ss`. On both it checks the README's line endings and matches the whole
+  content-root log line.
+- New CI job `package-linux`, on `ubuntu-latest`, uploading `agentsplice-linux-x64`. Neither package job
+  restores a dependency cache.
+- New CI job `release-assets`, which takes both package artifacts by the IDs their jobs reported —
+  never by name, which any job of the run can upload again with a digest to match — verifies each,
+  combines their digests into one `SHA256SUMS`, checks that the set is one archive per platform of one
+  version, and uploads `agentsplice-release`. It uses no action but the artifacts' own, checks nothing
+  out, and runs on every change; `ci.yml` reports its artifact's ID to the release.
+- The release's `publish` job takes `agentsplice-release` by that ID, verifies it, checks that its
+  `SHA256SUMS` lists exactly this tag's archives, and creates the draft from the files it lists; the
+  notes gain a Linux paragraph and say how to check a download against the combined `SHA256SUMS`.
+- `docs/INSTALLATION.md` gains a Linux package section: checking the archive by its own line in
+  `SHA256SUMS`, extracting into a folder set to mode 700, running it, and the token, configuration, and
+  data, with two habits Windows does not teach — environment variable names are case-sensitive, and `~`
+  is the shell's to expand. It says that the folder's mode protects the store's file but not what the
+  gateway serves, and recommends the token wherever other accounts exist. Until the first release, it
+  names only the artifacts of CI runs for a push to `main`, for Windows too: a pull request's run builds
+  unreviewed code. The troubleshooting table covers what fails on Linux.
+- The README, `docs/DEVELOPMENT.md`, `docs/SECURITY.md`, `docs/THREAT_MODEL.md`, SPECIFICATION section
+  20.1, `docs/ARCHITECTURE.md`, `docs/OBSERVABILITY.md`, `docs/CLIENTS.md`, `THIRD-PARTY-NOTICES.md`, the
+  bug form's installation choices, and the comments that described the Windows package alone now
+  describe both. The security guide and the threat model say what the digests detect — corruption, not
+  a substitution by whoever writes an archive and its line — and record creating the store with mode
+  0600 as a follow-up. The guides and the threat model also state that Microsoft supports .NET 8 until
+  November 10, 2026, after which no .NET 8 build receives runtime fixes.
+- No runtime behaviour changes.
+
+Every new guard was verified to fail against a deliberately reintroduced defect:
+
+- the Linux artifact renamed; its smoke test dropped, switched off, or allowed to fail; its job
+  reporting no artifact ID; a cache restored in a package job;
+- a download missing from `release-assets`, one taken by name, a checkout, an action, or an install
+  added to it, a `needs` entry missing, its verification no longer strict, or its upload nested;
+- CI reporting another job's artifact to the release;
+- the release taking its artifact by name, verifying after it creates, checking only the Windows
+  archive, or naming its assets by hand;
+- the script accepting only Windows, or publishing with a literal profile;
+- the Linux profile deleted, trimmed, without the switch, or shipping the development settings.
+
+The Linux package was built and smoke-tested in a Debian 12 container — the .NET 8 SDK image — before
+CI ran it, and the release's assembly and publishing scripts were run against the real archives,
+including the refusals: a wrong tag, an extra file, and a stray file in an artifact.
+
 ### Stage 1D, part 7: the project is licensed, and says where to report vulnerabilities
 
 The repository was public with no license, so nothing it published could be used or passed on, and no

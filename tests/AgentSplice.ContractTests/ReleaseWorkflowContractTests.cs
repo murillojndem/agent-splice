@@ -7,8 +7,8 @@ using YamlDotNet.RepresentationModel;
 namespace AgentSplice.ContractTests;
 
 /// <summary>
-/// A tag becomes a reviewed draft, built by the full CI suite, published by the one job that may write
-/// (ADR 0018).
+/// A tag becomes a reviewed draft, built and assembled by the full CI suite, published by the one job
+/// that may write (ADR 0018, ADR 0021).
 /// </summary>
 /// <remarks>
 /// None of this runs until someone pushes a tag, and every way it can go wrong does so in public: a
@@ -19,7 +19,10 @@ namespace AgentSplice.ContractTests;
 /// </remarks>
 public sealed partial class ReleaseWorkflowContractTests
 {
-    private const string PackageArtifact = "agentsplice-win-x64";
+    private const string ReleaseArtifact = "agentsplice-release";
+
+    /// <summary>What a job that only handles artifacts never runs.</summary>
+    private static readonly string[] InstallCommands = ["pnpm", "npm ", "npx ", "dotnet ", "apt-get", "pip "];
 
     [Fact]
     public void A_release_is_only_ever_created_as_a_draft_pre_release()
@@ -74,26 +77,156 @@ public sealed partial class ReleaseWorkflowContractTests
     }
 
     [Fact]
-    public void The_release_publishes_the_package_ci_builds_and_checks()
+    public void Every_platform_the_package_script_builds_is_built_smoke_tested_and_uploaded_by_ci()
+    {
+        var platforms = PackagePlatforms();
+        var jobs = Jobs(Workflow("ci.yml")).ToArray();
+
+        Assert.Contains("linux-x64", platforms);
+        Assert.Contains("win-x64", platforms);
+
+        foreach (var platform in platforms)
+        {
+            var job = Assert.Single(jobs, entry => Steps(entry.Job).Any(step =>
+                Run(step).Contains("package.ps1 -RuntimeIdentifier " + platform + " ", StringComparison.Ordinal))).Job;
+
+            Assert.Single(Steps(job), step => Run(step).Contains("smoke-package.ps1", StringComparison.Ordinal));
+
+            var upload = Assert.Single(Steps(job), step => Uses(step).StartsWith("actions/upload-artifact", StringComparison.Ordinal));
+            Assert.Equal("agentsplice-" + platform, Scalar(Mapping(upload, "with"), "name"));
+
+            // The job reports the ID of what it uploaded, which is how release-assets takes it.
+            AssertReportsTheArtifactItUploads(job, upload);
+
+            // Nothing that gates the release can be switched off or allowed to fail.
+            AssertGates(job);
+
+            // A release artifact is built from the lockfile alone, never from a dependency cache another
+            // run could have written.
+            Assert.DoesNotContain(Steps(job), step =>
+                step.Children.TryGetValue(new YamlScalarNode("with"), out var with) && with is YamlMappingNode inputs && Scalar(inputs, "cache") is not null);
+        }
+    }
+
+    [Fact]
+    public void Ci_assembles_a_release_from_exactly_the_artifacts_it_built_and_checked()
     {
         var ci = Workflow("ci.yml");
+        var jobs = Jobs(ci).ToDictionary(job => job.Name, job => job.Job, StringComparer.Ordinal);
+        var assembly = jobs["release-assets"];
 
-        Assert.True(
-            Mapping(ci, "on").Children.ContainsKey(new YamlScalarNode("workflow_call")),
-            "ci.yml must be callable, so the release runs the whole suite against the tag.");
+        var built = jobs
+            .Where(job => job.Key != "release-assets")
+            .SelectMany(job => Steps(job.Value)
+                .Where(step => Uses(step).StartsWith("actions/upload-artifact", StringComparison.Ordinal))
+                .Select(step => (Job: job.Key, Artifact: Scalar(Mapping(step, "with"), "name")!)))
+            .Where(upload => upload.Artifact.StartsWith("agentsplice-", StringComparison.Ordinal))
+            .ToArray();
 
-        var package = Jobs(ci).Single(job => job.Name == "package-windows").Job;
-        var upload = Assert.Single(Steps(package), step => (Scalar(step, "uses") ?? string.Empty).StartsWith("actions/upload-artifact", StringComparison.Ordinal));
-        Assert.Equal(PackageArtifact, Scalar(Mapping(upload, "with"), "name"));
+        // Every artifact a release could carry, once each, and only those — each by the ID its own job
+        // reported, so one re-uploaded under the same name by any other job is never what is taken.
+        var downloaded = Steps(assembly)
+            .Where(step => Uses(step).StartsWith("actions/download-artifact", StringComparison.Ordinal))
+            .Select(step => Mapping(step, "with"))
+            .ToArray();
 
+        Assert.All(downloaded, with => Assert.Null(Scalar(with, "name")));
+        Assert.Equal(
+            built.Select(upload => "${{ needs." + upload.Job + ".outputs.artifact-id }}").Order(StringComparer.Ordinal),
+            downloaded.Select(with => Scalar(with, "artifact-ids")!).Order(StringComparer.Ordinal));
+
+        var needs = Assert.IsType<YamlSequenceNode>(assembly.Children[new YamlScalarNode("needs")]).Children
+            .Cast<YamlScalarNode>()
+            .Select(node => node.Value)
+            .ToArray();
+
+        Assert.All(built, upload => Assert.Contains(upload.Job, needs));
+
+        // It handles only what those jobs built: no action but the artifacts' own, nothing checked out,
+        // nothing installed, nothing switched off.
+        foreach (var step in Steps(assembly))
+        {
+            var uses = Uses(step);
+            Assert.True(
+                uses.Length == 0 || uses.StartsWith("actions/download-artifact@", StringComparison.Ordinal) || uses.StartsWith("actions/upload-artifact@", StringComparison.Ordinal),
+                FormattableString.Invariant($"release-assets must use no action but the artifacts' own; it uses {uses}."));
+
+            foreach (var command in InstallCommands)
+            {
+                Assert.DoesNotContain(command, Run(step), StringComparison.Ordinal);
+            }
+        }
+
+        AssertGates(assembly);
+        Assert.Contains(Steps(assembly), step => Run(step).Contains("sha256sum --check --strict", StringComparison.Ordinal));
+
+        var release = Assert.Single(Steps(assembly), step => Uses(step).StartsWith("actions/upload-artifact", StringComparison.Ordinal));
+        Assert.Equal(ReleaseArtifact, Scalar(Mapping(release, "with"), "name"));
+
+        // The folder's contents at the artifact's root, which is the layout the release publishes from.
+        Assert.Equal("release/", Scalar(Mapping(release, "with"), "path"));
+        AssertReportsTheArtifactItUploads(assembly, release);
+
+        // And the whole CI run reports that ID to the release that calls it.
+        var outputs = Mapping(Mapping(Mapping(Mapping(ci, "on"), "workflow_call"), "outputs"), "release-artifact-id");
+        Assert.Equal("${{ jobs.release-assets.outputs.artifact-id }}", Scalar(outputs, "value"));
+    }
+
+    [Fact]
+    public void The_release_publishes_what_ci_assembled_and_nothing_else()
+    {
         var jobs = Jobs(Release()).ToDictionary(job => job.Name, job => job.Job, StringComparer.Ordinal);
 
         Assert.Equal("./.github/workflows/ci.yml", Scalar(jobs["ci"], "uses"));
         Assert.Equal("ci", Scalar(jobs["publish"], "needs"));
         Assert.Equal("version", Scalar(jobs["ci"], "needs"));
 
-        var download = Assert.Single(Steps(jobs["publish"]), step => (Scalar(step, "uses") ?? string.Empty).StartsWith("actions/download-artifact", StringComparison.Ordinal));
-        Assert.Equal(PackageArtifact, Scalar(Mapping(download, "with"), "name"));
+        var steps = Steps(jobs["publish"]).ToArray();
+        var download = Mapping(Assert.Single(steps, step => Uses(step).StartsWith("actions/download-artifact", StringComparison.Ordinal)), "with");
+        Assert.Null(Scalar(download, "name"));
+        Assert.Equal("${{ needs.ci.outputs.release-artifact-id }}", Scalar(download, "artifact-ids"));
+
+        // The digests are verified before anything is created from them, and against exactly this tag's
+        // archive for every platform.
+        var verify = Array.FindIndex(steps, step => Run(step).Contains("sha256sum --check --strict", StringComparison.Ordinal));
+        var create = Array.FindIndex(steps, step => Run(step).Contains("gh release create", StringComparison.Ordinal));
+        Assert.InRange(verify, 0, create - 1);
+
+        foreach (var platform in PackagePlatforms())
+        {
+            var extension = platform.StartsWith("win-", StringComparison.Ordinal) ? "zip" : "tar.gz";
+            Assert.Contains("agentsplice-$version-" + platform + "." + extension, Run(steps[verify]), StringComparison.Ordinal);
+        }
+
+        // What the draft carries is read from the SHA256SUMS that was verified, so its assets and the
+        // digests it publishes cannot drift apart.
+        var command = Run(steps[create]);
+        Assert.Contains("mapfile -t assets < <(awk", command, StringComparison.Ordinal);
+        Assert.Contains("\"$ASSETS/SHA256SUMS\")", command, StringComparison.Ordinal);
+        Assert.Contains("gh release create \"$GITHUB_REF_NAME\" \"${assets[@]}\" \"$ASSETS/SHA256SUMS\"", command, StringComparison.Ordinal);
+
+        AssertGates(jobs["publish"]);
+    }
+
+    /// <summary>The upload step has an ID, and the job reports that step's artifact ID as its own output.</summary>
+    private static void AssertReportsTheArtifactItUploads(YamlMappingNode job, YamlMappingNode upload)
+    {
+        var id = Scalar(upload, "id");
+        Assert.False(string.IsNullOrEmpty(id), "The upload step must have an id for its artifact ID to be reported.");
+        Assert.Equal("${{ steps." + id + ".outputs.artifact-id }}", Scalar(Mapping(job, "outputs"), "artifact-id"));
+    }
+
+    /// <summary>Neither the job nor any of its steps can be skipped by a condition or allowed to fail.</summary>
+    private static void AssertGates(YamlMappingNode job)
+    {
+        Assert.False(job.Children.ContainsKey(new YamlScalarNode("if")), "A job that gates the release must not be conditional.");
+        Assert.False(job.Children.ContainsKey(new YamlScalarNode("continue-on-error")), "A job that gates the release must not be allowed to fail.");
+
+        foreach (var step in Steps(job))
+        {
+            Assert.False(step.Children.ContainsKey(new YamlScalarNode("if")), FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be conditional."));
+            Assert.False(step.Children.ContainsKey(new YamlScalarNode("continue-on-error")), FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be allowed to fail."));
+        }
     }
 
     [Fact]
@@ -157,6 +290,22 @@ public sealed partial class ReleaseWorkflowContractTests
 
     private static string? Scalar(YamlMappingNode node, string key) =>
         node.Children.TryGetValue(new YamlScalarNode(key), out var value) ? (value as YamlScalarNode)?.Value : null;
+
+    private static string[] PackagePlatforms()
+    {
+        var match = ValidateSet().Match(RepositoryPaths.ReadText(".github", "scripts", "package.ps1"));
+        Assert.True(match.Success, "package.ps1 must declare the platforms it builds in a ValidateSet.");
+
+        return match.Groups["platforms"].Value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(platform => platform.Trim('\''))
+            .ToArray();
+    }
+
+    private static string Uses(YamlMappingNode step) => Scalar(step, "uses") ?? string.Empty;
+
+    [GeneratedRegex(@"\[ValidateSet\((?<platforms>[^)]*)\)\]")]
+    private static partial Regex ValidateSet();
 
     [GeneratedRegex(@"<VersionPrefix>(?<value>[^<]*)</VersionPrefix>")]
     private static partial Regex VersionPrefix();

@@ -1,6 +1,6 @@
 # ADR 0017 — Stage 1D: a Windows package that needs no .NET SDK
 
-- Status: Accepted
+- Status: Accepted, extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (a Linux package; one script and one smoke test for both)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (loopback as a fallback; the SDK
   pinned by feature band), [ADR 0013](0013-stage-1c-metadata-store.md) (the metadata store),

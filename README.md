@@ -43,9 +43,9 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
    lms load <model-id> --context-length 32768
    ```
 
-2. **Start AgentSplice.** [Installing AgentSplice](docs/INSTALLATION.md) covers Docker, the Windows
-   package, and running from source, and the first two carry the dashboard. From a clone, with the
-   .NET 8 SDK:
+2. **Start AgentSplice.** [Installing AgentSplice](docs/INSTALLATION.md) covers Docker, the Windows and
+   Linux packages, and running from source, and the first three carry the dashboard. From a clone, with
+   the .NET 8 SDK:
 
    ```bash
    dotnet run --project src/AgentSplice.Api
@@ -157,6 +157,9 @@ name are checked against the gateway's own
 ([ADR 0019](docs/adr/0019-stage-1d-sample-client-configurations-and-a-quickstart.md)).
 AgentSplice is licensed under the Apache License 2.0, and every artifact carries the license and the
 notices of what it bundles ([ADR 0020](docs/adr/0020-stage-1d-the-project-is-licensed-under-apache-2.md)).
+A Linux package, the Windows package's twin for x64 distributions on glibc, ships beside it in every
+release, and CI assembles a release's assets on every change
+([ADR 0021](docs/adr/0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md)).
 Publishing the image to a registry and the first dated trace report are still to come.
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
@@ -215,11 +218,12 @@ docker compose up --build --wait
 `--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
 shows that status afterwards.
 
-On Windows without Docker, the Windows package needs no .NET installation: download
-`agentsplice-<version>-win-x64.zip` and `SHA256SUMS` from the releases page, check the digest,
-extract it, and run `AgentSplice.Api.exe` from any folder. It listens on loopback, carries the
-dashboard, and keeps its store beside the executable. [Installing AgentSplice](docs/INSTALLATION.md)
-covers all three paths — Docker, the Windows package, and running from source — step by step.
+Without Docker, the Windows and Linux packages need no .NET installation: download
+`agentsplice-<version>-win-x64.zip` or `agentsplice-<version>-linux-x64.tar.gz`, and `SHA256SUMS`, from
+the releases page, check the digest, extract it, and run `AgentSplice.Api.exe` or `AgentSplice.Api` from
+any folder. Each listens on loopback, carries the dashboard, and keeps its store beside the executable.
+[Installing AgentSplice](docs/INSTALLATION.md) covers every path — Docker, the two packages, and running
+from source — step by step.
 
 ## Documentation
 

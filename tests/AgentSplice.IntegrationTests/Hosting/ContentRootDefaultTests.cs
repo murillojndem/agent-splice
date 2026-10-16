@@ -5,8 +5,8 @@ using Xunit;
 namespace AgentSplice.IntegrationTests.Hosting;
 
 /// <summary>
-/// The content root is the working directory everywhere except the Windows package, and an explicit
-/// content root wins even there (ADR 0017).
+/// The content root is the working directory everywhere except the self-contained packages, and an
+/// explicit content root wins even there (ADR 0017, ADR 0021).
 /// </summary>
 /// <remarks>
 /// The decision is a pure function of the switch, the host settings, and the executable's directory,
@@ -71,8 +71,8 @@ public sealed class ContentRootDefaultTests
     [Fact]
     public void The_test_process_does_not_carry_the_switch()
     {
-        // The switch is written by the Windows publish profile into the package's runtime
-        // configuration alone. Were it present here, every integration test would be running the
+        // The switch is written by the packages' publish profiles into their runtime configuration
+        // alone. Were it present here, every integration test would be running the
         // package's content-root rule instead of the one dotnet run and the image use.
         Assert.False(AppContext.TryGetSwitch(ContentRootDefault.SwitchName, out var enabled) && enabled);
         Assert.Null(ContentRootDefault.For([]).ContentRootPath);

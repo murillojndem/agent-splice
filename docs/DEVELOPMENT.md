@@ -95,8 +95,8 @@ dotnet run --project src/AgentSplice.Api -- --agentsplice:dashboard:rootPath=../
 
 The startup log then says `1203 DashboardServed` with the directory. A published gateway looks in
 `dashboard/` beside its content root, so copy `web/AgentSplice.Dashboard/dist` to `<publish>/dashboard`
-when running `dotnet publish` output directly; the container image and the Windows package
-(`Packaging for Windows` below) do this themselves.
+when running `dotnet publish` output directly; the container image and the packages (`Packaging`
+below) do this themselves.
 
 For working on the dashboard, `pnpm dev` is faster: it serves `http://127.0.0.1:5281/dashboard/` with
 hot reload and proxies `/api` to the gateway on 5280, which reproduces the single origin
@@ -180,7 +180,7 @@ CI builds the image and drives it the same way. To run that check against a loca
 bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
 ```
 
-Running directly rather than in a container — from source, or the Windows package — needs none of
+Running directly rather than in a container — from source, or a package — needs none of
 this: the default binding is loopback and no token is configured, so `/api/v1` serves local callers
 and startup refuses any binding that would change that. `docs/INSTALLATION.md` explains why setting a
 token is still worthwhile there.
@@ -210,36 +210,52 @@ dotnet run --project src/AgentSplice.Api
 Spans arrive within about five seconds of an exchange and metrics within a minute. Setting
 `OTEL_EXPORTER_OTLP_ENDPOINT` does nothing; see `docs/OBSERVABILITY.md` "OpenTelemetry export".
 
-### Packaging for Windows
+### Packaging
 
-The Windows package is a self-contained, single-file win-x64 build with the dashboard beside it, for
-machines with no .NET installed (ADR 0017; installing it is in `docs/INSTALLATION.md`). Building it
-needs the .NET 8 SDK, Node 22, and pnpm 10, and PowerShell 7.2 or later:
+The packages are self-contained, single-file builds with the dashboard beside them, for machines with
+no .NET installed: win-x64 for Windows and linux-x64 for x64 distributions on glibc (ADR 0017, ADR 0021;
+installing them is in `docs/INSTALLATION.md`). Building one needs the .NET 8 SDK, Node 22, pnpm 10, and
+PowerShell 7.4 or later, and the Linux package is built on Linux, whose smoke test also uses GNU tar,
+`ss` from iproute2, bash, and curl:
 
 ```powershell
-pwsh -File .github/scripts/package-windows.ps1 -OutputDirectory artifacts/package
-pwsh -File .github/scripts/smoke-windows-package.ps1 -Archive (Get-Item artifacts/package/*.zip).FullName
+# Windows
+pwsh -File .github/scripts/package.ps1 -RuntimeIdentifier win-x64 -OutputDirectory artifacts/package
+pwsh -File .github/scripts/smoke-package.ps1 -Archive (Get-Item artifacts/package/*.zip).FullName
+
+# Linux
+pwsh -File .github/scripts/package.ps1 -RuntimeIdentifier linux-x64 -OutputDirectory artifacts/package
+pwsh -File .github/scripts/smoke-package.ps1 -Archive (Get-Item artifacts/package/*.tar.gz).FullName
 ```
 
-The first script builds the dashboard, publishes the gateway with
-`src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml`, copies the dashboard to where the
-shipped `rootPath` looks, and writes `agentsplice-<version>-win-x64.zip` and `SHA256SUMS`. Everything
-specific to the package lives in that profile, never in the project file, and a contract test holds
-that line: a runtime identifier or `SelfContained` there would change the container publish and break
-the test projects. The profile also sets the runtime switch that makes the executable's directory the
-content root, so the package finds its settings and dashboard wherever it is started from; no other
-build carries it, so `dotnet run` and the image behave exactly as before.
+The first script builds the dashboard, publishes the gateway with the profile named for the platform —
+`src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml` or `linux-x64.pubxml` — copies the
+dashboard to where the shipped `rootPath` looks, adds the license and the notices (ADR 0020), and writes
+`agentsplice-<version>-win-x64.zip` or `agentsplice-<version>-linux-x64.tar.gz`, and `SHA256SUMS`. The
+tar.gz records owner and group 0, the executable's execute bit, and modes nobody but the owner can
+write; it is written only on Linux, where the published executable has that bit. Everything specific to
+a package lives in its profile, never in the project file, and a contract test holds that line: a
+runtime identifier or `SelfContained` there would change the container publish and break the test
+projects. Each profile also sets the runtime switch that makes the executable's directory the content
+root, so a package finds its settings and dashboard wherever it is started from; no other build carries
+it, so `dotnet run` and the image behave exactly as before.
 
-The second script is what CI's `package-windows` job runs. It verifies the archive against
-`SHA256SUMS`, checks what the package contains, then starts it twice from an empty folder elsewhere:
-once with the shipped defaults, checking the dashboard, `/api/v1` without a token, an exchange read
-back from the store, the store beside the executable, nothing written to the working directory, and a
-listener on loopback only; and once with a token, running `smoke-gateway.sh` through Git Bash. Port
-5280 must be free.
+The second script is what CI's `package-windows` and `package-linux` jobs run. It verifies the archive
+against `SHA256SUMS`, checks what the package contains — and on Linux what the archive's listing
+records — then starts it twice from an empty folder elsewhere: once with the shipped defaults, checking
+the dashboard, `/api/v1` without a token, an exchange read back from the store, the store beside the
+executable, nothing written to the working directory, and a listener on loopback only; and once with a
+token, running `smoke-gateway.sh` through Bash, which on Windows is Git Bash. Port 5280 must be free.
 
 A package carries the .NET runtime of the SDK that built it, and nothing patches that runtime
 afterwards, so a package built locally with an old 8.0 SDK carries an old runtime. Releases are built
-by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version.
+by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version. Microsoft
+supports .NET 8 until November 10, 2026.
+
+CI's `release-assets` job then assembles what a release publishes from the two package artifacts: it
+verifies each, combines their digests into one `SHA256SUMS`, checks that the set is one archive per
+platform of one version, and uploads `agentsplice-release`. It runs on every change, so a defect in
+assembling a release fails a pull request.
 
 ## Releasing
 
@@ -252,9 +268,9 @@ A release is a tag, and what it publishes is a draft for a maintainer to review 
    the tag.
 3. `.github/workflows/release.yml` checks that the tag names the build's version and that `LICENSE`,
    `NOTICE`, and `THIRD-PARTY-NOTICES.md` exist (ADR 0020), runs the whole CI suite against the tag, and
-   creates a **draft pre-release** with the
-   Windows package and `SHA256SUMS` that run built and smoke-tested. Nothing is visible to anyone else
-   yet.
+   creates a **draft pre-release** from the `agentsplice-release` artifact that run assembled: the
+   Windows and Linux packages it built and smoke-tested, and one `SHA256SUMS` for both (ADR 0021).
+   Nothing is visible to anyone else yet.
 4. Review the draft — the assets, their digests, the notes — and publish it on GitHub.
 
 The image is not pushed to a registry; a release's image is built from its tag. To retry a failed
@@ -290,7 +306,7 @@ FR-DATA-003 commits to PostgreSQL through the same contracts but no provider shi
 A relative `Data Source` is resolved against the content root, as `appsettings.json` and the
 dashboard's `rootPath` are, so the shipped `Data Source=agentsplice.db` is
 `src/AgentSplice.Api/agentsplice.db` under `dotnet run` and the file beside the executable in the
-Windows package (ADR 0017). Absolute paths, `:memory:`, `file:` URIs, and `|DataDirectory|` are used as
+packages (ADR 0017, ADR 0021). Absolute paths, `:memory:`, `file:` URIs, and `|DataDirectory|` are used as
 written. The startup log names the file as `1305 MetadataStoreOpened`. The gateway never creates the
 store's directory: a missing or read-only one fails startup with a message naming the file.
 

@@ -287,12 +287,14 @@ returned as the same string instance: `:memory:`, `Mode=Memory`, `file:` URIs, `
 absolute paths, and an empty data source. `StoreLocationTests` boots the host with a relative path
 that names different files from the content root and from the working directory — the technique the
 dashboard's `rootPath` test uses — and fails against a raw `UseSqlite`. A missing store directory is a
-startup failure naming the file (`HostStartupTests`). `WindowsPackageContractTests` reads the publish
+startup failure naming the file (`HostStartupTests`). `WindowsPackageContractTests` —
+`SelfContainedPackageContractTests` since part 8 — reads the publish
 profile and fails if the switch's name drifts from the gateway's constant, if any package setting
 moves into the project file, or if a self-contained profile lacks the switch.
 
 What only the real package can prove is the CI `package-windows` job, on `windows-latest`:
-`.github/scripts/smoke-windows-package.ps1` checks the archive against `SHA256SUMS` and what it
+`.github/scripts/smoke-windows-package.ps1` — `smoke-package.ps1` since part 8 — checks the archive
+against `SHA256SUMS` and what it
 contains, then starts it from an empty folder elsewhere — with the shipped defaults, where it reads
 back a refused request from its store, proving EF Core and the native SQLite library inside the single
 file, and with a token, where it runs `smoke-gateway.sh`, whose backslash traversal vectors only a
@@ -383,6 +385,43 @@ the chooser to link vulnerabilities to private reporting. In CI, the package smo
 archive carries the three files, identical to the repository's, and the bundled runtime's own notices
 in `licenses/`; the image job compares the running image's copies with the repository's and reads its
 labels back.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
+## Delivered by Stage 1D, part 8: a Linux package
+
+The Linux package is the Windows package's twin, so the tests hold the two to one set of rules rather
+than repeating them (ADR 0021). `WindowsPackageContractTests` became `SelfContainedPackageContractTests`:
+
+- the self-contained publish profiles are exactly the platforms a package is built for, `linux-x64` and
+  `win-x64`;
+- over each: self-contained, single-file, untrimmed, uncompressed, not ReadyToRun, native libraries
+  beside the executable, no IIS assets, the content-root switch, and no development settings;
+- the package script accepts exactly those platforms, its `dotnet publish` takes the profile named for
+  the one it is given, and no profile is named anywhere by a literal;
+- nothing package-specific is declared in the project file or `Directory.Build.props`, as before.
+
+`ReleaseWorkflowContractTests` replaced its check of the one Windows artifact with three:
+
+- every platform the package script accepts has a CI job that builds it, runs the smoke test, uploads
+  `agentsplice-<platform>`, reports the artifact's ID, and restores no dependency cache, and no job or
+  step there can be skipped or allowed to fail;
+- `release-assets` takes every `agentsplice-*` artifact by the ID its job reported and none by name,
+  needs every job that uploads one, uses no action but the artifacts' own, installs nothing, verifies
+  strictly, uploads `agentsplice-release` from `release/`, and reports its ID, which `ci.yml` reports to
+  the release;
+- the release takes that artifact by ID and nothing else, verifies the digests before it creates the
+  draft, checks every platform's archive, and creates the draft from what `SHA256SUMS` lists.
+
+What only the real package can prove is the CI `package-linux` job, on `ubuntu-latest`, running the same
+`smoke-package.ps1` the Windows job runs. It runs the installation guide's own `sha256sum` check, then
+reads the archive's listing before extracting it: every entry owned by 0:0, folders and the executable
+`rwxr-xr-x`, every other file `rw-r--r--`. Then it holds the Linux package to every check the Windows one
+meets, finding the listener with `ss` where Windows uses `Get-NetTCPConnection`. Both platforms now also
+check the README's line endings and match the whole `Content root path:` log line. The `release-assets`
+job assembles and verifies a release's assets on every change, so on the release's first real run only
+the draft is new. The assembly and publishing scripts were also run against real archives before CI,
+refusing a wrong tag, an extra file, and a stray file in an artifact.
 
 Each fails against its reintroduced defect, listed in the changelog.
 

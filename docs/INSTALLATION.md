@@ -16,7 +16,8 @@ LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127
 | --- | --- | --- |
 | [Docker](#docker) | Docker with Compose v2 | Docker is already there. The store lives in a volume, and an administrative token is required. |
 | [Windows package](#windows-package) | Windows 10 or 11, x64 | You want no Docker and no .NET installation: a folder you extract and run. |
-| [From source](#from-source) | .NET 8 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on Linux or macOS. |
+| [Linux package](#linux-package) | An x64 distribution based on glibc, with OpenSSL | The same on Linux: no Docker and no .NET installation. |
+| [From source](#from-source) | .NET 8 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on macOS or another platform without a package. |
 
 ## Docker
 
@@ -73,8 +74,15 @@ dashboard, so nothing needs to be installed first.
 
 Download `agentsplice-<version>-win-x64.zip` and `SHA256SUMS` from the repository's GitHub Releases
 page. Every release so far is a pre-release, built by CI from its tag and published only after a
-maintainer reviewed it (ADR 0018). Until the first one is published, each CI run's
-`agentsplice-win-x64` artifact holds the same two files, which a signed-in GitHub user can download.
+maintainer reviewed it (ADR 0018). Until the first one is published, the `agentsplice-win-x64` artifact
+of a CI run for a push to `main` holds the same two files, which a signed-in GitHub user can download —
+only such a run: a run for a pull request builds code nobody has reviewed yet, and its artifacts pass
+the same digest check.
+
+```powershell
+gh run list --repo murillojndem/agent-splice --workflow CI --branch main --event push --limit 1
+gh run download <run-id> --repo murillojndem/agent-splice --name agentsplice-win-x64
+```
 
 Check the archive against its published digest before opening it:
 
@@ -185,10 +193,106 @@ delete the old folder.
 
 The package carries its own .NET runtime, so Windows Update and .NET installers never patch it:
 upgrading AgentSplice is how it receives .NET security fixes. `README.txt` in each package names the
-runtime version it was built with.
+runtime version it was built with. Microsoft supports .NET 8 until November 10, 2026; after that date no
+.NET 8 build, this package included, receives runtime fixes.
 
 To uninstall, stop the gateway, delete its folder and `%LOCALAPPDATA%\AgentSplice` if you used it, and
-remove any `AGENTSPLICE__*` variables you set for your account.
+remove any `AGENTSPLICE__*` variables, and `AGENTSPLICE_ADMIN_API_KEY`, that you set for your account.
+
+## Linux package
+
+A self-contained build for 64-bit Linux distributions based on glibc — Debian, Ubuntu, Fedora, and most
+others, but not Alpine, which uses musl (ADR 0021). It carries its own .NET runtime and the dashboard,
+so it needs nothing installed beyond what such a distribution already has, OpenSSL included.
+
+### Download and verify
+
+Download `agentsplice-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the repository's GitHub Releases
+page into one folder. As for Windows, every release is a pre-release that a maintainer reviewed, and
+until the first one is published the `agentsplice-linux-x64` artifact of a CI run for a push to `main` —
+never one for a pull request — holds the same two files (`gh run download <run-id> --name
+agentsplice-linux-x64`, as shown for Windows). Check the archive against its own line in `SHA256SUMS`,
+which lists every asset of the release:
+
+```bash
+archive=agentsplice-0.2.0-alpha-linux-x64.tar.gz   # the file you downloaded
+grep -F "  $archive" SHA256SUMS | sha256sum --check --strict -
+```
+
+It must print `agentsplice-0.2.0-alpha-linux-x64.tar.gz: OK`; if the line is missing, `sha256sum` finds
+nothing to check and fails. GitHub also shows each asset's digest on the release page. The package is
+not signed (`docs/SECURITY.md`).
+
+### Extract
+
+Into a folder only your account can write. By default the gateway keeps its store beside the
+executable, so the folder must be writable by you, and whoever can write it can replace the executable
+and the dashboard's script:
+
+```bash
+mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
+tar -xzf agentsplice-0.2.0-alpha-linux-x64.tar.gz -C ~/.local/opt/agentsplice
+```
+
+`chmod` rather than `mkdir -m`, which leaves a folder that already exists as it was.
+
+That gives `~/.local/opt/agentsplice/agentsplice-<version>-linux-x64/`, which holds `AgentSplice.Api`,
+`libe_sqlite3.so`, `appsettings.json`, the `dashboard` folder, `README.txt`, and the license: `LICENSE`,
+`NOTICE`, `THIRD-PARTY-NOTICES.md`, and the bundled .NET runtime's own notices in `licenses`. A folder
+under `/opt` owned by root is not writable by you, and the gateway would refuse to start for want of a
+store; extract there only if you also point the store elsewhere (see Token, configuration, and data
+below).
+
+### Run
+
+```bash
+~/.local/opt/agentsplice/agentsplice-0.2.0-alpha-linux-x64/AgentSplice.Api
+```
+
+As on Windows, it can be started from any folder, reads its settings and serves its dashboard from
+beside the executable, and writes nothing where it was started. Stop it with Ctrl+C.
+
+### Token, configuration, and data
+
+These work as for the Windows package, with the shell's syntax:
+
+```bash
+# An administrative token, in the shell that then starts the gateway
+export AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "$AGENTSPLICE_ADMIN_API_KEY"   # paste this into the dashboard's token field
+
+# A different runtime address, from the package folder
+./AgentSplice.Api --agentsplice:runtimes:0:baseUrl=http://127.0.0.1:8080/v1
+
+# The store outside the package folder, so an upgrade does not touch it
+mkdir -p ~/.local/share/agentsplice && chmod 700 ~/.local/share/agentsplice
+export AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING="Data Source=$HOME/.local/share/agentsplice/agentsplice.db"
+```
+
+`chmod 700` keeps both folders to your account: SQLite creates the store readable by everyone your
+umask allows, usually the whole machine, so the folder it is in is what protects the file. It does not
+protect what the gateway serves: with no token, every account on the machine can read the same evidence
+from `/api/v1` while the gateway runs, because loopback callers are served. On a machine with other
+accounts, set the token. Two differences from Windows matter:
+
+- **Environment variable names are case-sensitive.** The gateway looks a secret up by exactly the name
+  the setting gives. With a name exported in another case, it finds no token: it refuses to start on a
+  binding another machine could reach, and on loopback every `/api/v1` request is refused.
+- **`~` is not expanded inside a setting.** Write the path in full, or let the shell expand `$HOME`
+  before the gateway sees it, as above.
+
+### Upgrade and uninstall
+
+To upgrade, stop the gateway, extract the new version beside the old one, copy the store across if it
+is in the old folder, and delete the old folder. The package carries its own .NET runtime, so the
+distribution's updates never patch it: upgrading AgentSplice is how it receives .NET security fixes, and
+`README.txt` names the runtime version it was built with. Microsoft supports .NET 8 until November 10,
+2026; after that date no .NET 8 build, this package included, receives runtime fixes.
+
+To uninstall, stop the gateway and delete its folder, `~/.local/share/agentsplice` if you used it, and
+any `AGENTSPLICE__*` variables, and `AGENTSPLICE_ADMIN_API_KEY`, that you exported in your shell's
+startup files.
 
 ## From source
 
@@ -213,8 +317,8 @@ Copy-Item -Recurse web/AgentSplice.Dashboard/dist out/dashboard
 Set-Location out; dotnet AgentSplice.Api.dll
 ```
 
-Start it from inside `out`: unlike the Windows package, a framework-dependent build takes its content
-root from the working directory, as every ASP.NET Core application does.
+Start it from inside `out`: unlike the packages, a framework-dependent build takes its content root from
+the working directory, as every ASP.NET Core application does.
 
 ## Checking that it is up
 
@@ -230,8 +334,10 @@ curl.exe -i http://127.0.0.1:5280/health/live
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `1204 DashboardBuildMissing` at startup; nothing at `/dashboard/` | No build where `agentsplice:dashboard:rootPath` points. The image and the Windows package carry one; from source, build it first (`docs/DEVELOPMENT.md`). The APIs work regardless. |
-| `The metadata store '…' could not be opened for writing` | The store's directory does not exist or is not writable. Create it, choose another file, or set `agentsplice:persistence:mode` to `None`. |
+| `1204 DashboardBuildMissing` at startup; nothing at `/dashboard/` | No build where `agentsplice:dashboard:rootPath` points. The image and the packages carry one; from source, build it first (`docs/DEVELOPMENT.md`). The APIs work regardless. |
+| `The metadata store '…' could not be opened for writing` | The store's directory does not exist or is not writable. Create it, choose another file, or set `agentsplice:persistence:mode` to `None`. On Linux, a package extracted into a folder you cannot write, such as one under `/opt`, meets this at its default store. |
+| `Permission denied` starting `AgentSplice.Api` on Linux | The archive was extracted with a tool that dropped the execute bit. Extract it with `tar -xzf`, which keeps it, or run `chmod +x AgentSplice.Api`. |
+| On Linux, `/api/v1` answers `401` with the token you set | The gateway did not see the variable: its name differs in case from the one `agentsplice:administration:apiKeyEnvironmentVariable` names, which on Linux must match exactly, or it was not exported in the shell that started the gateway. Export it, then start the gateway from that shell. |
 | `Failed to bind to address http://127.0.0.1:5280` | Something else is using the port. Stop it, or pass `--urls http://127.0.0.1:<another port>`. |
 | Startup refuses a binding beyond loopback | Serving stored evidence to a network requires an administrative token (`docs/SECURITY.md`). |
 | A setting seems to be ignored | Environment variables use double underscores (`AGENTSPLICE__PERSISTENCE__MODE`), and a command-line argument wins over both a variable and `appsettings.json`. |

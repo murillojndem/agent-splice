@@ -2,7 +2,7 @@ namespace AgentSplice.Api.Hosting;
 
 /// <summary>
 /// Decides the host's content root: the working directory, as ASP.NET Core chooses it, unless this
-/// build is the Windows package (ADR 0017).
+/// build is a self-contained package, Windows or Linux (ADR 0017, ADR 0021).
 /// </summary>
 /// <remarks>
 /// The content root is where <c>appsettings.json</c> is read from and what
@@ -13,7 +13,7 @@ namespace AgentSplice.Api.Hosting;
 /// the built-in defaults and refuses to start with an error about a connection string the operator
 /// never removed.
 ///
-/// The package therefore says so itself. Its publish profile writes the runtime switch named by
+/// A package therefore says so itself. Its publish profile writes the runtime switch named by
 /// <see cref="SwitchName"/> into the executable's runtime configuration, and with it set the content
 /// root is the directory the executable is in. No other build carries the switch — not
 /// <c>dotnet run</c>, not the container image, not the test host — so for them this returns exactly
@@ -27,7 +27,7 @@ namespace AgentSplice.Api.Hosting;
 /// </remarks>
 internal static class ContentRootDefault
 {
-    /// <summary>The runtime switch the Windows package's publish profile sets.</summary>
+    /// <summary>The runtime switch every self-contained package's publish profile sets.</summary>
     internal const string SwitchName = "AgentSplice.Hosting.ContentRootIsApplicationDirectory";
 
     /// <summary>The builder options for this process.</summary>

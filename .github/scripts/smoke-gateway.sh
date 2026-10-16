@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Smoke test for a running AgentSplice gateway with an administrative token configured: the container
-# image (ADR 0015) or the Windows package (ADR 0017).
+# image (ADR 0015) or a self-contained package, Windows or Linux (ADR 0017, ADR 0021).
 #
 # The integration tests prove the serving rules against a fixture build in an in-process server. This
 # proves what they cannot: that the artifact as built carries the dashboard it was built with, that
 # the shell names files the gateway actually serves, that real Kestrel path normalisation — on Linux
-# in the image, on Windows in the package — keeps the build directory closed, and that serving it
-# changed nothing else.
+# in the image and the Linux package, on Windows in the Windows package — keeps the build directory
+# closed, and that serving it changed nothing else.
 #
 # Usage: bash .github/scripts/smoke-gateway.sh <base-url> <admin-token>
 #   e.g. bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"

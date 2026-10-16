@@ -120,7 +120,7 @@ Threat: a web page the operator visits sends requests to a gateway on `127.0.0.1
 
 Status: residual, and unchanged by serving the dashboard — an attacker needs only the API, which was reachable the same way before. Mitigations today: configuring an administrative token closes the rebinding read of `/api/v1`, and nothing reads a response cross-origin without CORS, which the gateway never sends. Follow-ups: a Host allowlist for the loopback default, and refusing completion requests that are not `application/json`.
 
-The Windows package runs in exactly this configuration by default — loopback, no token — on the machine where its operator browses the web, so `docs/INSTALLATION.md` recommends setting a token and shows how (ADR 0017).
+The Windows and Linux packages run in exactly this configuration by default — loopback, no token — on the machine where their operator browses the web, so `docs/INSTALLATION.md` recommends setting a token and shows how (ADR 0017, ADR 0021).
 
 ### Dashboard asset tampering
 
@@ -128,27 +128,27 @@ Threat: something able to write to the gateway's files replaces the dashboard's 
 
 Status: residual. In the image the build sits under `/app`, which the process user owns, as it owns the gateway's own assemblies; making the dashboard alone root-owned would protect nothing, because the owner of a directory can replace its contents. Follow-up: a read-only `/app`.
 
-The Windows package has the same property in its install folder, where whoever can write it can also replace the executable itself. The installation guide puts the folder under the user's own profile, because a folder created directly under `C:\` grants write access to every authenticated user (ADR 0017).
+The packages have the same property in their install folders, where whoever can write one can also replace the executable itself. The installation guide puts the folder under the user's own profile, because a folder created directly under `C:\` grants write access to every authenticated user (ADR 0017), and on Linux creates it with `mkdir -m 700`; the Linux archive records nothing writable by group or others (ADR 0021).
 
 ### Evidence at rest
 
 Threat: the SQLite store, or a backup of it, is read by someone it was not meant for. It holds structural metadata and the identifiers `docs/SECURITY.md` lists as retained — never prompts or output by default, but enough to describe what was run, when, and against which model.
 
-Status: residual. The store is unencrypted and protected by its file system permissions alone: the `/data` volume in the image, and the folder it is created in for the Windows package — beside the executable unless configured elsewhere, a relative path resolved against the content root so that it never lands in whatever directory the process was started from (ADR 0017). Startup names the file (`1305`) so an operator knows what to protect. Retention bounds how long rows stay; it does not reach copies. Follow-up: an encryption decision when content retention exists (`docs/SECURITY.md` "Content retention").
+Status: residual. The store is unencrypted and protected by its file system permissions alone: the `/data` volume in the image, and the folder it is created in for the packages — beside the executable unless configured elsewhere, a relative path resolved against the content root so that it never lands in whatever directory the process was started from (ADR 0017). On Linux SQLite creates the file readable by whomever the umask allows, so the folder's mode is what protects it, and the installation guide sets the folders it suggests to mode 700 (ADR 0021). The folder protects the file only: with no administrative token, every account on the machine can read the same evidence from `/api/v1` while the gateway runs, so the guide recommends the token wherever other accounts exist. Follow-up: create the store with mode 0600 on Unix, so the file protects itself. Startup names the file (`1305`) so an operator knows what to protect. Retention bounds how long rows stay; it does not reach copies. Follow-up: an encryption decision when content retention exists (`docs/SECURITY.md` "Content retention").
 
 ### Release artifact integrity
 
-Threat: an operator downloads a Windows package that is not the one the tagged source builds — replaced on the way, built from something other than the tag, or published by a compromised build step.
+Threat: an operator downloads a package that is not the one the tagged source builds — replaced on the way, built from something other than the tag, or published by a compromised build step.
 
-Mitigations: the package is built only by CI, from the tag, after the full suite passes, and a tag that does not name the build's version stops the release before anything is built. The release is a draft until a maintainer publishes it. The job that creates it holds the only write token, checks nothing out, and installs nothing; it verifies `SHA256SUMS` before uploading, and the installation guide tells users to verify it after downloading (ADR 0018).
+Mitigations: the packages are built only by CI, from the tag, after the full suite passes, with no dependency cache restored, and a tag that does not name the build's version stops the release before anything is built. A read-only job that checks nothing out verifies each package and assembles them, with one `SHA256SUMS`, into the artifact the release publishes (ADR 0021). Each artifact is taken by the ID its producing job reported, so another job of the same run that re-uploads one under the same name — archive and digest together — makes the download fail rather than the substitute publish. The release is a draft until a maintainer publishes it. The job that creates it holds the only write token, checks nothing out, and installs nothing; it verifies `SHA256SUMS` again before uploading, and the installation guide tells users to verify the line for the file they downloaded (ADR 0018).
 
-Status: residual. The package is not code signed and no build provenance is attested, and `SHA256SUMS` sits beside the archive it describes, so anyone able to replace a release asset can replace both. GitHub's own record of each asset's digest is the independent check. Follow-ups: signing and attested provenance.
+Status: residual. The packages are not signed and no build provenance is attested. The digests detect corruption in transfer, not substitution: a compromised step inside a package job writes the archive and its digest together, and `SHA256SUMS` sits beside the archives it describes, so anyone able to replace a release asset can replace both. GitHub's record of each asset's digest is computed from whatever was uploaded, so it is not independent of that either. Until releases are immutable once published, a replaced asset is undetectable. Follow-ups: immutable releases, signing, and attested provenance.
 
 ### Unserviced bundled runtime
 
-Threat: a .NET security fix ships, and installed Windows packages keep running the vulnerable runtime, because a self-contained application carries its own copy and Windows Update does not patch it.
+Threat: a .NET security fix ships, and installed packages keep running the vulnerable runtime, because a self-contained application carries its own copy and neither Windows Update nor a Linux distribution's updates patch it.
 
-Status: residual. Packages are built in CI with the current .NET 8 SDK, so each one carries the latest runtime patch at the time it was built, and `README.txt` in the package names that version. A fix reaches an installation only through a new AgentSplice release that the operator installs; there is no update check.
+Status: residual. Packages are built in CI with the current .NET 8 SDK, so each one carries the latest runtime patch at the time it was built, and `README.txt` in the package names that version. A fix reaches an installation only through a new AgentSplice release that the operator installs; there is no update check. Microsoft supports .NET 8 until November 10, 2026: after that date there are no .NET 8 fixes for any release to carry, until AgentSplice moves to a supported .NET.
 
 ### Container health probe
 
@@ -185,7 +185,7 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - serving the dashboard changes no answer outside `/dashboard`;
 - the health probe refuses any target off loopback `http` without sending a request, and exits only 0 or 1;
 - on Windows, backslash forms of a traversal never serve a file outside the dashboard build;
-- the Windows package writes nothing to the directory it is started from, and listens on loopback only;
+- each package writes nothing to the directory it is started from, and listens on loopback only;
 - a release is created only as a draft, only by the one job allowed to write, and only after its digests verify;
 - adapter cannot activate outside declared constraints;
 - exported reports include provenance and omit secret values.

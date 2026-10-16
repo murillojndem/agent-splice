@@ -1,6 +1,7 @@
 # ADR 0018 — Stage 1D: tagged releases as reviewed drafts
 
-- Status: Accepted, decision 6 refined by [ADR 0020](0020-stage-1d-the-project-is-licensed-under-apache-2.md)
+- Status: Accepted, decision 6 refined by [ADR 0020](0020-stage-1d-the-project-is-licensed-under-apache-2.md),
+  decisions 2 and 5 extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (both packages, assembled in CI and taken by artifact ID; one `SHA256SUMS`, checked by the line for the file downloaded)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (Windows and Linux CI),
   [ADR 0016](0016-stage-1d-the-image-reports-its-health.md) (the image's health check),
@@ -34,6 +35,10 @@ smoke-tested. The package the release carries is the `agentsplice-win-x64` artif
 uploaded. Nothing is rebuilt for publishing, so what is published is what was tested. The release has
 its own concurrency group, because a reusable workflow that waits on its caller's group never starts.
 
+> **Extended by ADR 0021.** The release carries the `agentsplice-release` artifact that CI's
+> `release-assets` job assembles from both packages, taken by the artifact ID CI reports, and creates
+> the draft from the files its `SHA256SUMS` lists.
+
 ### 3. Drafts, published by a person
 
 The release is created with `gh release create --draft --prerelease --verify-tag`. Nobody else sees
@@ -53,6 +58,9 @@ The release carries `SHA256SUMS` beside the archive, and the installation guide 
 it with `Get-FileHash`. GitHub also records each asset's digest. The package is not Authenticode
 signed and no build provenance is attested: signing needs a certificate or a signing service, and
 attestation is a separate decision. Both are recorded as residuals rather than implied.
+
+> **Extended by ADR 0021.** One `SHA256SUMS` lists every asset, and the installation guide checks a
+> download by its own line: `Get-FileHash` on Windows, `sha256sum --check` on Linux.
 
 ### 6. A license gates the release
 

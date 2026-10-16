@@ -177,7 +177,7 @@ public sealed partial class LicenseContractTests
     [Fact]
     public void The_package_carries_the_license_and_the_notices_or_is_not_built()
     {
-        var script = RepositoryPaths.ReadText(".github", "scripts", "package-windows.ps1");
+        var script = RepositoryPaths.ReadText(".github", "scripts", "package.ps1");
 
         Assert.Contains("foreach ($notice in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md'))", script, StringComparison.Ordinal);
         Assert.Contains("every package carries it (ADR 0020)", script, StringComparison.Ordinal);

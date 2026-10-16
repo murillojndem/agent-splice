@@ -143,7 +143,9 @@ Status: in progress. Done so far:
   client, with a README quickstart, checked against the gateway's address, headers, settings, and
   error codes (ADR 0019);
 - the Apache License 2.0, carried with the notices of what each artifact bundles, and a private channel
-  for vulnerability reports (ADR 0020).
+  for vulnerability reports (ADR 0020);
+- a self-contained Linux package beside the Windows one, built and smoke-tested on Linux in CI, with a
+  release's assets assembled and verified on every change (ADR 0021).
 
 The rest of the list below is not done.
 
@@ -153,10 +155,10 @@ The rest of the list below is not done.
 - Docker image with a health check that needs no HTTP client in the base image (done);
 - Docker image published to a registry;
 - Compose example using `host.docker.internal` for LM Studio (done);
-- direct-process setup: from source anywhere, and a self-contained Windows package (done);
+- direct-process setup: from source anywhere, and self-contained Windows and Linux packages (done);
 - loopback-only defaults, checked against the running package as well as the host (done);
-- release workflow: a version tag becomes a reviewed draft pre-release carrying the Windows package
-  (done);
+- release workflow: a version tag becomes a reviewed draft pre-release carrying the Windows and Linux
+  packages and one `SHA256SUMS` (done);
 - sample OpenCode, Cline, and generic client configurations (done);
 - close the streaming gap recorded in ADR 0019: a stream that times out or loses its runtime after the
   runtime's headers but before its first relayed byte must reach the client as more than a bare

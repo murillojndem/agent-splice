@@ -25,6 +25,7 @@ body:
       options:
         - Docker Compose from a clone
         - Windows package
+        - Linux package
         - From source
     validations:
       required: true

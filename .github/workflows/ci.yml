@@ -6,8 +6,14 @@ on:
   pull_request:
   workflow_dispatch:
   # The release workflow runs this whole suite against the tag before it publishes anything, and
-  # publishes the Windows package this run uploads (ADR 0018).
+  # publishes the agentsplice-release artifact this run's release-assets job assembles — by its ID, so
+  # an artifact some other job re-uploaded under the same name is never what it publishes (ADR 0018,
+  # ADR 0021).
   workflow_call:
+    outputs:
+      release-artifact-id:
+        description: The ID of the agentsplice-release artifact release-assets uploaded.
+        value: ${{ jobs.release-assets.outputs.artifact-id }}
 
 permissions:
   contents: read
@@ -217,16 +223,18 @@ jobs:
           docker compose down --volumes || true
 
   package-windows:
-    # The Windows package is the other way an alpha user installs AgentSplice, and the one that needs
-    # no Docker and no .NET SDK (ADR 0017). Built and started here on every change, like the image, so
-    # a packaging defect fails a pull request rather than a release. Windows, because the package is a
-    # Windows executable and because only the Windows file system can prove the backslash traversal
-    # checks. The artifact it uploads is what a tagged release publishes.
+    # The Windows package is one of the two ways an alpha user installs AgentSplice without Docker or a
+    # .NET SDK (ADR 0017). Built and started here on every change, like the image, so a packaging defect
+    # fails a pull request rather than a release. Windows, because the package is a Windows executable
+    # and because only the Windows file system can prove the backslash traversal checks. The artifact it
+    # uploads is what a tagged release publishes, through release-assets, which takes it by its ID.
     name: package (win-x64)
     runs-on: windows-latest
     defaults:
       run:
         shell: pwsh
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
 
     steps:
       - name: Checkout
@@ -246,21 +254,22 @@ jobs:
           version: 10.30.0
 
       - name: Set up Node
+        # No dependency cache: a release artifact is built from the lockfile alone, never from a store
+        # another job's run could have written.
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: pnpm
-          cache-dependency-path: web/AgentSplice.Dashboard/pnpm-lock.yaml
 
       - name: Build the package
-        run: ./.github/scripts/package-windows.ps1 -OutputDirectory artifacts/package
+        run: ./.github/scripts/package.ps1 -RuntimeIdentifier win-x64 -OutputDirectory artifacts/package
 
       - name: Smoke test the package
         run: |
           $archive = Get-ChildItem artifacts/package -Filter 'agentsplice-*-win-x64.zip' | Select-Object -First 1
-          ./.github/scripts/smoke-windows-package.ps1 -Archive $archive.FullName -Bash "$env:ProgramFiles\Git\bin\bash.exe"
+          ./.github/scripts/smoke-package.ps1 -Archive $archive.FullName -Bash "$env:ProgramFiles\Git\bin\bash.exe"
 
       - name: Upload the package
+        id: upload
         uses: actions/upload-artifact@v4
         with:
           name: agentsplice-win-x64
@@ -268,3 +277,133 @@ jobs:
             artifacts/package/*.zip
             artifacts/package/SHA256SUMS
           if-no-files-found: error
+
+  package-linux:
+    # The Linux package (ADR 0021): the Windows package's twin for x64 distributions on glibc, built and
+    # smoke-tested on Linux, where the archive can record the executable's permission bits and ss can see
+    # the listener. The artifact it uploads is what a tagged release publishes, through release-assets.
+    name: package (linux-x64)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # As for Windows: the package carries this SDK's runtime.
+          dotnet-version: '8.0.x'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+
+      - name: Set up Node
+        # No dependency cache, as for Windows.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the package
+        run: ./.github/scripts/package.ps1 -RuntimeIdentifier linux-x64 -OutputDirectory artifacts/package
+
+      - name: Smoke test the package
+        run: |
+          $archive = Get-ChildItem artifacts/package -Filter 'agentsplice-*-linux-x64.tar.gz' | Select-Object -First 1
+          ./.github/scripts/smoke-package.ps1 -Archive $archive.FullName -Bash bash
+
+      - name: Upload the package
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsplice-linux-x64
+          path: |
+            artifacts/package/*.tar.gz
+            artifacts/package/SHA256SUMS
+          if-no-files-found: error
+
+  release-assets:
+    # What a release publishes, assembled from what the jobs it needs built and checked (ADR 0021): every
+    # archive, verified against its own digest, with one SHA256SUMS for all of them. It runs on every
+    # change, so a defect in putting a release together fails a pull request rather than a tag.
+    #
+    # It takes each artifact by the ID its job reported, not by name: any job in this run can re-upload
+    # an artifact under an existing name, archive and SHA256SUMS together, and a digest check against a
+    # file that came in the same artifact would still pass. A re-uploaded artifact has another ID, so the
+    # download fails instead. It checks nothing out and installs nothing.
+    name: release assets
+    needs: [package-windows, package-linux]
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+
+    steps:
+      - name: Download the Windows package
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.package-windows.outputs.artifact-id }}
+          path: artifacts/windows
+
+      - name: Download the Linux package
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.package-linux.outputs.artifact-id }}
+          path: artifacts/linux
+
+      - name: Verify each artifact and combine their digests
+        run: |
+          mkdir release
+          for download in artifacts/*/; do
+            # Downloaded by ID, an artifact's files can land in a folder named for it below the path; the
+            # folder holding SHA256SUMS is the artifact either way, and there must be exactly one.
+            mapfile -t sums < <(find "$download" -maxdepth 2 -type f -name SHA256SUMS)
+            if [ "${#sums[@]}" -ne 1 ]; then
+              echo "$download does not hold exactly one SHA256SUMS." >&2
+              exit 1
+            fi
+            artifact="$(dirname "${sums[0]}")"
+            # Each artifact is one archive and its own one-line SHA256SUMS, and the archive matches it.
+            if [ "$(ls -A "$artifact" | wc -l)" -ne 2 ] || [ "$(wc -l < "$artifact/SHA256SUMS")" -ne 1 ]; then
+              echo "$artifact must hold one archive and its SHA256SUMS line:" >&2
+              ls -A "$artifact" >&2
+              exit 1
+            fi
+            (cd "$artifact" && sha256sum --check --strict SHA256SUMS)
+            cat "$artifact/SHA256SUMS" >> "$RUNNER_TEMP/SHA256SUMS"
+            find "$artifact" -maxdepth 1 -type f ! -name SHA256SUMS -exec mv -t release/ -- {} +
+          done
+          LC_ALL=C sort -k 2 "$RUNNER_TEMP/SHA256SUMS" > release/SHA256SUMS
+
+          # Exactly one archive per platform, all of one version, and nothing else.
+          version="$(ls release | sed -nE 's/^agentsplice-(.+)-win-x64\.zip$/\1/p')"
+          expected="$(printf '%s\n' SHA256SUMS "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          if [ -z "$version" ] || [ "$(ls release | LC_ALL=C sort)" != "$expected" ]; then
+            echo "The release assets are not one Windows and one Linux package of one version:" >&2
+            ls release >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The assets are version $version, but the tag is $GITHUB_REF_NAME." >&2
+            exit 1
+          fi
+          (cd release && sha256sum --check --strict SHA256SUMS)
+
+      - name: Upload the release assets
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsplice-release
+          # The folder's contents, at the artifact's root: what the release publishes, flat.
+          path: release/
+          if-no-files-found: error
+          # The release that consumes it runs in this same workflow run, minutes later.
+          retention-days: 7
+          # The archives are compressed already.
+          compression-level: 0

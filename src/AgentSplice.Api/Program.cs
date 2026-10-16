@@ -7,9 +7,9 @@ using AgentSplice.Observability;
 using AgentSplice.Protocols.OpenAI;
 using AgentSplice.Providers.LmStudio;
 
-// The working directory is the content root, as ASP.NET Core chooses it, except in the Windows
-// package, whose executable finds its settings and dashboard beside itself wherever it is started
-// from (ADR 0017). Every other build gets exactly CreateBuilder(args).
+// The working directory is the content root, as ASP.NET Core chooses it, except in the self-contained
+// packages, whose executable finds its settings and dashboard beside itself wherever it is started
+// from (ADR 0017, ADR 0021). Every other build gets exactly CreateBuilder(args).
 var builder = WebApplication.CreateBuilder(ContentRootDefault.For(args));
 
 // Loopback-only unless an operator says otherwise. Applied here rather than in appsettings.json so

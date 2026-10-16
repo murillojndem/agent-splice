@@ -1,13 +1,13 @@
 # Third-party notices
 
 AgentSplice is licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE)). What it distributes also carries
-third-party software, each under its own license: the Windows package a release publishes, and the container image
-built from this repository. Each carries this file. Direct NuGet dependencies are pinned in
+third-party software, each under its own license: the Windows and Linux packages a release publishes, and the
+container image built from this repository. Each carries this file. Direct NuGet dependencies are pinned in
 `Directory.Packages.props` and transitive ones are what the restore resolves at the release's tag; the dashboard's
 are pinned by `web/AgentSplice.Dashboard/pnpm-lock.yaml`.
 
-- **The Windows package** is self-contained, so it also carries the .NET runtime and ASP.NET Core. Its `licenses/`
-  folder holds the runtime pack's own license and third-party notices and ASP.NET Core's third-party notices, as
+- **The Windows and Linux packages** are self-contained, so they also carry the .NET runtime and ASP.NET Core. Each
+  package's `licenses/` folder holds the runtime pack's own license and third-party notices and ASP.NET Core's third-party notices, as
   Microsoft ships them in the runtime packs the package was published with. ASP.NET Core 8's pack carries no
   separate license file: ASP.NET Core is MIT under the same holder as the runtime, whose notice is below.
 - **The container image** is built on Microsoft's `mcr.microsoft.com/dotnet/aspnet:8.0` image, which carries the
@@ -22,13 +22,13 @@ precedes the asterisk.
 
 | Component | Packages | License | Copyright |
 | --- | --- | --- | --- |
-| .NET runtime and ASP.NET Core | in the Windows package; in the image's base layer | MIT | .NET Foundation and Contributors |
+| .NET runtime and ASP.NET Core | in the Windows and Linux packages; in the image's base layer | MIT | .NET Foundation and Contributors |
 | Entity Framework Core and Microsoft.Data.Sqlite | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.*`, `Microsoft.Data.Sqlite.Core` | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions | `Microsoft.Extensions.*` | MIT | .NET Foundation and Contributors |
 | System libraries | `System.Diagnostics.DiagnosticSource`, `System.Diagnostics.EventLog`, `System.Memory` | MIT | .NET Foundation and Contributors |
 | OpenTelemetry .NET | `OpenTelemetry`, `OpenTelemetry.*` | Apache-2.0 | The OpenTelemetry Authors |
 | SQLitePCLRaw | `SQLitePCLRaw.*` | Apache-2.0 | 2014-2023 SourceGear, LLC |
-| SQLite | compiled into `SQLitePCLRaw.lib.e_sqlite3`: `e_sqlite3.dll` in the Windows package, `libe_sqlite3.so` among the image's native libraries | Public domain | — |
+| SQLite | compiled into `SQLitePCLRaw.lib.e_sqlite3`: `e_sqlite3.dll` in the Windows package, `libe_sqlite3.so` in the Linux package and among the image's native libraries | Public domain | — |
 | React | `react`, `react-dom`, `scheduler`, bundled into the dashboard | MIT | Facebook, Inc. and its affiliates |
 | React Router | `react-router-dom`, `react-router`, `@remix-run/router`, bundled into the dashboard | MIT | React Training LLC 2015-2019; Remix Software Inc. 2020-2021; Shopify Inc. 2022-2023 |
 | TanStack Query | `@tanstack/react-query`, `@tanstack/query-core`, bundled into the dashboard | MIT | 2021-present Tanner Linsley |

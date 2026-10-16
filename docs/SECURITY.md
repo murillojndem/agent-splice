@@ -54,24 +54,31 @@ The gateway serves the dashboard build at `/dashboard/` on its own origin (ADR 0
 
 ## Local installation
 
-The Windows package (ADR 0017, `docs/INSTALLATION.md`) runs as the user who starts it, from a folder
-that user extracted:
+The Windows and Linux packages (ADR 0017, ADR 0021, `docs/INSTALLATION.md`) run as the user who
+starts them, from a folder that user extracted:
 
 - **The folder is trusted like `/app` in the image.** Whoever can write it can replace the executable,
   its settings, and the dashboard's script. Install it under the user's own profile
-  (`%LOCALAPPDATA%\Programs`), not in a folder every user can write; a folder created directly under
-  `C:\` inherits write access for all authenticated users.
+  (`%LOCALAPPDATA%\Programs` on Windows, a folder set to mode 700 under the home directory on Linux),
+  not in a folder every user can write; a folder created directly under `C:\` inherits write access for
+  all authenticated users. The Linux archive records folders and the executable as `rwxr-xr-x` and every
+  other file as `rw-r--r--`.
 - **The store holds evidence.** `agentsplice.db` beside the executable, or wherever
   `agentsplice:persistence:connectionString` points, holds the structural metadata and identifiers
   this document lists as retained, unencrypted. It is protected by the folder's permissions alone, and
-  so are copies of it.
-- **The default is loopback without a token,** which serves `/api/v1` to every local caller. Setting a
-  token is recommended even so; the installation guide shows how, and the threat model records the
-  browser-based read it closes.
+  so are copies of it. On Linux, SQLite creates the file readable by whomever the umask allows — usually
+  every account on the machine — so the guide sets the folders it suggests to mode 700. The folder
+  protects the file only; see the next point for what the gateway serves.
+- **The default is loopback without a token,** which serves `/api/v1` to every local caller — every
+  account on the machine, not only the one that started the gateway, while it runs. Setting a token is
+  recommended even so, and on a machine with other accounts it is what keeps the evidence to its owner;
+  the installation guide shows how, and the threat model records the browser-based read it also closes.
 - **The bundled runtime is not serviced.** A self-contained package carries the .NET runtime it was
-  built with, and Windows Update does not patch it. .NET security fixes reach a package only through a
-  new AgentSplice release; `README.txt` in each package names the runtime version.
-- **The package is not code signed.** Its integrity rests on the SHA-256 digest published beside it
+  built with, and neither Windows Update nor a Linux distribution's updates patch it. .NET security
+  fixes reach a package only through a new AgentSplice release; `README.txt` in each package names the
+  runtime version. Microsoft supports .NET 8 until November 10, 2026; after that date no .NET 8 build
+  receives runtime fixes.
+- **The packages are not signed.** Their integrity rests on the SHA-256 digests published beside them
   and verified as the installation guide describes.
 
 ## Authentication
@@ -194,15 +201,24 @@ Text-to-tool recovery is particularly sensitive because it can turn inert text i
 What exists today:
 
 - **Releases are built by CI from the tag, never on a workstation** (ADR 0018). A `v<version>` tag that
-  names the build's version runs the whole CI suite against the tagged commit. The Windows package that
-  run builds and smoke-tests is the one the release carries; nothing is rebuilt for it.
+  names the build's version runs the whole CI suite against the tagged commit. The Windows and Linux
+  packages that run builds and smoke-tests, assembled into one artifact by a read-only job that checks
+  nothing out (ADR 0021), are what the release carries; nothing is rebuilt for it. Each artifact is
+  taken by the ID the job that uploaded it reported, so one that another job of the run re-uploaded
+  under the same name is refused rather than published. The package builds restore no dependency
+  cache: what they bundle comes from the lockfile and the registry, never from a store another run
+  wrote.
 - **Releases are drafts until a maintainer publishes them.** The workflow creates a draft pre-release,
   and a person reviews it before it becomes visible.
-- **Write access is confined to one job,** which downloads the package and creates the release. It
+- **Write access is confined to one job,** which downloads the assembled assets and creates the release. It
   checks nothing out and installs nothing, so no dependency's install script runs with the token in
   reach; every job that builds holds read access only.
-- **Digests.** Each release carries `SHA256SUMS`, which the publishing job verifies before creating the
-  release and the installation guide tells users to check. GitHub shows each asset's digest too.
+- **Digests.** Each release carries one `SHA256SUMS` for all its assets, which CI verifies when it
+  assembles them, the publishing job verifies again before creating the release, and the installation
+  guide tells users to check by the line for the file they downloaded. GitHub shows each asset's digest
+  too. These detect corruption in transfer; they cannot detect a substitution by whoever wrote both the
+  archive and its line, which is why the artifacts are taken by ID and why signing and attested
+  provenance remain follow-ups.
 - **Pinned inputs.** Package versions are central and exact (`Directory.Packages.props`), the dashboard
   installs from a frozen lockfile with an exact `pnpm`, and the collector image is pinned by version.
   Base images are pinned by tag, not by digest.
@@ -213,7 +229,7 @@ Not yet:
 - automated dependency updates with review;
 - SBOM generation;
 - vulnerability scanning;
-- signed release artifacts — the package is not code signed, and no build provenance is attested;
+- signed release artifacts — the packages are not signed, and no build provenance is attested;
 - provenance for community adapters and profiles, which arrive with the stages that add them.
 
 ## Disclosure
