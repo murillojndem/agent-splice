@@ -64,6 +64,15 @@ RUN dotnet publish src/AgentSplice.HealthProbe/AgentSplice.HealthProbe.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
+# What a registry shows for the image and links it to (ADR 0020). The source is the
+# repository Directory.Build.props names, and the license the SPDX identifier the dashboard's
+# package.json declares; a contract test holds all three to one value. GitHub's package page shows at
+# most 512 characters of the description.
+LABEL org.opencontainers.image.title="AgentSplice" \
+      org.opencontainers.image.description="An experimental alpha: a local trace proxy for OpenAI-compatible model runtimes such as LM Studio. It forwards requests unchanged and records where the time went, never prompts or model output." \
+      org.opencontainers.image.source="https://github.com/murillojndem/agent-splice" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 # The process binds to the container interface; loopback-only exposure is the operator's port
 # mapping (see docker-compose.yml and docs/SECURITY.md).
 ENV ASPNETCORE_URLS=http://0.0.0.0:5280 \
@@ -82,6 +91,10 @@ COPY --from=dashboard /dashboard/dist ./dashboard/
 # runtimeconfig.json or deps.json can shadow the other's. Under /app like everything else, for the
 # same ownership reason as the dashboard.
 COPY --from=build /publish-probe ./probe/
+
+# The license the image is distributed under, beside what it covers. The .NET runtime's own notices are
+# in the base image under /usr/share/dotnet.
+COPY LICENSE NOTICE THIRD-PARTY-NOTICES.md ./
 
 # /data holds the SQLite metadata store. The image runs as the non-root user shipped in the .NET 8
 # base image, so the volume mount point must be writable by it.

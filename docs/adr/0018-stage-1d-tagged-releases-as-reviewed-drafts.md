@@ -1,6 +1,6 @@
 # ADR 0018 — Stage 1D: tagged releases as reviewed drafts
 
-- Status: Accepted
+- Status: Accepted, decision 6 refined by [ADR 0020](0020-stage-1d-the-project-is-licensed-under-apache-2.md)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (Windows and Linux CI),
   [ADR 0016](0016-stage-1d-the-image-reports-its-health.md) (the image's health check),
@@ -59,6 +59,9 @@ attestation is a separate decision. Both are recorded as residuals rather than i
 The version job also refuses to release without a `LICENSE` file. `LICENSE-CHOICE.md` recommends a
 license but leaves the decision to the maintainer and asks for the license text before anything is
 published. A release would otherwise publish code nobody may use.
+
+> **Refined by ADR 0020.** The maintainer chose Apache-2.0, `LICENSE-CHOICE.md` was removed, and the gate
+> now requires `LICENSE`, `NOTICE`, and `THIRD-PARTY-NOTICES.md`.
 
 ### 7. The image is not pushed
 

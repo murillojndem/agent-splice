@@ -250,8 +250,9 @@ A release is a tag, and what it publishes is a draft for a maintainer to review 
    `Unreleased` entries in `CHANGELOG.md` under a heading for the version.
 2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
    the tag.
-3. `.github/workflows/release.yml` checks that the tag names the build's version and that a `LICENSE`
-   file exists, runs the whole CI suite against the tag, and creates a **draft pre-release** with the
+3. `.github/workflows/release.yml` checks that the tag names the build's version and that `LICENSE`,
+   `NOTICE`, and `THIRD-PARTY-NOTICES.md` exist (ADR 0020), runs the whole CI suite against the tag, and
+   creates a **draft pre-release** with the
    Windows package and `SHA256SUMS` that run built and smoke-tested. Nothing is visible to anyone else
    yet.
 4. Review the draft — the assets, their digests, the notes — and publish it on GitHub.
@@ -264,6 +265,21 @@ that already has a release.
 
 Versions are centrally managed. Add a `PackageVersion` to `Directory.Packages.props`, then reference
 the package without a version in the project file.
+
+A package the gateway ships, and a runtime dependency of the dashboard, must be under a license
+compatible with Apache-2.0 and must be listed in `THIRD-PARTY-NOTICES.md` with its license and
+copyright, in the same change (ADR 0020). `LicenseContractTests` fails until it is. It reads the
+gateway's restored graph, `src/AgentSplice.Api/obj/project.assets.json`, so restore the solution before
+running the contract tests on their own. Every package there that puts a runtime, native, or resource
+file into the build must be in the Packages column of the notices' Components table, by its name or by a
+`.*` family; analyzers and other build-time packages put no file in and are not listed. The dashboard's
+production graph, walked through `pnpm-lock.yaml`, must be listed the same way. A package that is in a
+graph but never ships goes under "Packages that do not ship" instead.
+
+The dashboard's source imports only from its `dependencies`, which a contract test also checks: the
+bundler takes whatever `src/` imports, whichever section of `package.json` declares it. The build tools
+in `devDependencies` — Vite, Rollup, esbuild — have a row of their own in the notices, because the code
+they generate is part of the bundle.
 
 ## Database
 

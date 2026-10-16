@@ -96,10 +96,57 @@ try {
 
     Copy-Item -Recurse -Path (Join-Path $dashboard 'dist') -Destination (Join-Path $staging $rootPath)
 
-    $license = Join-Path $repository 'LICENSE'
+    # The license the package is distributed under, and the notices of everything it bundles (ADR 0020).
+    # Without them the package would carry code nobody may pass on, so a missing one stops the build.
+    foreach ($notice in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md')) {
+        $path = Join-Path $repository $notice
 
-    if (Test-Path $license) {
-        Copy-Item -Path $license -Destination $staging
+        if (-not (Test-Path $path)) {
+            throw "$notice is missing from the repository root; every package carries it (ADR 0020)."
+        }
+
+        Copy-Item -Path $path -Destination $staging
+    }
+
+    # The package also carries the .NET runtime and ASP.NET Core, so it carries their license and
+    # third-party notices as Microsoft ships them in the runtime packs. The SDK says which packs, and from
+    # which directory, this publish used; asked right after the publish, it answers for the restore that
+    # publish ran. ASP.NET Core 8's pack has no license file of its own: it is MIT under the same holder,
+    # whose notice THIRD-PARTY-NOTICES.md carries.
+    $resolved = (& dotnet msbuild $project -nologo '-p:PublishProfile=win-x64' '-p:Configuration=Release' `
+            -t:ResolveFrameworkReferences -getItem:ResolvedRuntimePack | Out-String)
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not ask the SDK which runtime packs the publish used."
+    }
+
+    $packs = @(($resolved | ConvertFrom-Json).Items.ResolvedRuntimePack)
+    $licenses = Join-Path $staging 'licenses'
+    New-Item -ItemType Directory -Force -Path $licenses | Out-Null
+
+    foreach ($pack in @(
+            @{ Framework = 'Microsoft.NETCore.App'; Prefix = 'dotnet-runtime'; Required = @('LICENSE', 'THIRD-PARTY-NOTICES') },
+            @{ Framework = 'Microsoft.AspNetCore.App'; Prefix = 'aspnetcore-runtime'; Required = @('THIRD-PARTY-NOTICES') })) {
+        $item = @($packs | Where-Object { $_.FrameworkName -eq $pack.Framework })
+
+        if ($item.Count -ne 1 -or -not $item[0].PackageDirectory -or -not (Test-Path $item[0].PackageDirectory)) {
+            throw "The SDK names no runtime pack directory for $($pack.Framework); cannot ship the notices of the runtime the package carries."
+        }
+
+        $directory = $item[0].PackageDirectory
+
+        # Matched without regard to case: the packs name the same files LICENSE.TXT and LICENSE.txt.
+        $files = @(Get-ChildItem -File -Path $directory | Where-Object { $_.Name -match '^(LICENSE|THIRD-PARTY-NOTICES)\.txt$' })
+
+        foreach ($required in $pack.Required) {
+            if (-not ($files | Where-Object { $_.BaseName -ieq $required })) {
+                throw "$directory holds no $required.TXT; cannot ship the notices of the runtime the package carries."
+            }
+        }
+
+        foreach ($file in $files) {
+            Copy-Item -Path $file.FullName -Destination (Join-Path $licenses "$($pack.Prefix)-$($file.BaseName.ToUpperInvariant()).TXT")
+        }
     }
 
     $readme = @"
@@ -126,7 +173,12 @@ appsettings.json, which an upgrade replaces:
 Trace metadata -- never prompts or model output -- is kept in agentsplice.db in this folder
 unless agentsplice:persistence:connectionString names another file.
 
-Full instructions: docs/INSTALLATION.md in the AgentSplice repository.
+AgentSplice is licensed under the Apache License 2.0: see LICENSE and NOTICE. The software
+it bundles is listed with its licenses in THIRD-PARTY-NOTICES.md, and the .NET runtime's
+own license and notices are in the licenses folder.
+
+Full instructions: docs/INSTALLATION.md in the AgentSplice repository,
+https://github.com/murillojndem/agent-splice
 "@
 
     # ASCII and CRLF, so Notepad on any Windows version shows it as written.

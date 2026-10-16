@@ -48,13 +48,16 @@ jobs:
           }
 
       - name: The release carries a license
-        # LICENSE-CHOICE.md leaves the choice of license to the maintainer and asks for the license
-        # text before anything is published. A release without it would publish code nobody may use.
+        # Every artifact carries LICENSE, NOTICE, and THIRD-PARTY-NOTICES.md (ADR 0020). A release
+        # without them would publish code nobody may pass on, so their absence stops it here, before
+        # anything is built.
         run: |
-          if [ ! -f LICENSE ]; then
-            echo "There is no LICENSE file. Add one before tagging a release (LICENSE-CHOICE.md)." >&2
-            exit 1
-          fi
+          for notice in LICENSE NOTICE THIRD-PARTY-NOTICES.md; do
+            if [ ! -f "$notice" ]; then
+              echo "There is no $notice file. Every release carries it (ADR 0020)." >&2
+              exit 1
+            fi
+          done
 
   ci:
     # The whole CI suite against the tagged commit: both platforms' tests, the dashboard, the image, and

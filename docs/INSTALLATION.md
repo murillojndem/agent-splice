@@ -98,7 +98,9 @@ Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\Programs\AgentSplice"
 ```
 
 That gives `%LOCALAPPDATA%\Programs\AgentSplice\agentsplice-<version>-win-x64\`, which holds
-`AgentSplice.Api.exe`, `e_sqlite3.dll`, `appsettings.json`, the `dashboard` folder, and `README.txt`.
+`AgentSplice.Api.exe`, `e_sqlite3.dll`, `appsettings.json`, the `dashboard` folder, `README.txt`, and the
+license: `LICENSE`, `NOTICE`, `THIRD-PARTY-NOTICES.md`, and the bundled .NET runtime's own notices in
+`licenses`.
 A per-user folder matters for two reasons. By default the gateway keeps its store beside the
 executable, so the folder must be writable by you. And whoever can write the folder can replace the
 executable and the dashboard's script, so it should be writable by nobody else; a folder created

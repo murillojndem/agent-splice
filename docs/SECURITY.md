@@ -218,4 +218,5 @@ Not yet:
 
 ## Disclosure
 
-See root `SECURITY.md` for the public vulnerability-reporting policy.
+Vulnerabilities are reported privately through GitHub's private vulnerability reporting, which is
+enabled for the repository; root `SECURITY.md` says how, and what a report should include.

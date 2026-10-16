@@ -163,6 +163,17 @@ try {
     Check (Test-Path (Join-Path $package 'dashboard' 'index.html')) "the dashboard's page is in dashboard/"
     Check (Test-Path (Join-Path $package 'dashboard' 'assets')) "the dashboard's assets are in dashboard/assets/"
     Check (Test-Path (Join-Path $package 'README.txt')) "the package carries README.txt"
+
+    # What it may be passed on under, and the notices of what it bundles (ADR 0020).
+    foreach ($notice in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES.md')) {
+        Check ((Test-Path (Join-Path $package $notice)) -and
+            (Get-FileHash (Join-Path $package $notice)).Hash -eq (Get-FileHash (Join-Path $repository $notice)).Hash) "the package carries the repository's $notice"
+    }
+
+    foreach ($notice in @('dotnet-runtime-LICENSE.TXT', 'dotnet-runtime-THIRD-PARTY-NOTICES.TXT', 'aspnetcore-runtime-THIRD-PARTY-NOTICES.TXT')) {
+        Check (Test-Path (Join-Path $package 'licenses' $notice)) "the package carries the bundled runtime's licenses/$notice"
+    }
+
     Check (-not (Get-ChildItem -Path $package -Recurse -Filter '*.pdb')) "no loose symbol files"
     Check (-not (Test-Path (Join-Path $package 'web.config'))) "no IIS web.config"
     Check (-not (Test-Path (Join-Path $package 'aspnetcorev2_inprocess.dll'))) "no IIS module"

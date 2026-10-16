@@ -1,6 +1,7 @@
 {
   "name": "agentsplice-dashboard",
   "version": "0.2.0-alpha",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "description": "Optional diagnostic surface over the documented AgentSplice /api/v1 endpoints.",

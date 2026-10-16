@@ -346,6 +346,46 @@ a workstation against LM Studio, which makes no compatibility claim. So was a ga
 cannot show, because it sends headers as soon as they are committed: under Kestrel, a stream that times
 out after the runtime's headers but before its first byte ends with no response at all (ADR 0019).
 
+## Delivered by Stage 1D, part 7: the license and the reporting channel
+
+A license is published once and read by everyone who receives an artifact, so `LicenseContractTests`
+reads the files every build and holds them to one another (ADR 0020):
+
+- `LICENSE` is the Apache License 2.0 word for word: its SHA-256, with LF line endings, is the one of the
+  text the Apache Software Foundation publishes;
+- exactly one file at the root has a name GitHub's license detection reads, and there is no `LICENSES`
+  directory, so GitHub can name the repository's license;
+- `package.json`, the OpenAPI document's `info.license`, and the image's
+  `org.opencontainers.image.licenses` label name the same SPDX identifier;
+- the image's source label is the build's `RepositoryUrl`, and `SECURITY.md` links that repository's
+  private vulnerability reporting;
+- the image's description fits the 512 characters GitHub's package page shows;
+- `NOTICE` names the copyright holder the build declares;
+- every package in the gateway's restored graph that puts a runtime, native, or resource file into the
+  build — read from `src/AgentSplice.Api/obj/project.assets.json`, so the solution must have been restored
+  — and every package in the dashboard's production graph, walked through `pnpm-lock.yaml`, is in the
+  Packages column of `THIRD-PARTY-NOTICES.md`'s Components table, exactly or by a `.*` family, or in its
+  list of packages that do not ship, and not in both. A name elsewhere in the file counts for nothing.
+  Guards on the extraction check that both graphs include transitive packages, that the gateway's leaves
+  out what ships nothing — so the set is the same after a single-file publish's restore — and that the
+  dashboard's excludes development tools;
+- the dashboard's source imports only packages its `package.json` declares under `dependencies`, which
+  is what makes the production graph the one the bundle is built from;
+- the image copies `LICENSE`, `NOTICE`, and `THIRD-PARTY-NOTICES.md` into its runtime stage, the package
+  script copies them and refuses to build without them, and the release's `version` job refuses to run
+  without them.
+
+`IssueFormContractTests` holds every issue form to the rules of GitHub's form schema whose breach makes
+GitHub drop it — a name, a description rather than a Markdown template's `about`, elements of a known
+type, labels, markdown values, distinct dropdown choices, and distinct well-formed IDs — and to labels
+GitHub creates in every repository. It also requires the bug form to ask for the AgentSplice version and the installation, and
+the chooser to link vulnerabilities to private reporting. In CI, the package smoke test checks that the
+archive carries the three files, identical to the repository's, and the bundled runtime's own notices
+in `licenses/`; the image job compares the running image's copies with the repository's and reads its
+labels back.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

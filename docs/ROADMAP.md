@@ -141,7 +141,9 @@ Status: in progress. Done so far:
 - tagged releases as drafts carrying that package and its digest (ADR 0018);
 - a sample OpenCode configuration and a client guide for OpenCode, Cline, and any OpenAI-compatible
   client, with a README quickstart, checked against the gateway's address, headers, settings, and
-  error codes (ADR 0019).
+  error codes (ADR 0019);
+- the Apache License 2.0, carried with the notices of what each artifact bundles, and a private channel
+  for vulnerability reports (ADR 0020).
 
 The rest of the list below is not done.
 

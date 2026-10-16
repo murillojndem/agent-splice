@@ -1,11 +1,31 @@
 name: Compatibility bug
-about: Report a reproducible client/runtime/model compatibility defect
+description: Report a reproducible client/runtime/model compatibility defect
 title: "[Bug]: "
-labels: [bug, needs-triage]
+labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: >-
+        Report vulnerabilities privately instead (SECURITY.md). Never paste prompts, model output, or
+        credentials here: AgentSplice records structure and timing, and that is what a report needs.
   - type: textarea
     attributes:
       label: Summary
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: AgentSplice version
+      description: The release you installed, or the `version` that GET /api/v1/system reports.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Installation
+      options:
+        - Docker Compose from a clone
+        - Windows package
+        - From source
     validations:
       required: true
   - type: input
@@ -27,6 +47,10 @@ body:
     attributes:
       label: Hardware backend
       description: ROCm, Vulkan, CUDA, CPU, or other
+  - type: input
+    attributes:
+      label: Exchange ID
+      description: The x-agentsplice-exchange-id response header of an affected request, if you have one.
   - type: textarea
     attributes:
       label: Reproduction

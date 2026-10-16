@@ -27,7 +27,10 @@
     <Product>AgentSplice</Product>
     <VersionPrefix>0.2.0</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
-    <RepositoryUrl>https://github.com/agentsplice/agentsplice</RepositoryUrl>
+    <!-- The holder NOTICE names (ADR 0020); a contract test keeps the two the same. -->
+    <Copyright>Copyright 2026 Murillo Jorge Nóbrega de Melo</Copyright>
+    <!-- The image's org.opencontainers.image.source label names the same repository; a contract test keeps them one. -->
+    <RepositoryUrl>https://github.com/murillojndem/agent-splice</RepositoryUrl>
   </PropertyGroup>
 
 </Project>

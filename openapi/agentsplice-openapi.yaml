@@ -7,6 +7,9 @@ info:
     and evaluation platform for AI-agent/runtime interactions. The /v1 surface
     is OpenAI-compatible ingress. The /api/v1 surface exposes AgentSplice
     diagnostics and metadata. Stage 1 does not perform text-to-tool recovery.
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
 servers:
   - url: http://127.0.0.1:5280
     description: Local loopback default

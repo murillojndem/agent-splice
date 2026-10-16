@@ -1,7 +1,7 @@
 name: Feature request
-about: Propose a scoped AgentSplice capability
+description: Propose a scoped AgentSplice capability
 title: "[Feature]: "
-labels: [enhancement, needs-triage]
+labels: [enhancement]
 body:
   - type: textarea
     attributes:

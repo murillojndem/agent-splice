@@ -155,6 +155,8 @@ client that speaks OpenAI Chat Completions can be pointed at the gateway with th
 and guide in [docs/CLIENTS.md](docs/CLIENTS.md); the address, headers, settings, and error codes they
 name are checked against the gateway's own
 ([ADR 0019](docs/adr/0019-stage-1d-sample-client-configurations-and-a-quickstart.md)).
+AgentSplice is licensed under the Apache License 2.0, and every artifact carries the license and the
+notices of what it bundles ([ADR 0020](docs/adr/0020-stage-1d-the-project-is-licensed-under-apache-2.md)).
 Publishing the image to a registry and the first dated trace report are still to come.
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
@@ -256,4 +258,6 @@ AgentSplice is not another chat, coding agent, model runtime, model downloader, 
 
 ## License
 
-Apache License 2.0 is proposed. Review [LICENSE-CHOICE.md](LICENSE-CHOICE.md) before publication.
+AgentSplice is licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). The software it bundles is
+listed with its licenses in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Report vulnerabilities privately, as
+[SECURITY.md](SECURITY.md) describes.

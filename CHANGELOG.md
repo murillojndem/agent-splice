@@ -4,6 +4,60 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 7: the project is licensed, and says where to report vulnerabilities
+
+The repository was public with no license, so nothing it published could be used or passed on, and no
+release could be cut: the release workflow refuses to run without a license. The maintainer chose the
+Apache License 2.0, and what the project distributes now carries it and the notices of what it bundles
+(ADR 0020).
+
+- New `LICENSE`, the Apache License 2.0 as the Apache Software Foundation publishes it, byte for byte;
+  `NOTICE`, naming the copyright holder; and `THIRD-PARTY-NOTICES.md`, listing every distributed
+  component with its license and copyright. Its sources are the packages' own license files where they
+  ship them, and otherwise the nuspec's license and `<copyright>` or the upstream repository's license. It
+  carries the notices OpenTelemetry passes on, and a row for Vite, Rollup, and esbuild, whose generated
+  code is part of the dashboard's bundle.
+- `LICENSE-CHOICE.md` is removed: GitHub read it as a second license file and reported the repository's
+  license as "Other". Its reasoning is ADR 0020's context.
+- The Windows package carries `LICENSE`, `NOTICE`, and `THIRD-PARTY-NOTICES.md`, and in `licenses/` the
+  .NET runtime pack's license and third-party notices and ASP.NET Core's third-party notices. The script
+  asks the SDK which runtime packs the publish used, and refuses to build without any of the six files;
+  the smoke test checks them.
+- The image copies the three files into `/app` and gains `org.opencontainers.image` labels for its title,
+  description, source repository, and license. CI checks the running image's copies against the
+  repository's and reads the labels back.
+- The release workflow's `version` job refuses to run without the three files.
+- A contract test reads the gateway's restored dependency graph and the dashboard's production graph from
+  its lockfile, transitive packages included and packages that ship no file left out, and fails for any
+  package the notices' table does not list. Another checks that the dashboard's source imports only its
+  production dependencies, which is what makes that graph the one that ships.
+- `package.json`, the OpenAPI document's `info.license`, and the image's label name the same SPDX
+  identifier. `Directory.Build.props` gains `Copyright` and corrects `RepositoryUrl`, which named a
+  repository that does not exist.
+- `SECURITY.md` names GitHub's private vulnerability reporting, now enabled, as the channel, and no
+  personal address; the issue chooser links there too. `CONTRIBUTING.md` says that, under section 5 of the
+  license, contributions come in under the same terms unless a contributor says otherwise, that
+  contributions under other terms are not accepted, and that a new dependency is listed in
+  `THIRD-PARTY-NOTICES.md` in the same change.
+- **Defects fixed:** both issue forms carried `about`, the key of a Markdown template, instead of
+  `description`, so GitHub offered neither, and both applied `needs-triage`, a label the repository never
+  had. A bug report now also asks for the AgentSplice version and how it was installed.
+- No runtime behaviour changes.
+
+Every new guard was verified to fail against a deliberately reintroduced defect:
+
+- a byte added to `LICENSE`, a second license file or a `COPYRIGHT` file at the root, or a `LICENSES`
+  directory;
+- `MIT` in `package.json`, in the image's label, or in the OpenAPI document;
+- the old repository in the image's source label or in `SECURITY.md`'s link;
+- an image description past GitHub's 512 characters, or another year in `NOTICE`;
+- `scheduler`, `SQLitePCLRaw.*`, or the bare `OpenTelemetry` missing from the notices' table, or named only
+  in prose; `js-tokens` missing from the packages that do not ship; a package in both;
+- the dashboard importing a package it declares only as a development dependency;
+- the image, the package script, or the release checking `LICENSE` alone;
+- `about` back in an issue form, an unknown element type, a dropdown without choices, the version no
+  longer required, `needs-triage` back, or the chooser linking vulnerabilities to public issues.
+
 ### Stage 1D, part 6: sample client configurations and a quickstart
 
 Nothing showed how to point a client at the gateway beyond one sentence of the installation guide.
