@@ -28,6 +28,57 @@ Model runtime
   LM Studio / llama.cpp / Ollama / vLLM / SGLang
 ```
 
+## Quickstart
+
+AgentSplice is an experimental alpha. Today it serves the OpenAI Chat Completions endpoints in front of
+an LM Studio runtime and records structural evidence of every exchange. Replay, conformance runs,
+evaluation, Anthropic ingress, other runtimes, and compatibility adapters are planned, not present
+([Status](#status)). No compatibility claim is made for any client, model, or runtime.
+
+1. **Start LM Studio's server and load a model** with room for an agent's prompt, in LM Studio's
+   Developer tab or with its `lms` command:
+
+   ```bash
+   lms server start --port 1234
+   lms load <model-id> --context-length 32768
+   ```
+
+2. **Start AgentSplice.** [Installing AgentSplice](docs/INSTALLATION.md) covers Docker, the Windows
+   package, and running from source, and the first two carry the dashboard. From a clone, with the
+   .NET 8 SDK:
+
+   ```bash
+   dotnet run --project src/AgentSplice.Api
+   ```
+
+3. **Check that it sees the model.** The `id` values listed are the model names a client sends:
+
+   ```bash
+   curl -s http://127.0.0.1:5280/v1/models
+   ```
+
+   ```powershell
+   curl.exe -s http://127.0.0.1:5280/v1/models
+   ```
+
+4. **Point a client at `http://127.0.0.1:5280/v1`**, with any placeholder as its API key:
+
+   | Client | Configuration |
+   | --- | --- |
+   | OpenCode | [`examples/opencode/opencode.json`](examples/opencode/opencode.json), with your model ID |
+   | Cline | API Provider **OpenAI Compatible**, with the fields in [Cline](docs/CLIENTS.md#cline) |
+   | Any client or SDK that speaks OpenAI Chat Completions | [Base URL, `curl`, PowerShell, and Python](docs/CLIENTS.md#any-openai-compatible-client) |
+
+5. **Open the exchange.** A completion response carries `x-agentsplice-exchange-id`. Open
+   `http://127.0.0.1:5280/dashboard/exchanges/<exchange-id>`, or the Exchanges list at
+   `http://127.0.0.1:5280/dashboard/exchanges`. Run from source, the gateway serves the dashboard only
+   once it is built and `--agentsplice:dashboard:rootPath` points at the build
+   ([Development guide](docs/DEVELOPMENT.md), "The dashboard"); the same evidence is at
+   `/api/v1/exchanges/<exchange-id>`.
+
+[Pointing a client at AgentSplice](docs/CLIENTS.md) explains each setting and what to do when a request
+fails.
+
 ## Why this project exists
 
 Agent workflows fail across several independent boundaries: client schemas, provider adapters, prompt templates, streaming parsers, model behavior, tool-call representations, cache mechanisms, runtime versions, and hardware backends. The user interface often collapses all of those failures into “the model is slow” or “tools do not work.”
@@ -99,8 +150,12 @@ The image reports its own health: it carries a small probe that its `HEALTHCHECK
 package runs without Docker or a .NET installation, from any folder
 ([ADR 0017](docs/adr/0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md)), and a version
 tag turns it into a draft pre-release for a maintainer to review and publish
-([ADR 0018](docs/adr/0018-stage-1d-tagged-releases-as-reviewed-drafts.md)). Publishing the image to a
-registry, sample client configurations, and the first dated trace report are still to come.
+([ADR 0018](docs/adr/0018-stage-1d-tagged-releases-as-reviewed-drafts.md)). OpenCode, Cline, and any
+client that speaks OpenAI Chat Completions can be pointed at the gateway with the sample configuration
+and guide in [docs/CLIENTS.md](docs/CLIENTS.md); the address, headers, settings, and error codes they
+name are checked against the gateway's own
+([ADR 0019](docs/adr/0019-stage-1d-sample-client-configurations-and-a-quickstart.md)).
+Publishing the image to a registry and the first dated trace report are still to come.
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 
@@ -167,6 +222,7 @@ covers all three paths — Docker, the Windows package, and running from source 
 ## Documentation
 
 - [Installing AgentSplice](docs/INSTALLATION.md)
+- [Pointing a client at AgentSplice](docs/CLIENTS.md)
 - [Development guide](docs/DEVELOPMENT.md)
 - [Complete product and engineering specification](docs/SPECIFICATION.md)
 - [Product positioning](docs/PRODUCT_POSITIONING.md)

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "agentsplice": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AgentSplice",
+      "options": {
+        "baseURL": "http://127.0.0.1:5280/v1"
+      },
+      "models": {
+        "your-model-id": {
+          "name": "Model through AgentSplice",
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  },
+  "model": "agentsplice/your-model-id",
+  "small_model": "agentsplice/your-model-id"
+}

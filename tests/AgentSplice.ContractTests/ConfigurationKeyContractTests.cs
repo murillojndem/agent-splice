@@ -1,7 +1,9 @@
 using System.Collections;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AgentSplice.Application.Configuration;
+using AgentSplice.ContractTests.Documents;
 using AgentSplice.TestSupport;
 using Xunit;
 using YamlDotNet.RepresentationModel;
@@ -18,7 +20,7 @@ namespace AgentSplice.ContractTests;
 /// Compose override had no effect, so the mapping from
 /// <c>AGENTSPLICE__SECTION__PROPERTY</c> to the options tree is asserted here.
 /// </remarks>
-public sealed class ConfigurationKeyContractTests
+public sealed partial class ConfigurationKeyContractTests
 {
     private const string Prefix = "AGENTSPLICE__";
 
@@ -38,6 +40,33 @@ public sealed class ConfigurationKeyContractTests
 
         Assert.NotEmpty(keys);
         AssertAllBind(keys, ".env.example");
+    }
+
+    [Fact]
+    public void Every_agentsplice_variable_in_the_user_guides_binds_to_a_real_setting()
+    {
+        // The guides tell people which setting to change when a timeout fires or a runtime moves. A
+        // name that binds to nothing is accepted without complaint and changes nothing, so the advice
+        // would read as followed while the gateway kept its defaults. A name that stops at a section
+        // is the same failure: a value assigned to it reaches no setting.
+        var keys = new List<string>();
+
+        foreach (var (name, text) in UserGuides.Read())
+        {
+            var guideKeys = GuideKeys(text);
+            var unbound = guideKeys
+                .Where(key => !TryResolve(key, out var leafType) || !IsSettingValue(leafType!))
+                .ToArray();
+
+            keys.AddRange(guideKeys);
+
+            Assert.True(
+                unbound.Length == 0,
+                FormattableString.Invariant(
+                    $"{name} names settings that bind to no value: {string.Join(", ", unbound)}"));
+        }
+
+        Assert.NotEmpty(keys);
     }
 
     [Fact]
@@ -267,6 +296,44 @@ public sealed class ConfigurationKeyContractTests
         Assert.True(TryResolve("AGENTSPLICE__RUNTIMES__0__DISCOVERY__CACHEDURATION", out _));
     }
 
+    [Fact]
+    public void Both_spellings_a_guide_uses_are_read_as_settings()
+    {
+        // Guards the extraction behind the user-guide test. A pattern that matched nothing, stopped at
+        // a single underscore, or skipped an argument spelled with capitals would cut a misspelled
+        // name back to a section that exists, and let it through.
+        var keys = GuideKeys(
+            """
+            $env:AGENTSPLICE__RUNTIMES__0__TIMEOUT__IDLESTREAM = '00:03:00'
+            .\AgentSplice.Api.exe --agentsplice:runtimes:0:timeouts:responseHeaders=00:03:00
+            $env:AGENTSPLICE__PERSISTENCE_MODE = 'None'
+            .\AgentSplice.Api.exe --AgentSplice:Runtimes:0:Timeouts_IdleStream=00:03:00
+            Any AGENTSPLICE__* variable, and AGENTSPLICE_ADMIN_API_KEY, which names a secret.
+            """);
+
+        Assert.Collection(
+            keys,
+            key => AssertUnbound("AGENTSPLICE__RUNTIMES__0__TIMEOUT__IDLESTREAM", key),
+            key =>
+            {
+                Assert.Equal("agentsplice:runtimes:0:timeouts:responseHeaders", key);
+                Assert.True(TryResolve(key, out var leafType));
+                Assert.True(IsSettingValue(leafType!));
+            },
+            key => AssertUnbound("AGENTSPLICE__PERSISTENCE_MODE", key),
+            key => AssertUnbound("AgentSplice:Runtimes:0:Timeouts_IdleStream", key));
+
+        // A name cut short at a section resolves, and is still not a setting a value can be given to.
+        Assert.True(TryResolve("AGENTSPLICE__RUNTIMES__0__TIMEOUTS", out var section));
+        Assert.False(IsSettingValue(section!));
+
+        static void AssertUnbound(string expected, string key)
+        {
+            Assert.Equal(expected, key);
+            Assert.False(TryResolve(key, out _));
+        }
+    }
+
     private static JsonDocument ShippedSettings() =>
         JsonDocument.Parse(RepositoryPaths.ReadText("src", "AgentSplice.Api", "appsettings.json"));
 
@@ -312,6 +379,31 @@ public sealed class ConfigurationKeyContractTests
                     keys.Add(value);
                 }
             }
+        }
+
+        return keys;
+    }
+
+    /// <summary>
+    /// Every setting a guide names, as an environment variable or as a command-line argument.
+    /// </summary>
+    /// <remarks>
+    /// A name is read whole, through single underscores and in any case, so a misspelling reaches the
+    /// resolver rather than being cut back to a section that exists. The environment form needs a
+    /// segment after the prefix, so the glob <c>AGENTSPLICE__*</c> and a secret's name such as
+    /// <c>AGENTSPLICE_ADMIN_API_KEY</c> are not mistaken for settings. The argument form loses its
+    /// leading dashes and stops at the equals sign; the resolver reads colons and double underscores
+    /// alike.
+    /// </remarks>
+    private static List<string> GuideKeys(string text)
+    {
+        var keys = new List<string>();
+
+        foreach (Match match in GuideSettingPattern().Matches(text))
+        {
+            keys.Add(match.Groups["environment"].Success
+                ? match.Groups["environment"].Value
+                : match.Groups["argument"].Value);
         }
 
         return keys;
@@ -408,4 +500,24 @@ public sealed class ConfigurationKeyContractTests
 
         return type.IsGenericType ? type.GetGenericArguments()[0] : typeof(object);
     }
+
+    /// <summary>
+    /// True when a resolved name ends at a value a setting can hold, rather than at a section.
+    /// </summary>
+    private static bool IsSettingValue(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+
+        return underlying.IsPrimitive
+            || underlying.IsEnum
+            || underlying == typeof(string)
+            || underlying == typeof(decimal)
+            || underlying == typeof(TimeSpan)
+            || underlying == typeof(Uri);
+    }
+
+    [GeneratedRegex(
+        "(?<environment>AGENTSPLICE__[A-Za-z0-9_]+)|--(?<argument>agentsplice(?::[A-Za-z0-9_]+)+)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex GuideSettingPattern();
 }

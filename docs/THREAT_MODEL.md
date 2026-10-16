@@ -40,7 +40,13 @@ Mitigations: loopback default, startup refusal/warning for unsafe bind, authenti
 
 Threat: client credential forwarded to an unintended runtime or persisted in evidence.
 
-Mitigations: runtime-scoped secret references, header allowlists, no default pass-through, sanitization before persistence/export.
+Mitigations: runtime-scoped secret references, header allowlists, no default pass-through, sanitization before persistence/export. The client's own credential is dropped at ingress, so the sample client configuration carries none and the client guide gives a placeholder, never the administrative token or a runtime key, which would otherwise sit in a client's settings file — for OpenCode, often a file in a repository (ADR 0019).
+
+### Traffic that bypasses the gateway
+
+Threat: a client pointed at AgentSplice still sends some requests elsewhere — to another provider it is configured with, to an auxiliary model for titles or summaries, or as its own telemetry — so the recorded evidence reads as a whole session when it is not, and content reaches a destination the operator believed was out of the loop.
+
+Mitigations: the sample OpenCode configuration routes both `model` and `small_model` through the gateway, and a contract test holds it; the client guide says that other providers configured in a client remain reachable and unobserved, and sets `OPENAI_BASE_URL` per session rather than for the account, where it would redirect every OpenAI SDK program on the machine. Residual: AgentSplice sees only what is sent to it and cannot detect what a client sends elsewhere (ADR 0019).
 
 ### SSRF and arbitrary targets
 

@@ -938,7 +938,7 @@ Example:
 
 ```yaml
 agentsplice:
-  publicBaseUrl: http://localhost:5280
+  publicBaseUrl: http://127.0.0.1:5280
   # Optional. When set, a model identifier matching no alias and no discovered model is forwarded
   # unchanged to this runtime (ModelResolutionSource.PassThrough). Unset means such a request is
   # rejected, so the strict posture is the default.

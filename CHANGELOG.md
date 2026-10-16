@@ -4,6 +4,57 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 6: sample client configurations and a quickstart
+
+Nothing showed how to point a client at the gateway beyond one sentence of the installation guide.
+There is now a sample OpenCode configuration, a guide for OpenCode, Cline, and any client that speaks
+OpenAI Chat Completions, and a README quickstart, and the address, headers, settings, and error codes
+they name are checked against the gateway's own (ADR 0019, SPECIFICATION section 22 criterion 13).
+
+- New `examples/opencode/opencode.json` defines an `agentsplice` provider with
+  `@ai-sdk/openai-compatible`, at `http://127.0.0.1:5280/v1`, with no API key, and routes both `model`
+  and `small_model` through it, so OpenCode's title requests stay on the gateway too. Its model is a
+  placeholder that fails closed with `404` `agentsplice_model_not_found`.
+- New `docs/CLIENTS.md` covers:
+  - what every client needs, and why: the IPv4 loopback literal, a placeholder key, a model ID copied
+    from `/v1/models`, two endpoints, and a context length large enough for an agent's prompt;
+  - the OpenCode sample; Cline's OpenAI Compatible fields; `curl`, Windows PowerShell and PowerShell 7,
+    the OpenAI Python SDK, and the SDKs' environment variables;
+  - finding an exchange from `x-agentsplice-exchange-id`, and what a cancelled request records;
+  - troubleshooting, including which timeout a slow request meets — a `504` while the gateway can still
+    say so, a closed connection once a stream's status is committed — and a Compose override for the
+    timeouts, which a line in `.env` does not reach.
+- The README opens with a quickstart, says what the alpha does and does not do, and links the guide;
+  `docs/INSTALLATION.md` links it too.
+- **Documentation correction:** `docs/API.md`'s error table mapped every elapsed timeout to `504`. Once
+  a stream's headers have arrived from the runtime the status is committed and the connection is
+  abandoned instead, as the relay always did, and the table now says so. The specification's
+  configuration example uses `127.0.0.1` rather than `localhost`.
+- **Known gap, found and not fixed here:** Kestrel sends a committed status only with the first relayed
+  byte, so a stream that times out or loses its runtime after the runtime's headers arrive but before
+  its first byte — LM Studio processing a long prompt — ends with no response at all, not even
+  `x-agentsplice-exchange-id`, while the exchange records the failure correctly. The guide and
+  `docs/API.md` describe it, and the roadmap lists closing it as a request-path change for its own
+  slice (ADR 0019).
+- New `ClientSampleContractTests` reads the sample and the guides against `LoopbackBindingDefault.Urls`,
+  the shipped runtime address, and `GatewayHeaderNames`. `ConfigurationKeyContractTests` now resolves
+  every setting the user guides name as a variable or a `--agentsplice:` argument to a value, and
+  `ErrorCodeContractTests` every error code they name; both read the guides from one list.
+- `docs/THREAT_MODEL.md` gains "Traffic that bypasses the gateway" and extends "Credential confusion" to
+  client configuration; `docs/SECURITY.md` gains a "Client configuration" section. The roadmap marks the
+  sample client configurations done and lists the streaming gap as open. `tests/README.md` describes the contract and integration suites as
+  they now are.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: `localhost` in the
+sample and in the guide, a wrong port in each, the runtime's port as a client's base URL in the guide
+and in the README, `@ai-sdk/openai`, `small_model` removed, an agent's model
+pointed elsewhere, an `apiKey` and an `env` list added, a misspelled header in either case, `TIMEOUT`
+for `TIMEOUTS`, a single underscore between segments, a misspelled capitalised argument, and a
+misspelled error code in two guides. The guide's commands were run as written on one
+Windows workstation against LM Studio 0.4.20 with a small model, as was OpenCode 1.18.7 with the sample;
+Cline was not run, and its table was checked against the 4.1.22 extension instead. That checks the
+instructions and is not a compatibility result.
+
 ### Stage 1D, part 5: tagged releases as reviewed drafts
 
 The Windows package exists to be installed without the SDK, so it has to be downloadable, and a CI

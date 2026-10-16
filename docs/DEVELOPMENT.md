@@ -120,7 +120,9 @@ AGENTSPLICE__RUNTIMES__0__DISCOVERY__ENABLED   -> agentsplice:runtimes:0:discove
 
 A contract test asserts that every `AGENTSPLICE__*` variable in `docker-compose.yml` and
 `.env.example` resolves to a real setting, because a variable that binds to nothing is silently
-ignored and the deployment quietly runs on defaults.
+ignored and the deployment quietly runs on defaults. The same test reads every setting the user
+guides name — `README.md`, `docs/INSTALLATION.md`, `docs/CLIENTS.md`, and this file — as a variable or
+as a `--agentsplice:` argument.
 
 Copy `.env.example` to `.env` for Compose. Never commit a real API key: a runtime is configured with
 the *name* of the environment variable holding its key, never the value.

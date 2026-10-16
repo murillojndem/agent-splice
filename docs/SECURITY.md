@@ -100,6 +100,16 @@ interface it can see and cannot tell that the host published the port on loopbac
 
 Each runtime endpoint references its own secret source. Credentials are attached only to that runtime. Never forward a client authorization header upstream unless an explicit trusted pass-through policy exists.
 
+## Client configuration
+
+- `/v1` authenticates nobody, so a client's API key field holds a placeholder. Never put the
+  administrative token or a runtime's key into a client: the gateway discards it, and client settings —
+  a project's `opencode.json` in particular — are commonly committed to repositories.
+- The sample client configuration carries no credential and points at the IPv4 loopback literal the
+  gateway binds, and a contract test holds both (ADR 0019).
+- Set `OPENAI_BASE_URL` for one command or session. Set for the account, it sends every OpenAI SDK
+  program on the machine to the gateway, with whatever real key that program holds.
+
 ## Content retention
 
 Prompts, responses, source code, tool schemas, tool arguments, file paths, and replay data are sensitive. Metadata must remain useful without body content.

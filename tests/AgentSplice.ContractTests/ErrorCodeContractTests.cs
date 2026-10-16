@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using AgentSplice.Application.Errors;
 using AgentSplice.ContractTests.Documents;
 using AgentSplice.Domain.Exchanges;
@@ -10,8 +11,30 @@ namespace AgentSplice.ContractTests;
 /// The stable error codes are a published contract (docs/API.md). Clients, conformance reports, and
 /// issue templates match on the exact strings, so code and document must not drift apart.
 /// </summary>
-public sealed class ErrorCodeContractTests
+public sealed partial class ErrorCodeContractTests
 {
+    [Fact]
+    public void Every_error_code_the_user_guides_name_is_one_the_gateway_emits()
+    {
+        // A troubleshooting table is where a user looks a code up. A code renamed in the gateway and
+        // not in the guide would send them to an entry that can no longer match what they see.
+        var named = 0;
+
+        foreach (var (name, text) in UserGuides.Read())
+        {
+            foreach (Match match in ErrorCodePattern().Matches(text))
+            {
+                named++;
+
+                Assert.True(
+                    ErrorCodes.All.Contains(match.Value),
+                    FormattableString.Invariant($"{name} names '{match.Value}', which the gateway never emits."));
+            }
+        }
+
+        Assert.True(named > 0, "No user guide names an error code, so this test checks nothing.");
+    }
+
     [Fact]
     public void The_declared_core_error_codes_are_exactly_those_published_in_the_api_document()
     {
@@ -73,4 +96,7 @@ public sealed class ErrorCodeContractTests
     }
 
     private static string ApiDocument() => RepositoryPaths.ReadText("docs", "API.md");
+
+    [GeneratedRegex("agentsplice_[a-z]+(?:_[a-z]+)*")]
+    private static partial Regex ErrorCodePattern();
 }

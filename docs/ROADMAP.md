@@ -138,7 +138,10 @@ Status: in progress. Done so far:
 - the direct-process path: a self-contained Windows package that needs no Docker and no .NET
   installation, built and smoke-tested on Windows in CI, with every installation path documented in
   `docs/INSTALLATION.md` (ADR 0017);
-- tagged releases as drafts carrying that package and its digest (ADR 0018).
+- tagged releases as drafts carrying that package and its digest (ADR 0018);
+- a sample OpenCode configuration and a client guide for OpenCode, Cline, and any OpenAI-compatible
+  client, with a README quickstart, checked against the gateway's address, headers, settings, and
+  error codes (ADR 0019).
 
 The rest of the list below is not done.
 
@@ -152,7 +155,10 @@ The rest of the list below is not done.
 - loopback-only defaults, checked against the running package as well as the host (done);
 - release workflow: a version tag becomes a reviewed draft pre-release carrying the Windows package
   (done);
-- sample OpenCode, Cline, and generic client configurations;
+- sample OpenCode, Cline, and generic client configurations (done);
+- close the streaming gap recorded in ADR 0019: a stream that times out or loses its runtime after the
+  runtime's headers but before its first relayed byte must reach the client as more than a bare
+  connection reset;
 - first dated trace report;
 - documentation and demo capture.
 

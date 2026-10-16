@@ -7,7 +7,8 @@ client, model, or runtime (`docs/CONFORMANCE.md`).
 
 Whichever way it is installed, the gateway listens on `http://127.0.0.1:5280` only, serves its
 dashboard at `http://127.0.0.1:5280/dashboard/`, and forwards to the runtime it is configured with —
-LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127.0.0.1:5280/v1`.
+LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127.0.0.1:5280/v1`;
+`docs/CLIENTS.md` shows how for OpenCode, Cline, and any OpenAI-compatible client.
 
 ## Choosing a path
 
@@ -118,7 +119,8 @@ choose **More info**, then **Run anyway**. If Smart App Control is on, it can bl
 with no way to allow one; use Docker or run from source instead. The gateway listens on loopback only,
 so Windows Firewall has nothing to ask about.
 
-Open `http://127.0.0.1:5280/` for the dashboard and point clients at `http://127.0.0.1:5280/v1`.
+Open `http://127.0.0.1:5280/` for the dashboard and point clients at `http://127.0.0.1:5280/v1`
+(`docs/CLIENTS.md`).
 
 ### Administrative token
 

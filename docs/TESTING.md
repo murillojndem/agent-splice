@@ -315,6 +315,37 @@ every build instead:
 Each fails against its reintroduced defect. The workflow itself is proven only by the first real tag,
 whose output is a draft that can be deleted.
 
+## Delivered by Stage 1D, part 6: sample client configurations and a quickstart
+
+The sample and the client guide are files a user copies, so the tests read them the way a client would
+and compare them with the gateway's own constants. `ClientSampleContractTests` lives in the
+integration project because the address is `LoopbackBindingDefault.Urls`, and the contract project does
+not reference `AgentSplice.Api`:
+
+- the OpenCode sample's `baseURL` is the gateway's loopback default plus `/v1`, and its package is
+  `@ai-sdk/openai-compatible`;
+- it defines only the gateway's provider, and every `model` and `small_model` in it, at any depth,
+  names a model under that provider;
+- it carries no `apiKey`, no `headers`, no provider `env` list, and no `{env:}` or `{file:}`
+  substitution;
+- no guide or sample names the gateway's port on `localhost` or the IPv6 loopback, and every loopback
+  address the README and the client guide name is the gateway's, or the shipped runtime's on a line
+  about LM Studio;
+- the client guide names the exchange header, and every `x-agentsplice-*` header the guide or the
+  README names, in any case, is one `GatewayHeaderNames` declares.
+
+In the contract suite, `ConfigurationKeyContractTests` reads every setting the user guides name — as an
+environment variable or as a `--agentsplice:` argument, whole, through single underscores and in any
+case — and resolves it to a value rather than to a section, with a guard on the extraction itself.
+`ErrorCodeContractTests` checks every code the user guides name against the codes the gateway can emit.
+Both read the guides from one list, `Documents/UserGuides`.
+
+Each fails against its reintroduced defect. What only real clients can show — that the commands work
+as written in each shell, and that OpenCode reaches a model through the sample — was checked by hand on
+a workstation against LM Studio, which makes no compatibility claim. So was a gap the in-process host
+cannot show, because it sends headers as soon as they are committed: under Kestrel, a stream that times
+out after the runtime's headers but before its first byte ends with no response at all (ADR 0019).
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.
