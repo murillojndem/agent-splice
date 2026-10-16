@@ -160,7 +160,11 @@ notices of what it bundles ([ADR 0020](docs/adr/0020-stage-1d-the-project-is-lic
 A Linux package, the Windows package's twin for x64 distributions on glibc, ships beside it in every
 release, and CI assembles a release's assets on every change
 ([ADR 0021](docs/adr/0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md)).
-Publishing the image to a registry and the first dated trace report are still to come.
+A release carries the image as an archive, and publishing the release pushes exactly that image to
+GitHub Container Registry, never under `latest`
+([ADR 0022](docs/adr/0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md)). The
+first dated trace report is still to come, and the first release waits for it (SPECIFICATION section 22,
+criterion 17).
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 
@@ -216,7 +220,9 @@ docker compose up --build --wait
 ```
 
 `--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
-shows that status afterwards.
+shows that status afterwards. Once a release is published, its image needs no clone at all:
+`ghcr.io/murillojndem/agent-splice:<version>`, started with the `docker run` command in
+[Installing AgentSplice](docs/INSTALLATION.md).
 
 Without Docker, the Windows and Linux packages need no .NET installation: download
 `agentsplice-<version>-win-x64.zip` or `agentsplice-<version>-linux-x64.tar.gz`, and `SHA256SUMS`, from

@@ -209,10 +209,20 @@ What exists today:
   cache: what they bundle comes from the lockfile and the registry, never from a store another run
   wrote.
 - **Releases are drafts until a maintainer publishes them.** The workflow creates a draft pre-release,
-  and a person reviews it before it becomes visible.
-- **Write access is confined to one job,** which downloads the assembled assets and creates the release. It
-  checks nothing out and installs nothing, so no dependency's install script runs with the token in
-  reach; every job that builds holds read access only.
+  and a person reviews it before it becomes visible. Release immutability is on: once published, a
+  release's assets and tag cannot change, and `gh release verify` checks GitHub's attestation of them.
+- **The image reaches the registry only when a person publishes a release** (ADR 0022). The release
+  carries the image CI built and tested as an archive. Publishing it starts a workflow that checks the
+  archive against the release's `SHA256SUMS` and against the digest GitHub recorded at upload, reads what
+  the archive holds before loading it, pushes it under the release's version — never `latest` — and
+  refuses to move a version tag that already names another image. Pushing a tag cannot reach the
+  registry at all.
+- **Each job that writes, writes one kind of thing,** and none checks anything out or installs anything,
+  so no dependency's install script runs with a write token in reach: the release's `publish` job
+  creates the draft (`contents: write`), `publish-image.yml`'s `push` job pushes the image
+  (`packages: write`), and its `notes` job writes the image's digest into the published notes
+  (`contents: write`). Every job that builds holds read access only, and no workflow step puts an
+  expression into a script.
 - **Digests.** Each release carries one `SHA256SUMS` for all its assets, which CI verifies when it
   assembles them, the publishing job verifies again before creating the release, and the installation
   guide tells users to check by the line for the file they downloaded. GitHub shows each asset's digest
@@ -222,6 +232,9 @@ What exists today:
 - **Pinned inputs.** Package versions are central and exact (`Directory.Packages.props`), the dashboard
   installs from a frozen lockfile with an exact `pnpm`, and the collector image is pinned by version.
   Base images are pinned by tag, not by digest.
+- **Pull by digest.** A tag in a registry can be moved by whoever can push to the package; the digest a
+  release's notes name cannot. The installation guide shows how to pull by it, and the release carries
+  the same image as an archive, for `docker load`.
 - **No unreviewed dynamic plugin loading.**
 
 Not yet:
@@ -229,7 +242,8 @@ Not yet:
 - automated dependency updates with review;
 - SBOM generation;
 - vulnerability scanning;
-- signed release artifacts — the packages are not signed, and no build provenance is attested;
+- signed release artifacts — neither the packages nor the image are signed, and no build provenance is
+  attested;
 - provenance for community adapters and profiles, which arrive with the stages that add them.
 
 ## Disclosure

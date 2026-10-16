@@ -1,6 +1,10 @@
 services:
   agentsplice:
-    image: agentsplice/agentsplice:dev
+    # The image this file builds. A name without a '/' is in Docker Hub's library namespace, where no
+    # account can publish, so a pull can never fetch somebody else's image under it; and Compose builds
+    # it rather than pulling. The published image is ghcr.io/murillojndem/agent-splice (ADR 0022).
+    image: agentsplice:dev
+    pull_policy: build
     build:
       context: .
       dockerfile: Dockerfile

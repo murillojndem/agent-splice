@@ -259,23 +259,41 @@ assembling a release fails a pull request.
 
 ## Releasing
 
-A release is a tag, and what it publishes is a draft for a maintainer to review (ADR 0018):
+A release is a tag, what the tag produces is a draft for a maintainer to review, and only publishing
+the draft pushes the image (ADR 0018, ADR 0022):
 
 1. Set the version in `Directory.Build.props` (`VersionPrefix` and `VersionSuffix`) and the same value
    in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ. Move the
    `Unreleased` entries in `CHANGELOG.md` under a heading for the version.
 2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
-   the tag.
+   the tag. Release immutability is on, so a tag whose release has been published can never be used
+   again; until then, a draft and its tag can still be deleted and made again.
 3. `.github/workflows/release.yml` checks that the tag names the build's version and that `LICENSE`,
    `NOTICE`, and `THIRD-PARTY-NOTICES.md` exist (ADR 0020), runs the whole CI suite against the tag, and
    creates a **draft pre-release** from the `agentsplice-release` artifact that run assembled: the
-   Windows and Linux packages it built and smoke-tested, and one `SHA256SUMS` for both (ADR 0021).
-   Nothing is visible to anyone else yet.
-4. Review the draft — the assets, their digests, the notes — and publish it on GitHub.
+   Windows and Linux packages it built and smoke-tested, the image as the archive it built, ran, and
+   ran again from the archive, and one `SHA256SUMS` for all three (ADR 0021, ADR 0022). Nothing is
+   visible to anyone else yet, and nothing has reached the registry.
+4. Review the draft — download the assets and check them against `SHA256SUMS`, read the notes — and
+   publish it on GitHub.
+5. Publishing starts `.github/workflows/publish-image.yml`. It pushes the archive the release carries to
+   `ghcr.io/<owner>/<repository>:<version>`, never `latest`, and writes the registry's digest into the
+   release notes. Check that run, then:
+   - the package page shows the image as public, linked to this repository, with its description and
+     license — the first push creates the package, and only then can that be seen;
+   - `docker pull ghcr.io/<owner>/<repository>@<digest>` works without signing in;
+   - `gh release verify v<version>` and `gh release verify-asset v<version> <file>` accept the release
+     and its assets.
 
-The image is not pushed to a registry; a release's image is built from its tag. To retry a failed
-release, delete the draft and the tag, fix the cause, and tag again: `gh release create` refuses a tag
-that already has a release.
+If `publish-image.yml` fails for a cause in the workflow itself, fix it on `main` and run it for the tag
+with `gh workflow run publish-image.yml -f tag=v<version>`: a release event runs the file as it was at
+the tag, and a dispatch runs `main`'s. It refuses a release that is not published or that the release
+workflow did not create, and it never moves a tag that already names another image.
+
+To retry a release before it is published, delete the draft and the tag, fix the cause, and tag again:
+`gh release create` refuses a tag that already has a release. After publication, a release's tag is
+never reused: the fix is a new version. Vulnerability reports arrive through GitHub's private
+vulnerability reporting, which stays enabled (`SECURITY.md`).
 
 ## Adding a package
 

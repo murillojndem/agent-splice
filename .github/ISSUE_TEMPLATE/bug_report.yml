@@ -23,6 +23,7 @@ body:
     attributes:
       label: Installation
       options:
+        - Docker image from GitHub Container Registry
         - Docker Compose from a clone
         - Windows package
         - Linux package

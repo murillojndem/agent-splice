@@ -145,7 +145,10 @@ Status: in progress. Done so far:
 - the Apache License 2.0, carried with the notices of what each artifact bundles, and a private channel
   for vulnerability reports (ADR 0020);
 - a self-contained Linux package beside the Windows one, built and smoke-tested on Linux in CI, with a
-  release's assets assembled and verified on every change (ADR 0021).
+  release's assets assembled and verified on every change (ADR 0021);
+- the image saved as the archive a release carries, run from that archive the way the installation guide
+  runs it, and pushed to GitHub Container Registry only when a person publishes the release, with
+  release immutability on (ADR 0022).
 
 The rest of the list below is not done.
 
@@ -153,7 +156,8 @@ The rest of the list below is not done.
 - the gateway serves the built dashboard at `/dashboard/`, built into the Docker image and checked in
   CI, so an installation needs no Node toolchain to open it (done);
 - Docker image with a health check that needs no HTTP client in the base image (done);
-- Docker image published to a registry;
+- Docker image published to a registry: pushed to GitHub Container Registry when a release is published
+  (pipeline done, ADR 0022; the first push comes with the first release);
 - Compose example using `host.docker.internal` for LM Studio (done);
 - direct-process setup: from source anywhere, and self-contained Windows and Linux packages (done);
 - loopback-only defaults, checked against the running package as well as the host (done);

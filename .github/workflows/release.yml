@@ -1,8 +1,9 @@
 name: Release
 
-# A tag v<version> becomes a draft pre-release carrying the Windows and Linux packages and one
-# SHA256SUMS for both (ADR 0018, ADR 0021). Nothing is published until a maintainer reviews the draft
-# and publishes it by hand, and the image is not pushed anywhere: it is built from the tagged source.
+# A tag v<version> becomes a draft pre-release carrying the Windows and Linux packages, the image as an
+# archive, and one SHA256SUMS for all three (ADR 0018, ADR 0021, ADR 0022). Nothing is published until a
+# maintainer reviews the draft and publishes it by hand. This workflow never reaches the registry:
+# publishing the draft starts publish-image.yml, which pushes exactly the archive the draft carries.
 
 on:
   push:
@@ -61,7 +62,8 @@ jobs:
 
   ci:
     # The whole CI suite against the tagged commit: both platforms' tests, the dashboard, the image, and
-    # both packages, which this run builds, smoke-tests, and assembles into the release's assets.
+    # both packages, which this run builds, smoke-tests, and assembles with the image into the release's
+    # assets.
     name: ci
     needs: version
     uses: ./.github/workflows/ci.yml
@@ -100,7 +102,7 @@ jobs:
           # SHA256SUMS lists exactly this tag's archives, one per platform, and the folder holds nothing
           # else; the draft is then made of what it lists, so its assets and its digests cannot drift.
           version="${GITHUB_REF_NAME#v}"
-          expected="$(printf '%s\n' "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          expected="$(printf '%s\n' "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
           if [ "$(awk '{print $2}' SHA256SUMS | LC_ALL=C sort)" != "$expected" ] \
              || [ "$(ls -A | grep -vx SHA256SUMS | LC_ALL=C sort)" != "$expected" ]; then
             echo "The release assets are not exactly this tag's archives:" >&2
@@ -124,7 +126,7 @@ jobs:
 
           **Checking a download.** \`SHA256SUMS\` lists every asset's SHA-256 digest; check the one you downloaded against its line before extracting it, as docs/INSTALLATION.md shows. GitHub shows each asset's digest too.
 
-          **Docker.** The image is not published to a registry. Build it from this tag with \`docker compose up --build --wait\`.
+          **Docker.** Publishing this release pushes the image to \`ghcr.io/${GITHUB_REPOSITORY,,}:$version\`, for linux/amd64, and adds its digest to these notes. \`agentsplice-$version-image-linux-amd64.tar.gz\` is the same image, for a machine without registry access: check it against \`SHA256SUMS\`, then \`docker load --input\` it. See docs/INSTALLATION.md.
 
           What changed is in CHANGELOG.md at this tag.
           EOF

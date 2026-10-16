@@ -1,7 +1,8 @@
 # ADR 0018 — Stage 1D: tagged releases as reviewed drafts
 
 - Status: Accepted, decision 6 refined by [ADR 0020](0020-stage-1d-the-project-is-licensed-under-apache-2.md),
-  decisions 2 and 5 extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (both packages, assembled in CI and taken by artifact ID; one `SHA256SUMS`, checked by the line for the file downloaded)
+  decisions 2 and 5 extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (both packages, assembled in CI and taken by artifact ID; one `SHA256SUMS`, checked by the line for the file downloaded),
+  decision 7 superseded and decisions 2 and 4 extended by [ADR 0022](0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md) (the image pushed to GHCR when a release is published)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (Windows and Linux CI),
   [ADR 0016](0016-stage-1d-the-image-reports-its-health.md) (the image's health check),
@@ -76,6 +77,10 @@ published. A release would otherwise publish code nobody may use.
 The roadmap's "Docker image, published" stays open. A registry adds credentials, tags, and
 architecture decisions that the Windows package does not need. A release's image is built from its tag
 with `docker compose up --build --wait`, which the release notes say.
+
+> **Superseded by ADR 0022.** A release carries the image CI built and tested as an archive, and
+> publishing the release pushes exactly that archive to GitHub Container Registry. The registry is
+> reached only by a person publishing a release, by a job that writes packages and nothing else.
 
 ## Consequences
 

@@ -1509,6 +1509,11 @@ probe exits 0 on any 2xx and 1 otherwise, and gives up before Docker's own timeo
 (FR-HEALTH-002). Health gates `docker compose up --wait` and `depends_on: condition: service_healthy`;
 outside Swarm, Docker restarts nothing because of it.
 
+A release's image is published to GitHub Container Registry as `ghcr.io/<owner>/<repository>:<version>`
+when the release is published, and never under `latest`; the release carries the same image as an
+archive and names its digest (ADR 0022). `docs/INSTALLATION.md` gives the `docker run` command for it,
+which CI runs against the archive on every change.
+
 ### 20.3 Network defaults
 
 - Bind to loopback by default.

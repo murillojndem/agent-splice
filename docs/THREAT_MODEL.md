@@ -27,6 +27,7 @@
 9. Exported issue bundle to external recipients.
 10. AgentSplice to an OpenTelemetry collector.
 11. Release pipeline to the operator's machine.
+12. Container registry to the operator's machine.
 
 ## Threats and mitigations
 
@@ -142,7 +143,15 @@ Threat: an operator downloads a package that is not the one the tagged source bu
 
 Mitigations: the packages are built only by CI, from the tag, after the full suite passes, with no dependency cache restored, and a tag that does not name the build's version stops the release before anything is built. A read-only job that checks nothing out verifies each package and assembles them, with one `SHA256SUMS`, into the artifact the release publishes (ADR 0021). Each artifact is taken by the ID its producing job reported, so another job of the same run that re-uploads one under the same name — archive and digest together — makes the download fail rather than the substitute publish. The release is a draft until a maintainer publishes it. The job that creates it holds the only write token, checks nothing out, and installs nothing; it verifies `SHA256SUMS` again before uploading, and the installation guide tells users to verify the line for the file they downloaded (ADR 0018).
 
-Status: residual. The packages are not signed and no build provenance is attested. The digests detect corruption in transfer, not substitution: a compromised step inside a package job writes the archive and its digest together, and `SHA256SUMS` sits beside the archives it describes, so anyone able to replace a release asset can replace both. GitHub's record of each asset's digest is computed from whatever was uploaded, so it is not independent of that either. Until releases are immutable once published, a replaced asset is undetectable. Follow-ups: immutable releases, signing, and attested provenance.
+Status: residual. The packages are not signed and no build provenance is attested. The digests detect corruption in transfer, not substitution: a compromised step inside a package job writes the archive and its digest together, and `SHA256SUMS` sits beside the archives it describes, so anyone able to replace a release asset can replace both. GitHub's record of each asset's digest is computed from whatever was uploaded, so it is not independent of that either. Release immutability is on, so once a release is published its assets cannot be replaced, and GitHub's attestation of the release lets `gh release verify` say so; a draft can still be changed before a person publishes it. Follow-ups: signing and attested provenance.
+
+### Registry image substitution
+
+Threat: an operator pulls an image that is not the one the release reviewed — pushed from a tag nobody reviewed, moved later under the version tag, or fetched under a name somebody else controls.
+
+Mitigations: the registry is reached only when a person publishes a release (ADR 0022). The job that pushes holds `packages: write` alone, checks nothing out, installs nothing, and uses no action. It refuses a release that is not published or that the release workflow did not create. It checks the archive against the release's `SHA256SUMS` and against the digest GitHub recorded at upload, reads the archive's manifest before loading it, pushes only the release's version, never `latest`, and refuses to move a version tag that already names another image. The registry's digest is written into the release notes, and the installation guide shows how to pull by it. Compose's own image is `agentsplice:dev` and is built, never pulled: its old name was a Docker Hub account anyone could register.
+
+Status: residual. A version tag remains mutable to anyone who can push to the package, and the image is neither signed nor attested, so the digest in the notes is what an operator can pin. The notes stay editable after publication, so that digest is a convenience, not an anchor: the anchor is the reviewed archive, immutable in the release, whose config the pushed image must match. A public package can never be made private again, and its versions can be deleted only while they have few downloads. Follow-ups: attested provenance for the image, and signing.
 
 ### Unserviced bundled runtime
 
@@ -186,6 +195,7 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - the health probe refuses any target off loopback `http` without sending a request, and exits only 0 or 1;
 - on Windows, backslash forms of a traversal never serve a file outside the dashboard build;
 - each package writes nothing to the directory it is started from, and listens on loopback only;
+- the image reaches the registry only from a published release, by a job that writes packages alone, installs nothing, and never moves a tag;
 - a release is created only as a draft, only by the one job allowed to write, and only after its digests verify;
 - adapter cannot activate outside declared constraints;
 - exported reports include provenance and omit secret values.

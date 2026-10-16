@@ -425,6 +425,37 @@ refusing a wrong tag, an extra file, and a stray file in an artifact.
 
 Each fails against its reintroduced defect, listed in the changelog.
 
+## Delivered by Stage 1D, part 9: the image is published when a release is
+
+A published image cannot be taken back, and `publish-image.yml` runs only when a person publishes a
+release, so `ImagePublicationContractTests` reads the workflows on every build instead (ADR 0022):
+
+- `publish-image.yml` runs on a published release and on dispatch with a required tag, and on nothing
+  else;
+- its default is read, its only jobs are `push`, with `contents: read` and `packages: write`, and
+  `notes`, with `contents: write`, which runs after it;
+- no step of it uses an action, builds, commits, or installs anything;
+- the `push` job downloads the archive, verifies it against `SHA256SUMS`, and reads its manifest before
+  it loads it; it pushes once, refuses to move a tag, and refuses a draft;
+- no step of any workflow puts an expression into a script, and none tags or pushes `latest`;
+- the jobs that build, load, and push the image run on `ubuntu-24.04`, and the `image` job refuses the
+  containerd image store;
+- the `image` job builds with `docker build --provenance=false --sbom=false`, starts with `--no-build`,
+  smoke-tests, and only then saves, refusing Compose's labels;
+- Compose's image has no account namespace and is built, never pulled, and CI builds it under that name;
+- the `docker run` in the installation guide and the one `image-archive` runs use the same flags, and
+  every port the guides publish is on loopback;
+- `release-assets` needs `image-archive` and expects the image's archive, and so does the step of the
+  release's `publish` job that verifies the draft.
+
+What only Docker can prove runs in CI on every change: the `image` job saves the image it checked, and
+`image-archive` loads that archive on another runner, checks its manifest, labels, and platform, runs it
+with the guide's `docker run`, smoke-tests it, and checks that the store is on the volume. The push itself
+runs only at a release; before this change it was rehearsed against a local registry, where it pushed,
+left an unchanged tag alone on a second run, and refused to move a tag that named another image.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

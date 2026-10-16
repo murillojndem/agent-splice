@@ -119,9 +119,16 @@ jobs:
   image:
     # The alpha ships as this image, and the image is where the dashboard is built into the gateway
     # (ADR 0015). Nothing else builds it, which is how two Dockerfile defects once stayed latent since
-    # the projects existed. It goes through Compose because that is the path an alpha user takes.
+    # the projects existed. It is started through Compose because that is the path a user of a clone
+    # takes, and the image every step checked is saved as the archive a release carries and pushes to
+    # the registry when the release is published (ADR 0022).
     name: image
-    runs-on: ubuntu-latest
+    # The classic image store: a saved image keeps the config every step below checked, and a push
+    # from it is one manifest. ubuntu-latest moves to a release whose Docker defaults to the containerd
+    # store, where neither holds the same way; moving off this pin is a decision for ADR 0022.
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
 
     steps:
       - name: Checkout
@@ -135,11 +142,22 @@ jobs:
           echo "::add-mask::$token"
           echo "AGENTSPLICE_ADMIN_API_KEY=$token" >> "$GITHUB_ENV"
 
-      - name: Build, start, and wait until healthy
+      - name: Build the image
+        # Built by docker rather than by Compose, which labels the images it builds with its project, and
+        # with no provenance or SBOM attestation, which would make the image an index; on the containerd
+        # store the saved archive would not be the image the checks below ran.
+        run: |
+          if docker info --format '{{json .DriverStatus}}' | grep -q 'io.containerd.snapshotter'; then
+            echo "This runner's Docker uses the containerd image store; the image job assumes the classic one." >&2
+            exit 1
+          fi
+          docker build --provenance=false --sbom=false --tag agentsplice:dev .
+
+      - name: Start, and wait until healthy
         # --wait returns once the image's own HEALTHCHECK reports healthy (ADR 0016), and fails if it
         # reports unhealthy or the timeout passes — so the health check the image ships is what
         # decides that the gateway is up, as it is for `docker compose up --wait` anywhere else.
-        run: docker compose up --build --detach --wait --wait-timeout 120 agentsplice
+        run: docker compose up --no-build --detach --wait --wait-timeout 120 agentsplice
 
       - name: Smoke test
         run: bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
@@ -216,11 +234,157 @@ jobs:
             echo "::warning::The image's source label names $source, not https://github.com/$GITHUB_REPOSITORY."
           fi
 
+      - name: Save the image a release carries
+        # The image every step above checked, under the name the registry will give it, as the archive a
+        # release carries and publish-image.yml pushes when the release is published (ADR 0022). Its
+        # version is the one the gateway inside it reports, so the name cannot drift from the build.
+        run: |
+          container="$(docker compose ps --quiet agentsplice)"
+          image="$(docker inspect --format '{{.Image}}' "$container")"
+          # Compose labels the images it builds; one carried into a published image would make every
+          # container run from it look like part of somebody's Compose project.
+          if ! docker image inspect --format '{{json .Config.Labels}}' "$image" \
+               | jq -e 'keys | map(select(startswith("com.docker.compose."))) | length == 0' > /dev/null; then
+            echo "The image carries Compose's labels." >&2
+            exit 1
+          fi
+          version="$(curl -fsS -H "Authorization: Bearer $AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5280/api/v1/system | jq -er .version)"
+          version="${version%%+*}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "The gateway reports '$version', which is not a version an image can be tagged with." >&2
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The image is version $version, but the tag is $GITHUB_REF_NAME." >&2
+            exit 1
+          fi
+          reference="ghcr.io/${GITHUB_REPOSITORY,,}:$version"
+          docker tag "$image" "$reference"
+          mkdir -p artifacts/image
+          archive="agentsplice-$version-image-linux-amd64.tar.gz"
+          docker save "$reference" | gzip -n > "artifacts/image/$archive"
+          (cd artifacts/image && sha256sum "$archive" > SHA256SUMS)
+
+      - name: Upload the image
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsplice-image-linux-amd64
+          path: |
+            artifacts/image/*.tar.gz
+            artifacts/image/SHA256SUMS
+          if-no-files-found: error
+          # The release that consumes it runs in this same workflow run.
+          retention-days: 7
+          # The archive is compressed already.
+          compression-level: 0
+
       - name: Dump the log and stop
         if: always()
         run: |
           docker compose logs --no-color agentsplice || true
           docker compose down --volumes || true
+
+  image-archive:
+    # The image as a user receives it (ADR 0022): the archive a release carries, loaded on a runner that
+    # never built it, and started with the docker run command docs/INSTALLATION.md gives — a contract
+    # test holds the two to the same flags. The image job proved the image under Compose; this proves
+    # the archive and the path a user of the published image takes.
+    name: image (archive)
+    needs: image
+    # The classic image store, as for the image job.
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        # For smoke-gateway.sh; nothing is built here.
+        uses: actions/checkout@v4
+
+      - name: Download the image
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.image.outputs.artifact-id }}
+          path: artifacts/image
+
+      - name: Verify, read, and load the archive
+        run: |
+          mapfile -t sums < <(find artifacts/image -maxdepth 2 -type f -name SHA256SUMS)
+          if [ "${#sums[@]}" -ne 1 ]; then
+            echo "The image artifact holds no single SHA256SUMS." >&2
+            exit 1
+          fi
+          cd "$(dirname "${sums[0]}")"
+          sha256sum --check --strict SHA256SUMS
+          archive="$(awk '{print $2}' SHA256SUMS)"
+          version="${archive#agentsplice-}"
+          version="${version%-image-linux-amd64.tar.gz}"
+          reference="ghcr.io/${GITHUB_REPOSITORY,,}:$version"
+          # What publish-image.yml checks before it loads anything: one image, named for this release.
+          manifest="$(gzip -dc "$archive" | tar -xOf - manifest.json)"
+          if ! jq -e --arg reference "$reference" 'length == 1 and .[0].RepoTags == [$reference]' <<< "$manifest" > /dev/null; then
+            echo "The archive does not hold exactly one image named $reference." >&2
+            exit 1
+          fi
+          docker load --input "$archive"
+          platform="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$reference")"
+          if [ "$platform" != "linux/amd64" ]; then
+            echo "The image is $platform, not linux/amd64." >&2
+            exit 1
+          fi
+          if ! docker image inspect --format '{{json .Config.Labels}}' "$reference" \
+               | jq -e '(keys | map(select(startswith("com.docker.compose."))) | length == 0) and ."org.opencontainers.image.licenses" == "Apache-2.0"' > /dev/null; then
+            echo "The image's labels are not the ones a published image carries." >&2
+            exit 1
+          fi
+          echo "REFERENCE=$reference" >> "$GITHUB_ENV"
+
+      - name: Run it as the installation guide does
+        run: |
+          AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+          echo "::add-mask::$AGENTSPLICE_ADMIN_API_KEY"
+          echo "AGENTSPLICE_ADMIN_API_KEY=$AGENTSPLICE_ADMIN_API_KEY" >> "$GITHUB_ENV"
+          export AGENTSPLICE_ADMIN_API_KEY
+          docker run --detach --name agentsplice \
+            --publish 127.0.0.1:5280:5280 \
+            --volume agentsplice-data:/data \
+            --add-host host.docker.internal:host-gateway \
+            --env 'AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING=Data Source=/data/agentsplice.db' \
+            --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
+            --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
+            --env AGENTSPLICE_ADMIN_API_KEY \
+            "$REFERENCE"
+          # The image's own health check decides when the gateway is up, as docker ps shows a user.
+          for attempt in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' agentsplice)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$status" = "unhealthy" ] || [ "$(docker inspect --format '{{.State.Running}}' agentsplice)" != "true" ]; then
+              break
+            fi
+            sleep 2
+          done
+          echo "The container did not become healthy; it is '$status'." >&2
+          exit 1
+
+      - name: Smoke test
+        run: bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
+
+      - name: The store is on the volume
+        run: |
+          docker logs agentsplice > "$RUNNER_TEMP/agentsplice.log" 2>&1
+          if ! grep -Eq '\[1305\]|"EventId":1305' "$RUNNER_TEMP/agentsplice.log" \
+             || ! grep -Fq '/data/agentsplice.db' "$RUNNER_TEMP/agentsplice.log"; then
+            echo "The container did not report its store at /data/agentsplice.db (event 1305)." >&2
+            exit 1
+          fi
+
+      - name: Dump the log and stop
+        if: always()
+        run: |
+          docker logs agentsplice || true
+          docker rm --force agentsplice || true
+          docker volume rm agentsplice-data || true
 
   package-windows:
     # The Windows package is one of the two ways an alpha user installs AgentSplice without Docker or a
@@ -339,7 +503,8 @@ jobs:
     # file that came in the same artifact would still pass. A re-uploaded artifact has another ID, so the
     # download fails instead. It checks nothing out and installs nothing.
     name: release assets
-    needs: [package-windows, package-linux]
+    # The image archive only once image-archive has loaded and run it the way the guide does.
+    needs: [package-windows, package-linux, image, image-archive]
     runs-on: ubuntu-latest
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
@@ -356,6 +521,12 @@ jobs:
         with:
           artifact-ids: ${{ needs.package-linux.outputs.artifact-id }}
           path: artifacts/linux
+
+      - name: Download the image
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.image.outputs.artifact-id }}
+          path: artifacts/image
 
       - name: Verify each artifact and combine their digests
         run: |
@@ -381,11 +552,11 @@ jobs:
           done
           LC_ALL=C sort -k 2 "$RUNNER_TEMP/SHA256SUMS" > release/SHA256SUMS
 
-          # Exactly one archive per platform, all of one version, and nothing else.
+          # Exactly one archive per platform and the image's, all of one version, and nothing else.
           version="$(ls release | sed -nE 's/^agentsplice-(.+)-win-x64\.zip$/\1/p')"
-          expected="$(printf '%s\n' SHA256SUMS "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          expected="$(printf '%s\n' SHA256SUMS "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
           if [ -z "$version" ] || [ "$(ls release | LC_ALL=C sort)" != "$expected" ]; then
-            echo "The release assets are not one Windows and one Linux package of one version:" >&2
+            echo "The release assets are not the two packages and the image of one version:" >&2
             ls release >&2
             exit 1
           fi

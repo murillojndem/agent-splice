@@ -1,0 +1,192 @@
+name: Publish image
+
+# When a maintainer publishes a release, push the image that release carries to GitHub Container
+# Registry (ADR 0022). Pushing a tag never reaches the registry: the release workflow only drafts, and
+# the draft carries the image CI built and tested as an archive. This workflow pushes exactly that
+# archive, after checking it against the release's own SHA256SUMS, under the release's version — never
+# `latest` — and then writes the registry's digest into the release notes.
+#
+# It checks nothing out, installs nothing, and uses no action: every step is the runner's own docker,
+# gh, jq, and coreutils. A `release` event runs this file as it was at the tag, so a fix to it reaches an
+# already-published release only through workflow_dispatch, which runs main's copy; both paths refuse a
+# release that is not published, or that the release workflow did not create.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag of a published release whose image to push, for example v0.2.0-alpha.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-image-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  push:
+    name: push
+    # The classic image store, where a pushed image is one manifest whose config is the one the archive
+    # carries. ubuntu-latest moves to a release whose Docker defaults to the containerd store.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      tag: ${{ steps.release.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: The release is published, and the release workflow made it
+        id: release
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "'$TAG' is not a release tag." >&2
+            exit 1
+          fi
+          version="${TAG#v}"
+          asset="agentsplice-$version-image-linux-amd64.tar.gz"
+          # This endpoint answers only for a published release: a draft, or no release at all, is a 404.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          if ! jq -e --arg asset "$asset" '
+                .draft == false
+                and .author.login == "github-actions[bot]"
+                and ([.assets[] | select(.name == $asset and .uploader.login == "github-actions[bot]")] | length == 1)
+              ' "$RUNNER_TEMP/release.json" > /dev/null; then
+            echo "$TAG is not a published release that the release workflow created with $asset." >&2
+            exit 1
+          fi
+          {
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "asset=$asset"
+            echo "reference=ghcr.io/${GITHUB_REPOSITORY,,}:$version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download the image and check it against the release's digests
+        id: archive
+        env:
+          ASSET: ${{ steps.release.outputs.asset }}
+          REFERENCE: ${{ steps.release.outputs.reference }}
+        run: |
+          mkdir "$RUNNER_TEMP/image"
+          cd "$RUNNER_TEMP/image"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --pattern SHA256SUMS
+          # The archive's own line, exactly one, and the digest GitHub recorded when it was uploaded.
+          awk -v file="$ASSET" '$2 == file' SHA256SUMS > image.sum
+          if [ "$(wc -l < image.sum)" -ne 1 ]; then
+            echo "SHA256SUMS has no single line for $ASSET." >&2
+            exit 1
+          fi
+          sha256sum --check --strict image.sum
+          recorded="$(jq -r --arg asset "$ASSET" '.assets[] | select(.name == $asset) | .digest' "$RUNNER_TEMP/release.json")"
+          if [ "$recorded" != "sha256:$(cut -d' ' -f1 image.sum)" ]; then
+            echo "GitHub recorded $recorded for $ASSET, which is not its SHA256SUMS line." >&2
+            exit 1
+          fi
+          # What the archive holds, read before anything is loaded: one image, named exactly as this
+          # release's, and the digest of its config — the image's identity on any image store.
+          manifest="$(gzip -dc "$ASSET" | tar -xOf - manifest.json)"
+          if ! jq -e --arg reference "$REFERENCE" 'length == 1 and .[0].RepoTags == [$reference]' <<< "$manifest" > /dev/null; then
+            echo "The archive does not hold exactly one image named $REFERENCE." >&2
+            exit 1
+          fi
+          config="$(jq -r '.[0].Config' <<< "$manifest")"
+          config="${config#blobs/sha256/}"
+          config="sha256:${config%.json}"
+          if [[ ! "$config" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "The archive names no config digest." >&2
+            exit 1
+          fi
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+
+      - name: Push the image
+        id: push
+        env:
+          ASSET: ${{ steps.release.outputs.asset }}
+          REFERENCE: ${{ steps.release.outputs.reference }}
+          CONFIG: ${{ steps.archive.outputs.config }}
+        run: |
+          docker load --input "$RUNNER_TEMP/image/$ASSET"
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          # A version tag is never moved: if the registry already has this one, it must be this image.
+          if existing="$(docker buildx imagetools inspect --raw "$REFERENCE" 2> /dev/null)"; then
+            if ! jq -e --arg config "$CONFIG" '.config.digest == $config' <<< "$existing" > /dev/null; then
+              echo "$REFERENCE already names another image; refusing to move it." >&2
+              exit 1
+            fi
+            echo "$REFERENCE already names this image."
+          else
+            docker push "$REFERENCE"
+          fi
+          # What the registry now holds: a single image manifest whose config is the archive's.
+          pushed="$(docker buildx imagetools inspect --raw "$REFERENCE")"
+          if ! jq -e --arg config "$CONFIG" '
+                (.mediaType | test("manifest\\.v2\\+json$|image\\.manifest\\.v1\\+json$")) and .config.digest == $config
+              ' <<< "$pushed" > /dev/null; then
+            echo "The registry does not hold the archive's image as a single manifest." >&2
+            exit 1
+          fi
+          # The digest as the registry names the manifest, not one recomputed from a printed copy of it.
+          digest="$(docker buildx imagetools inspect "$REFERENCE" --format '{{json .Manifest}}' | jq -r .digest)"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "The registry named no digest for $REFERENCE." >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Log out
+        if: always()
+        run: docker logout ghcr.io || true
+
+      - name: The image is public, by its digest
+        env:
+          REFERENCE: ${{ steps.release.outputs.reference }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          # Logged out, as a user is: the package inherits the repository's visibility.
+          image="${REFERENCE%:*}@$DIGEST"
+          for attempt in 1 2 3 4 5 6; do
+            if docker buildx imagetools inspect "$image" > /dev/null 2>&1; then
+              echo "Pushed $image" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "$image is not anonymously readable." >&2
+          exit 1
+
+  notes:
+    # Writes the digest into the published release's notes, which stay editable on an immutable release.
+    name: notes
+    needs: push
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.push.outputs.tag }}
+      DIGEST: ${{ needs.push.outputs.digest }}
+
+    steps:
+      - name: Name the image's digest in the release notes
+        run: |
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "'$DIGEST' is not a digest." >&2
+            exit 1
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY,,}@$DIGEST"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/body.md"
+          grep -v '^\*\*Image digest\.\*\*' "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/notes.md" || true
+          printf '\n**Image digest.** `%s`\n' "$image" >> "$RUNNER_TEMP/notes.md"
+          if ! cmp --silent "$RUNNER_TEMP/body.md" "$RUNNER_TEMP/notes.md"; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
+          fi

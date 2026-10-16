@@ -2,7 +2,8 @@
 
 AgentSplice is licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE)). What it distributes also carries
 third-party software, each under its own license: the Windows and Linux packages a release publishes, and the
-container image built from this repository. Each carries this file. Direct NuGet dependencies are pinned in
+container image, which a release carries as an archive and pushes to GitHub Container Registry. Each carries this
+file. Direct NuGet dependencies are pinned in
 `Directory.Packages.props` and transitive ones are what the restore resolves at the release's tag; the dashboard's
 are pinned by `web/AgentSplice.Dashboard/pnpm-lock.yaml`.
 
@@ -11,7 +12,10 @@ are pinned by `web/AgentSplice.Dashboard/pnpm-lock.yaml`.
   Microsoft ships them in the runtime packs the package was published with. ASP.NET Core 8's pack carries no
   separate license file: ASP.NET Core is MIT under the same holder as the runtime, whose notice is below.
 - **The container image** is built on Microsoft's `mcr.microsoft.com/dotnet/aspnet:8.0` image, which carries the
-  .NET notices under `/usr/share/dotnet/` and the notices of its operating-system packages under `/usr/share/doc/`.
+  .NET notices under `/usr/share/dotnet/`. Its operating-system layer is Debian's: each package's copyright and
+  license are under `/usr/share/doc/<package>/copyright`, and some of those packages are under the GPL or the LGPL.
+  The image lists the exact packages and versions it holds in `/var/lib/dpkg/status`, and Debian publishes the
+  source of every version it has released at <https://snapshot.debian.org>.
 
 A contract test fails if a package that ships a file in the gateway's restored dependency graph, or a package in the
 dashboard's production dependency graph, is in neither the Packages column of the table below nor the list of

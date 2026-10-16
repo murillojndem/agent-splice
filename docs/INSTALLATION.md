@@ -14,17 +14,92 @@ LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127
 
 | Path | Needs | Choose it when |
 | --- | --- | --- |
-| [Docker](#docker) | Docker with Compose v2 | Docker is already there. The store lives in a volume, and an administrative token is required. |
+| [Docker](#docker) | Docker; Compose v2 to build from a clone | Docker is already there: the published image needs nothing from the repository. The store lives in a volume, and an administrative token is required. |
 | [Windows package](#windows-package) | Windows 10 or 11, x64 | You want no Docker and no .NET installation: a folder you extract and run. |
 | [Linux package](#linux-package) | An x64 distribution based on glibc, with OpenSSL | The same on Linux: no Docker and no .NET installation. |
 | [From source](#from-source) | .NET 8 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on macOS or another platform without a package. |
 
 ## Docker
 
-Docker Desktop, or Docker Engine 25 or later with the Compose plugin. Clone the repository, then from
-its root choose an administrative token and start the stack. The token is required: the container
-binds every interface inside itself and cannot tell that Compose publishes the port on loopback only,
-so the gateway refuses to serve stored evidence without one (`docs/SECURITY.md`).
+Docker Desktop, or Docker Engine 25 or later. There are two ways in:
+
+- **the published image**, which needs nothing from the repository: a release's image is pushed to
+  GitHub Container Registry when the release is published (ADR 0022);
+- **Compose from a clone**, which builds the image from the source you have and can add the optional
+  OpenTelemetry collector.
+
+Either way an administrative token is required: the container binds every interface inside itself and
+cannot tell that the port is published on loopback only, so the gateway refuses to serve stored
+evidence without one (`docs/SECURITY.md`).
+
+### Published image
+
+The image is `ghcr.io/murillojndem/agent-splice`, tagged with each release's version — never `latest` —
+and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation. Until
+the first release is published, a pull answers `manifest unknown`: use Compose from a clone instead.
+
+Choose a token, then start it:
+
+```bash
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "$AGENTSPLICE_ADMIN_API_KEY"   # paste this into the dashboard's token field
+docker run --detach --name agentsplice \
+  --publish 127.0.0.1:5280:5280 \
+  --volume agentsplice-data:/data \
+  --add-host host.docker.internal:host-gateway \
+  --env 'AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING=Data Source=/data/agentsplice.db' \
+  --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
+  --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
+  --env AGENTSPLICE_ADMIN_API_KEY \
+  ghcr.io/murillojndem/agent-splice:0.2.0-alpha
+```
+
+In PowerShell:
+
+```powershell
+$bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$env:AGENTSPLICE_ADMIN_API_KEY = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+$env:AGENTSPLICE_ADMIN_API_KEY   # paste this into the dashboard's token field
+docker run --detach --name agentsplice `
+  --publish 127.0.0.1:5280:5280 `
+  --volume agentsplice-data:/data `
+  --add-host host.docker.internal:host-gateway `
+  --env 'AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING=Data Source=/data/agentsplice.db' `
+  --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 `
+  --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY `
+  --env AGENTSPLICE_ADMIN_API_KEY `
+  ghcr.io/murillojndem/agent-splice:0.2.0-alpha
+```
+
+Each flag matters, and CI runs this command, flag for flag, against the image a release carries:
+
+- `--publish 127.0.0.1:5280:5280` publishes the port on the host's loopback only;
+- the volume and the connection string keep the store at `/data/agentsplice.db` on a volume that a new
+  container finds again — without them it lives inside the container and goes with it;
+- `--add-host` and the runtime address reach LM Studio on the host, as the Compose file does;
+- `--env AGENTSPLICE_ADMIN_API_KEY`, with no value, passes the token from your shell rather than writing
+  it into the command line.
+
+`docker ps` shows the image's own health check once the gateway answers (ADR 0016); open
+`http://127.0.0.1:5280/` for the dashboard. Do not start it with `--env-file .env.example`: that file is
+for Compose and development, and it would turn on development settings.
+
+**Pinning the image.** A version tag names the image a release pushed, and the release notes name its
+digest: `docker pull ghcr.io/murillojndem/agent-splice@sha256:<digest>` fetches exactly that image,
+whatever a later push might put under the tag. Each release also carries the same image as
+`agentsplice-<version>-image-linux-amd64.tar.gz`, for a machine without registry access: check it
+against its line in `SHA256SUMS`, as for the packages, then `docker load --input` it.
+
+**Data.** As with Compose below, but with `docker stop agentsplice`, `docker cp
+agentsplice:/data/agentsplice.db ./agentsplice-backup.db`, and `docker start agentsplice`.
+
+**Upgrading and removing.** `docker rm --force agentsplice`, then the same `docker run` with the new
+version; the volume is kept. `docker volume rm agentsplice-data` deletes the data too.
+
+### Compose from a clone
+
+Docker with the Compose plugin. Clone the repository, then from its root choose an administrative token
+and start the stack:
 
 ```bash
 cp .env.example .env
@@ -43,13 +118,14 @@ docker compose up --build --wait
 
 `--wait` returns once the image's own health check reports the gateway healthy (ADR 0016), and
 `docker compose ps` shows the status afterwards. Open `http://127.0.0.1:5280/` and paste the token from
-`.env` into the dashboard's token field; the page keeps it in memory only.
+`.env` into the dashboard's token field; the page keeps it in memory only. Compose builds the image as
+`agentsplice:dev` and never pulls it.
 
 **Reaching LM Studio.** The container reaches the host as `host.docker.internal`, and the Compose file
 points the runtime at `http://host.docker.internal:1234/v1`. Docker Desktop forwards that to the host
 for you. On a Linux engine, `host.docker.internal` is the host's bridge address, so the runtime must
 listen on an address the container can reach rather than on `127.0.0.1` alone. Override the URL in
-`.env` with `AGENTSPLICE__RUNTIMES__0__BASEURL`.
+`.env` with `AGENTSPLICE__RUNTIMES__0__BASEURL`. The same holds for the published image.
 
 **Data.** Trace metadata is kept in `/data/agentsplice.db` on the `agentsplice-data` volume; the
 startup log names it as event `1305`. To back it up, stop the gateway first so SQLite's write-ahead log

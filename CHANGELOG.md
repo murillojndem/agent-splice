@@ -4,6 +4,58 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 9: the image is pushed to GHCR when a release is published
+
+The roadmap's "Docker image published to a registry" was open: a release's image had to be built from
+its tag. A release now carries the image CI built and tested as an archive, and publishing the release —
+not pushing the tag — pushes exactly that image to GitHub Container Registry (ADR 0022, superseding ADR
+0018 decision 7).
+
+- The CI `image` job, pinned to `ubuntu-24.04` and refusing the containerd image store, builds with
+  `docker build --provenance=false --sbom=false` instead of through Compose, whose labels would have gone
+  into a published image, starts it with `docker compose up --no-build`, runs every check it ran before,
+  and then saves it, tagged `ghcr.io/<owner>/<repository>:<version>` from the version the gateway inside
+  it reports, as `agentsplice-<version>-image-linux-amd64.tar.gz` with its `SHA256SUMS`.
+- New CI job `image-archive` loads that archive on another runner, checks its manifest, labels, and
+  platform, runs it with the installation guide's `docker run`, smoke-tests it, and checks that the store
+  is on the volume. `release-assets` takes the archive by its artifact ID once `image-archive` has passed,
+  so every draft carries it, covered by the same `SHA256SUMS`.
+- New `.github/workflows/publish-image.yml`, on a published release and on dispatch with a tag. Its
+  `push` job, with `packages: write` alone, refuses a release that is not published or that the release
+  workflow did not create, checks the archive against `SHA256SUMS` and the digest GitHub recorded, reads
+  its manifest before loading it, pushes the version tag only — never `latest` — refuses to move a tag
+  that names another image, and checks the result anonymously by digest. Its `notes` job, with
+  `contents: write` alone, writes the registry's digest into the release notes. Neither checks anything
+  out, installs anything, or uses an action.
+- Release immutability is enabled for the repository: once published, a release's assets and tag cannot
+  change, and `gh release verify` checks them.
+- Compose's image is renamed `agentsplice:dev`, with `pull_policy: build`: the old
+  `agentsplice/agentsplice:dev` belonged to a Docker Hub account anyone could register.
+- `docs/INSTALLATION.md`'s Docker section now has the published image — `docker run` in bash and
+  PowerShell, pulling by digest, the archive for `docker load`, upgrading — beside Compose from a clone.
+  `docs/DEVELOPMENT.md`'s release runbook adds publishing, checking the package, and recovering through
+  dispatch. `docs/SECURITY.md`, `docs/THREAT_MODEL.md` (a registry trust boundary and an image
+  substitution threat), SPECIFICATION section 20.2, the roadmap, the README, and
+  `THIRD-PARTY-NOTICES.md` (the image's Debian packages and where their source is) say what changed.
+- No runtime behaviour changes.
+
+Every new guard was verified to fail against a deliberately reintroduced defect:
+
+- a push on release creation, a push trigger added, or the dispatch tag optional;
+- `packages: write` at the top, or `contents: write` added to the push job;
+- an action used, an image built, a load before the verification, two pushes, a moved tag, an
+  expression in a script, or `latest` pushed;
+- the push job on `ubuntu-latest`, or no containerd check;
+- the image built by Compose, rebuilt on start, or saved before the smoke test;
+- Compose's image under an account namespace, or pulled;
+- the guide's `docker run` without the volume, or publishing on every interface;
+- `release-assets` without `image-archive`, or taking the image by name;
+- the release's verification no longer expecting the image's archive.
+
+The image's path was rehearsed locally against Docker Desktop and a local registry before CI ran it: the
+save step, `image-archive`'s load, `docker run`, smoke test, and store check, and the push step's push,
+its second run, and its refusal to move a tag.
+
 ### Stage 1D, part 8: a Linux package that needs no .NET installation
 
 On Linux the only direct-process path was building from source. There is now a Linux package beside
