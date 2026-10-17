@@ -514,6 +514,15 @@ held the three that were sent.
 
 Each fails against its reintroduced defect, listed in the changelog.
 
+## Delivered by Stage 1D, part 11: the stage the gateway reports
+
+`ImplementedStageContractTests` holds `DiagnosticsService.ImplementedStage` to the one stage
+`docs/ROADMAP.md` marks in progress, and `DiagnosticsApiTests` checks that `GET /api/v1/system` reports
+that constant. The stage had been a literal pinned by a test, and stayed `1C` through Stage 1D until the
+first trace report read it.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

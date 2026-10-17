@@ -4,6 +4,17 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 11: the system endpoint reports the stage it implements
+
+`GET /api/v1/system` answered `stage: "1C"` through every Stage 1D change: the response held a literal,
+and an integration test pinned the same literal. The first trace report found it (its finding 8). The
+stage is now `DiagnosticsService.ImplementedStage`, `1D`; a contract test holds it to the one stage
+`docs/ROADMAP.md` marks in progress, and the integration test checks the response against it. The only
+runtime change is the value that endpoint reports.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: the constant left at
+`1C`, the response written as a literal again, and the roadmap marking two stages in progress, or none.
+
 ### Stage 1D, part 10: the first dated trace report
 
 SPECIFICATION section 22 criterion 17 asked for at least one real client and runtime trace report

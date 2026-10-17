@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using AgentSplice.Application.Administration;
 using AgentSplice.IntegrationTests.Hosting;
 using Xunit;
 
@@ -25,7 +26,7 @@ public sealed class DiagnosticsApiTests
 
         var system = await ReadAsync(fixture, "/api/v1/system");
 
-        Assert.Equal("1C", system.GetProperty("stage").GetString());
+        Assert.Equal(DiagnosticsService.ImplementedStage, system.GetProperty("stage").GetString());
         Assert.NotEmpty(system.GetProperty("enabledModules").EnumerateArray());
 
         // Both false on a default test host: content capture is refused by this build, and the test

@@ -23,6 +23,16 @@ namespace AgentSplice.Application.Administration;
 /// </remarks>
 public sealed class DiagnosticsService
 {
+    /// <summary>
+    /// The roadmap stage this build implements, as <c>GET /api/v1/system</c> reports it.
+    /// </summary>
+    /// <remarks>
+    /// A contract test holds it to the stage <c>docs/ROADMAP.md</c> marks in progress. Written as a
+    /// literal in the response, it stayed at "1C" through every Stage 1D change, and the first trace
+    /// report is what noticed (ADR 0023).
+    /// </remarks>
+    public const string ImplementedStage = "1D";
+
     private readonly Runtimes.RuntimeRegistry runtimes;
     private readonly ModelCatalogueService catalogue;
     private readonly IAdministrativeEnvelopeWriter writer;
@@ -52,7 +62,7 @@ public sealed class DiagnosticsService
         var view = new SystemInfoView
         {
             Version = Version(),
-            Stage = "1C",
+            Stage = ImplementedStage,
             EnabledModules = Modules(),
             ContentRetentionEnabled = options.Value.Capture.ContentEnabled,
             MetadataRetentionEnabled = options.Value.Persistence.Mode != PersistenceMode.None
