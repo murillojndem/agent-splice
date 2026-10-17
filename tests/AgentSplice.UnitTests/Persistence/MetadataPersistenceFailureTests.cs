@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Exchanges;
@@ -65,12 +66,79 @@ public sealed class MetadataPersistenceFailureTests
         // A batch that fails is dropped rather than retried. Retrying would either reorder evidence
         // behind whatever arrived while it retried, or stall the queue forever behind a record the
         // store will never accept — and a stalled queue loses every exchange after it, not just one.
+        // One record more than a batch holds, so a second batch comes after the refused one.
         var harness = new Harness(failing: true);
 
-        await harness.RunAsync(Record(), Record());
+        await harness.RunAsync(Records(MetadataPersistenceService.MaxBatchSize + 1));
+
+        Assert.Equal(
+            [MetadataPersistenceService.MaxBatchSize, 1],
+            harness.Telemetry.PersistenceFailures.Select(failure => failure.Count));
+        Assert.False(harness.Faulted, "The writer stopped instead of continuing to drain.");
+    }
+
+    [Fact]
+    public async Task The_queue_is_flushed_even_when_the_writer_is_stopped_before_it_started()
+    {
+        // Since .NET 10 a BackgroundService starts ExecuteAsync through Task.Run with its stopping
+        // token, so a stop that wins the race cancels the loop before its first line, and the
+        // shutdown flush with it. A start token that is already cancelled loses that race every time,
+        // which is what makes this deterministic. The refusing store is the observable: a counted
+        // failure is a write the flush attempted (ADR 0024).
+        var harness = new Harness(failing: true);
+
+        await harness.RunStoppedBeforeStartAsync(CancellationToken.None, Record(), Record());
 
         Assert.Equal(2, harness.Telemetry.PersistenceFailures.Sum(failure => failure.Count));
-        Assert.False(harness.Faulted, "The writer stopped instead of continuing to drain.");
+        Assert.False(harness.Faulted, "Stopping the writer threw.");
+    }
+
+    [Fact]
+    public async Task Stopping_a_writer_that_never_started_waits_no_longer_than_the_host_allows()
+    {
+        // That flush is bounded by the shutdown token, as the loop's is: the host's shutdown timeout
+        // bounds how long stopping takes (ADR 0013, ADR 0024). The store blocks the thread that asks,
+        // as SQLite's busy wait does for a locked store, until the test lets it answer or it gives up;
+        // stopping returns at the token, and the writes go on behind it.
+        var harness = new Harness(failing: true, answering: false);
+        var clock = Stopwatch.StartNew();
+
+        await harness.RunStoppedBeforeStartAsync(new CancellationToken(canceled: true), Record(), Record());
+
+        clock.Stop();
+
+        // A flush on the caller's thread would have held it until the store gave up.
+        Assert.True(
+            clock.Elapsed < RefusingDbContextFactory.GivesUpAfter / 2,
+            FormattableString.Invariant($"Stopping held its caller for {clock.Elapsed.TotalMilliseconds:F0} ms while the store did not answer."));
+        Assert.False(harness.Faulted, "Stopping the writer threw.");
+
+        harness.Store.Answer();
+        await harness.Store.AttemptsAsync(1);
+    }
+
+    [Fact]
+    public async Task A_stop_that_times_out_while_the_loop_is_writing_starts_no_second_reader()
+    {
+        // One reader drains the queue, whichever of the loop and StopAsync claims it (ADR 0013,
+        // ADR 0024). Here the loop holds its first batch at a store that is not answering, a record
+        // is still queued, and the host's shutdown timeout has already passed: a second reader in
+        // StopAsync would take that record to the store at once, beside the loop's batch.
+        var harness = new Harness(failing: true, answering: false);
+
+        await harness.StartAsync(Records(MetadataPersistenceService.MaxBatchSize + 1));
+        await harness.Store.EnteredAsync();
+        await harness.StopAsync(new CancellationToken(canceled: true));
+
+        Assert.False(
+            await harness.Store.EnteredAsync(TimeSpan.FromSeconds(1)),
+            "A second reader took a batch to the store while the loop held one.");
+
+        harness.Store.Answer();
+        await harness.LoopFinishedAsync();
+
+        Assert.Equal(1, harness.Store.MostAtOnce);
+        Assert.Equal(MetadataPersistenceService.MaxBatchSize + 1, harness.Telemetry.PersistenceFailures.Sum(failure => failure.Count));
     }
 
     [Fact]
@@ -109,6 +177,9 @@ public sealed class MetadataPersistenceFailureTests
 
     private static QueuedExchangeRecord Queued(DateTimeOffset queuedAt) => new(Record(), queuedAt);
 
+    private static ExchangeRecord[] Records(int count) =>
+        Enumerable.Range(0, count).Select(_ => Record()).ToArray();
+
     private static ExchangeRecord Record()
     {
         var exchangeId = ExchangeId.New();
@@ -130,7 +201,7 @@ public sealed class MetadataPersistenceFailureTests
     {
         private readonly MetadataPersistenceService writer;
 
-        internal Harness(bool failing)
+        internal Harness(bool failing, bool answering = true)
         {
             var options = new AgentSpliceOptions();
             options.Persistence.Mode = PersistenceMode.Sqlite;
@@ -142,9 +213,11 @@ public sealed class MetadataPersistenceFailureTests
                 Telemetry,
                 NullLogger<QueuedExchangeRecordSink>.Instance);
 
+            Store = new RefusingDbContextFactory(failing, answering);
+
             writer = new MetadataPersistenceService(
                 Sink,
-                new RefusingDbContextFactory(failing),
+                Store,
                 Telemetry,
                 new FakeTimeProvider(Origin),
                 Options.Create(options),
@@ -153,51 +226,183 @@ public sealed class MetadataPersistenceFailureTests
 
         internal QueuedExchangeRecordSink Sink { get; }
 
+        internal RefusingDbContextFactory Store { get; }
+
         internal RecordingExchangeTelemetry Telemetry { get; } = new();
 
         internal List<(EventId EventId, LogLevel Level)> Logged { get; } = [];
 
         internal bool Faulted { get; private set; }
 
-        public void Dispose() => writer.Dispose();
+        public void Dispose()
+        {
+            writer.Dispose();
+            Store.Dispose();
+        }
 
-        /// <summary>Queues the records, runs the writer to completion, and reports whether it survived.</summary>
+        /// <summary>
+        /// Queues the records, lets the writer's loop attempt every one, stops it, and reports whether
+        /// it survived.
+        /// </summary>
         internal async Task RunAsync(params ExchangeRecord[] records)
         {
-            foreach (var record in records)
-            {
-                await Sink.RecordAsync(record, CancellationToken.None);
-            }
+            await StartAsync(records);
 
-            using var stopping = new CancellationTokenSource();
+            // Each batch attempted before the stop, so what the tests assert is the loop's doing and
+            // not the shutdown flush's. Since .NET 10 the loop starts on the thread pool, and a stop
+            // straight after StartAsync would usually reach a writer whose loop had not run, which is
+            // the path the flush in StopAsync covers. One refused context per batch.
+            var batches = (records.Length + MetadataPersistenceService.MaxBatchSize - 1) / MetadataPersistenceService.MaxBatchSize;
+            await Store.AttemptsAsync(batches);
 
-            await writer.StartAsync(stopping.Token);
+            await StopAsync(CancellationToken.None);
+        }
 
-            // The writer drains what is queued and then waits. Stopping it makes that wait return and
-            // runs the shutdown flush, which is when the last batch is attempted.
+        /// <summary>
+        /// Queues the records and stops, at <paramref name="shutdown"/>, a writer whose loop was cancelled
+        /// before it ran.
+        /// </summary>
+        internal async Task RunStoppedBeforeStartAsync(CancellationToken shutdown, params ExchangeRecord[] records)
+        {
+            await QueueAsync(records);
+
+            using var starting = new CancellationTokenSource();
+            await starting.CancelAsync();
+
+            await writer.StartAsync(starting.Token);
+            await StopAsync(shutdown);
+        }
+
+        /// <summary>Queues the records and starts the writer.</summary>
+        internal async Task StartAsync(params ExchangeRecord[] records)
+        {
+            await QueueAsync(records);
+            await writer.StartAsync(CancellationToken.None);
+        }
+
+        /// <summary>Stops the writer at <paramref name="shutdown"/>, noting whether stopping threw.</summary>
+        internal async Task StopAsync(CancellationToken shutdown)
+        {
             try
             {
-                await writer.StopAsync(CancellationToken.None);
+                await writer.StopAsync(shutdown);
             }
             catch (Exception)
             {
                 Faulted = true;
             }
         }
+
+        /// <summary>Completes once the writer's loop has returned, its flush included.</summary>
+        internal Task LoopFinishedAsync() => writer.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
+
+        private async Task QueueAsync(ExchangeRecord[] records)
+        {
+            foreach (var record in records)
+            {
+                await Sink.RecordAsync(record, CancellationToken.None);
+            }
+        }
     }
 
     /// <summary>A context factory that refuses, standing in for a store that will not accept a write.</summary>
-    private sealed class RefusingDbContextFactory : IDbContextFactory<AgentSpliceDbContext>
+    /// <remarks>
+    /// A store that is not answering holds the thread that asks until it is told to answer, or until it
+    /// gives up, which is how Microsoft.Data.Sqlite waits for a locked store: its asynchronous calls
+    /// complete synchronously, and its busy wait sleeps. So the writer is left to the interface's own
+    /// <c>CreateDbContextAsync</c>, which calls <see cref="CreateDbContext"/> on the asking thread. Every
+    /// request is counted as it arrives and as it ends, and so is how many the store held at once, so a
+    /// test can wait for what it needs rather than for time to pass.
+    /// </remarks>
+    private sealed class RefusingDbContextFactory : IDbContextFactory<AgentSpliceDbContext>, IDisposable
     {
+        /// <summary>How long a store that is not answering holds a request before refusing it anyway.</summary>
+        internal static readonly TimeSpan GivesUpAfter = TimeSpan.FromSeconds(5);
+
         private readonly bool failing;
+        private readonly ManualResetEventSlim answering;
+        private readonly SemaphoreSlim entered = new(0);
+        private readonly SemaphoreSlim attempts = new(0);
+        private readonly object counting = new();
+        private int inside;
+        private int mostAtOnce;
 
-        internal RefusingDbContextFactory(bool failing) => this.failing = failing;
+        internal RefusingDbContextFactory(bool failing, bool answering)
+        {
+            this.failing = failing;
+            this.answering = new ManualResetEventSlim(answering);
+        }
 
-        public AgentSpliceDbContext CreateDbContext() =>
-            failing
-                ? throw new InvalidOperationException("The store is unavailable.")
-                : new AgentSpliceDbContext(
-                    new DbContextOptionsBuilder<AgentSpliceDbContext>().UseSqlite("Data Source=:memory:").Options);
+        /// <summary>The most requests the store has held at once.</summary>
+        internal int MostAtOnce
+        {
+            get
+            {
+                lock (counting)
+                {
+                    return mostAtOnce;
+                }
+            }
+        }
+
+        public AgentSpliceDbContext CreateDbContext()
+        {
+            lock (counting)
+            {
+                inside++;
+                mostAtOnce = Math.Max(mostAtOnce, inside);
+            }
+
+            entered.Release();
+
+            try
+            {
+                answering.Wait(GivesUpAfter);
+
+                return failing
+                    ? throw new InvalidOperationException("The store is unavailable.")
+                    : new AgentSpliceDbContext(
+                        new DbContextOptionsBuilder<AgentSpliceDbContext>().UseSqlite("Data Source=:memory:").Options);
+            }
+            finally
+            {
+                lock (counting)
+                {
+                    inside--;
+                }
+
+                attempts.Release();
+            }
+        }
+
+        public void Dispose()
+        {
+            answering.Dispose();
+            entered.Dispose();
+            attempts.Dispose();
+        }
+
+        /// <summary>Lets every request the store is holding, and every later one, through.</summary>
+        internal void Answer() => answering.Set();
+
+        /// <summary>Completes once a request has reached the store.</summary>
+        internal async Task EnteredAsync() =>
+            Assert.True(await entered.WaitAsync(TimeSpan.FromSeconds(10)), "The writer never asked the store.");
+
+        /// <summary>Whether another request reaches the store within <paramref name="wait"/>.</summary>
+        internal Task<bool> EnteredAsync(TimeSpan wait) => entered.WaitAsync(wait);
+
+        /// <summary>Completes once the writer has asked for <paramref name="count"/> contexts and been answered.</summary>
+        internal async Task AttemptsAsync(int count)
+        {
+            for (var attempt = 0; attempt < count; attempt++)
+            {
+                // Generous: reached only when the writer has stopped asking.
+                Assert.True(
+                    await attempts.WaitAsync(TimeSpan.FromSeconds(10)),
+                    "The writer did not attempt every batch it was given.");
+            }
+        }
     }
 
     /// <summary>Records the identity and level of every entry, which is what the assertions are about.</summary>

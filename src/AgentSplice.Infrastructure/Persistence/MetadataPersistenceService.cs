@@ -49,6 +49,9 @@ public sealed class MetadataPersistenceService : BackgroundService
     private readonly IOptions<AgentSpliceOptions> options;
     private readonly ILogger<MetadataPersistenceService> logger;
 
+    // Set once, by whichever of ExecuteAsync and StopAsync reaches the queue first. See StopAsync.
+    private int readerClaimed;
+
     /// <summary>Creates the writer.</summary>
     public MetadataPersistenceService(
         QueuedExchangeRecordSink sink,
@@ -78,7 +81,7 @@ public sealed class MetadataPersistenceService : BackgroundService
     {
         // With no store the sink resolved is the discarding one, so nothing will ever reach this
         // queue. Standing down keeps the context factory untouched and no database file created.
-        if (!PersistenceRegistration.Retains(options.Value))
+        if (!PersistenceRegistration.Retains(options.Value) || !ClaimReader())
         {
             return;
         }
@@ -101,6 +104,46 @@ public sealed class MetadataPersistenceService : BackgroundService
         // was accepted from a client, so stopping is not a reason to discard it — but a second reader
         // draining the same channel from StopAsync would race this loop whenever the host's shutdown
         // timeout elapsed before it finished. One reader, and StopAsync waits for it.
+        await FlushAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Stops the writer, flushing the queue even when the writer never started.</summary>
+    /// <remarks>
+    /// Since .NET 10, <see cref="BackgroundService.StartAsync"/> runs <see cref="ExecuteAsync"/>
+    /// through <c>Task.Run</c> with the stopping token. A stop that arrives before the thread pool
+    /// picks that work up cancels it before its first line runs, and the shutdown flush with it: the
+    /// records already queued would be discarded although every one was accepted from a client
+    /// (ADR 0024).
+    ///
+    /// So the flush runs here when, and only when, the loop never claimed the queue. The claim is a
+    /// flag either side sets once, rather than an inference from <see cref="BackgroundService.ExecuteTask"/>:
+    /// a task whose work item was cancelled before it ran still reads as pending until a pool thread
+    /// dequeues it, and on a starved pool — the one that delayed the loop in the first place — the
+    /// shutdown token can fire first. Whoever claims first is the one reader; the other stands down.
+    ///
+    /// Bounded by the shutdown token, as the loop's own flush is by <see cref="BackgroundService.StopAsync"/>
+    /// waiting for it: the host's shutdown timeout bounds how long stopping takes (ADR 0013), and the
+    /// writes go on in the background past it, as the loop's do. On a pool thread, as the loop's is,
+    /// because that is what lets the token bound it at all: Microsoft.Data.Sqlite's asynchronous calls
+    /// complete synchronously, and it waits for a locked store by sleeping, so a flush run on the
+    /// caller's thread would hold the caller for as long as the store's busy timeout, per batch.
+    /// </remarks>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+
+        if (PersistenceRegistration.Retains(options.Value) && ClaimReader())
+        {
+            await Task.Run(FlushAsync, CancellationToken.None)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+    }
+
+    private bool ClaimReader() => Interlocked.Exchange(ref readerClaimed, 1) == 0;
+
+    private async Task FlushAsync()
+    {
         while (sink.Reader.TryPeek(out _))
         {
             await WriteBatchAsync(Dequeue()).ConfigureAwait(false);

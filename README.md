@@ -45,7 +45,7 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
 
 2. **Start AgentSplice.** [Installing AgentSplice](docs/INSTALLATION.md) covers Docker, the Windows and
    Linux packages, and running from source, and the first three carry the dashboard. From a clone, with
-   the .NET 8 SDK:
+   the .NET 10 SDK:
 
    ```bash
    dotnet run --project src/AgentSplice.Api
@@ -114,7 +114,7 @@ See [Product positioning](docs/PRODUCT_POSITIONING.md) and [ADR 0006](docs/adr/0
 
 This repository is specification-first. Implementation is intentionally staged.
 
-**Stage 0 — Repository foundation is complete.** The .NET 8 solution exists with enforced module
+**Stage 0 — Repository foundation is complete.** The .NET solution exists with enforced module
 boundaries, the domain model for exchanges and evidence, validated configuration, a deterministic
 fake upstream runtime, and CI on Windows and Ubuntu.
 
@@ -167,6 +167,9 @@ first dated trace report records OpenCode sessions through the Windows package t
 gateway recorded, what that showed, and no compatibility claim
 ([ADR 0023](docs/adr/0023-stage-1d-the-first-dated-trace-report.md),
 [docs/reports](docs/reports/README.md)).
+Every build, package, and image runs on .NET 10 LTS, supported until November 2028, rather than on
+.NET 8, whose support ends on November 10, 2026
+([ADR 0024](docs/adr/0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md)).
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 
@@ -177,12 +180,12 @@ See [Development guide](docs/DEVELOPMENT.md) to build and test.
 
 ## Stack
 
-In use today: ASP.NET Core 8 and C# 12, System.Text.Json, Server-Sent Events, `System.Diagnostics`
+In use today: ASP.NET Core 10 and C# 12, System.Text.Json, Server-Sent Events, `System.Diagnostics`
 spans and metrics with the OpenTelemetry SDK and an opt-in OTLP exporter, SQLite, React, TypeScript,
 and Vite for the dashboard, and xUnit with architecture, contract, and integration suites. The rest is
 proposed and arrives with the stage that needs it.
 
-- ASP.NET Core 8 and C# 12
+- ASP.NET Core 10 and C# 12
 - System.Text.Json
 - Server-Sent Events
 - OpenTelemetry

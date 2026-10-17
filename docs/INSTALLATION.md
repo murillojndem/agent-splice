@@ -16,8 +16,8 @@ LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127
 | --- | --- | --- |
 | [Docker](#docker) | Docker; Compose v2 to build from a clone | Docker is already there: the published image needs nothing from the repository. The store lives in a volume, and an administrative token is required. |
 | [Windows package](#windows-package) | Windows 10 or 11, x64 | You want no Docker and no .NET installation: a folder you extract and run. |
-| [Linux package](#linux-package) | An x64 distribution based on glibc, with OpenSSL | The same on Linux: no Docker and no .NET installation. |
-| [From source](#from-source) | .NET 8 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on macOS or another platform without a package. |
+| [Linux package](#linux-package) | An x64 distribution based on glibc 2.34 or later, with OpenSSL 1.1.1 or later | The same on Linux: no Docker and no .NET installation. |
+| [From source](#from-source) | .NET 10 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on macOS or another platform without a package. |
 
 ## Docker
 
@@ -196,8 +196,8 @@ Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\Programs\AgentSplice"
 
 That gives `%LOCALAPPDATA%\Programs\AgentSplice\agentsplice-<version>-win-x64\`, which holds
 `AgentSplice.Api.exe`, `e_sqlite3.dll`, `appsettings.json`, the `dashboard` folder, `README.txt`, and the
-license: `LICENSE`, `NOTICE`, `THIRD-PARTY-NOTICES.md`, and the bundled .NET runtime's own notices in
-`licenses`.
+license: `LICENSE`, `NOTICE`, `THIRD-PARTY-NOTICES.md`, and, in `licenses`, the licenses and notices of
+the .NET runtime and ASP.NET Core it bundles.
 A per-user folder matters for two reasons. By default the gateway keeps its store beside the
 executable, so the folder must be writable by you. And whoever can write the folder can replace the
 executable and the dashboard's script, so it should be writable by nobody else; a folder created
@@ -282,17 +282,20 @@ delete the old folder.
 
 The package carries its own .NET runtime, so Windows Update and .NET installers never patch it:
 upgrading AgentSplice is how it receives .NET security fixes. `README.txt` in each package names the
-runtime version it was built with. Microsoft supports .NET 8 until November 10, 2026; after that date no
-.NET 8 build, this package included, receives runtime fixes.
+runtime version it was built with. Microsoft supports .NET 10 until November 14, 2028; after that date no
+.NET 10 build, this package included, receives runtime fixes.
 
 To uninstall, stop the gateway, delete its folder and `%LOCALAPPDATA%\AgentSplice` if you used it, and
 remove any `AGENTSPLICE__*` variables, and `AGENTSPLICE_ADMIN_API_KEY`, that you set for your account.
 
 ## Linux package
 
-A self-contained build for 64-bit Linux distributions based on glibc — Debian, Ubuntu, Fedora, and most
-others, but not Alpine, which uses musl (ADR 0021). It carries its own .NET runtime and the dashboard,
-so it needs nothing installed beyond what such a distribution already has, OpenSSL included.
+A self-contained build for 64-bit Linux distributions based on glibc 2.34 or later — Ubuntu 22.04,
+Debian 12, RHEL 9, current Fedora, and their successors — but not Alpine, which uses musl (ADR 0021), and
+not Ubuntu 20.04, Debian 11, or RHEL 8. It carries its own .NET runtime and the dashboard, so it needs
+nothing installed beyond what such a distribution already has, OpenSSL 1.1.1 or later included. The glibc
+floor is the SQLite library the package bundles, which Entity Framework Core 10 requires: the .NET 10
+runtime itself needs only glibc 2.27, and the .NET 8 package needed glibc 2.28 (ADR 0024).
 
 ### Download and verify
 
@@ -327,10 +330,10 @@ tar -xzf agentsplice-0.2.0-alpha-linux-x64.tar.gz -C ~/.local/opt/agentsplice
 
 That gives `~/.local/opt/agentsplice/agentsplice-<version>-linux-x64/`, which holds `AgentSplice.Api`,
 `libe_sqlite3.so`, `appsettings.json`, the `dashboard` folder, `README.txt`, and the license: `LICENSE`,
-`NOTICE`, `THIRD-PARTY-NOTICES.md`, and the bundled .NET runtime's own notices in `licenses`. A folder
-under `/opt` owned by root is not writable by you, and the gateway would refuse to start for want of a
-store; extract there only if you also point the store elsewhere (see Token, configuration, and data
-below).
+`NOTICE`, `THIRD-PARTY-NOTICES.md`, and, in `licenses`, the licenses and notices of the .NET runtime and
+ASP.NET Core it bundles. A folder under `/opt` owned by root is not writable by you, and the gateway
+would refuse to start for want of a store; extract there only if you also point the store elsewhere (see
+Token, configuration, and data below).
 
 ### Run
 
@@ -376,8 +379,8 @@ accounts, set the token. Two differences from Windows matter:
 To upgrade, stop the gateway, extract the new version beside the old one, copy the store across if it
 is in the old folder, and delete the old folder. The package carries its own .NET runtime, so the
 distribution's updates never patch it: upgrading AgentSplice is how it receives .NET security fixes, and
-`README.txt` names the runtime version it was built with. Microsoft supports .NET 8 until November 10,
-2026; after that date no .NET 8 build, this package included, receives runtime fixes.
+`README.txt` names the runtime version it was built with. Microsoft supports .NET 10 until November 14,
+2028; after that date no .NET 10 build, this package included, receives runtime fixes.
 
 To uninstall, stop the gateway and delete its folder, `~/.local/share/agentsplice` if you used it, and
 any `AGENTSPLICE__*` variables, and `AGENTSPLICE_ADMIN_API_KEY`, that you exported in your shell's
@@ -385,7 +388,7 @@ startup files.
 
 ## From source
 
-With the .NET 8 SDK installed (`docs/DEVELOPMENT.md` lists the prerequisites), from the repository
+With the .NET 10 SDK installed (`docs/DEVELOPMENT.md` lists the prerequisites), from the repository
 root on Windows, Linux, or macOS:
 
 ```powershell
@@ -396,7 +399,7 @@ The working directory is the project directory, so the store is `src/AgentSplice
 and settings are read from `src/AgentSplice.Api/appsettings.json`. A fresh clone has no dashboard build;
 `docs/DEVELOPMENT.md` shows how to build one and point the gateway at it.
 
-A framework-dependent build needs only the ASP.NET Core 8 runtime where it runs:
+A framework-dependent build needs only the ASP.NET Core 10 runtime where it runs:
 
 ```powershell
 dotnet publish src/AgentSplice.Api -c Release -o out
@@ -425,6 +428,10 @@ curl.exe -i http://127.0.0.1:5280/health/live
 | --- | --- |
 | `1204 DashboardBuildMissing` at startup; nothing at `/dashboard/` | No build where `agentsplice:dashboard:rootPath` points. The image and the packages carry one; from source, build it first (`docs/DEVELOPMENT.md`). The APIs work regardless. |
 | `The metadata store '…' could not be opened for writing` | The store's directory does not exist or is not writable. Create it, choose another file, or set `agentsplice:persistence:mode` to `None`. On Linux, a package extracted into a folder you cannot write, such as one under `/opt`, meets this at its default store. |
+| `The metadata store '…' was not brought up to date within 30 seconds` | A gateway killed while it was starting — ended from Task Manager, `kill -9`, `docker kill`, a power cut — left Entity Framework Core's migration lock in the store, and a later start waits for it. If no other gateway uses that store, delete the lock with the SQLite command-line tool, `sqlite3 <store> "DELETE FROM __EFMigrationsLock;"`, and start again; the error names the store. For the image, stop the container and run that against the volume from a container that has `sqlite3`. |
+| Startup fails with `agentsplice:… is null` | A settings file gives a switch, a number, a duration, or a mode as `null`, which would be read as `false`, zero, or the first of the mode's values rather than as its default. Remove the setting to use the default, or give it a value. |
+| Building from source fails with `NU1901` to `NU1904` | A security advisory was published, after the commit you are building, against a package it references. Build a newer commit, or use a release's package or image, which need no build. |
+| On Linux, startup fails with ``version `GLIBC_2.33' not found (required by …/libe_sqlite3.so)`` | The distribution's glibc is older than the SQLite library the package bundles needs. Use a distribution based on glibc 2.34 or later, or the Docker image. |
 | `Permission denied` starting `AgentSplice.Api` on Linux | The archive was extracted with a tool that dropped the execute bit. Extract it with `tar -xzf`, which keeps it, or run `chmod +x AgentSplice.Api`. |
 | On Linux, `/api/v1` answers `401` with the token you set | The gateway did not see the variable: its name differs in case from the one `agentsplice:administration:apiKeyEnvironmentVariable` names, which on Linux must match exactly, or it was not exported in the shell that started the gateway. Export it, then start the gateway from that shell. |
 | `Failed to bind to address http://127.0.0.1:5280` | Something else is using the port. Stop it, or pass `--urls http://127.0.0.1:<another port>`. |

@@ -151,7 +151,10 @@ Status: in progress. Done so far:
   release immutability on (ADR 0022);
 - the first dated trace report: OpenCode through the Windows package to LM Studio with two models, its
   evidence as the administrative API answered it, and a contract test holding every report to its
-  format (ADR 0023).
+  format (ADR 0023);
+- .NET 10 LTS for every build, package, and image, before .NET 8's support ends on November 10, 2026,
+  with one contract test holding the SDK, the target, the image's base, and every SDK a workflow
+  installs to one version (ADR 0024).
 
 The rest of the list below is not done.
 
@@ -167,6 +170,8 @@ The rest of the list below is not done.
 - release workflow: a version tag becomes a reviewed draft pre-release carrying the Windows and Linux
   packages and one `SHA256SUMS` (done);
 - sample OpenCode, Cline, and generic client configurations (done);
+- .NET 10 LTS before the first release, so that no release carries a runtime whose support has ended
+  (done, ADR 0024);
 - close the streaming gap recorded in ADR 0019: a stream that times out or loses its runtime after the
   runtime's headers but before its first relayed byte must reach the client as more than a bare
   connection reset — the first trace report met it in a real session;

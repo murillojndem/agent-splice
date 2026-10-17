@@ -1,9 +1,15 @@
 # ADR 0007 — Stage 0 build and test toolchain
 
-Status: accepted
+Status: accepted, partly superseded by [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md)
 Date: 2026-07-29
 Supersedes: none
 Related: ADR 0001 (modular monolith), ADR 0002 (System.Text.Json)
+
+> **Superseded in part.** The SDK pin below names 8.0.100, and the first consequence asks a developer with
+> only .NET 10 for an 8.0 SDK. ADR 0024 moved the pin to 10.0.100 before the first alpha, because .NET 8's
+> support ends on November 10, 2026, which reverses that consequence. The rule itself stands — a major and
+> minor version pinned with `latestFeature`, which builds with the newest installed SDK of that version —
+> and so does every other decision here. This document is kept as written.
 
 ## Context
 

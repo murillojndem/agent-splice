@@ -2,16 +2,27 @@
 
   <!--
     Stage 0 build contract (see CLAUDE.md "Engineering constraints").
-    Every project targets .NET 8 / C# 12 with nullable reference types enabled and
+    Every project targets .NET 10 / C# 12 with nullable reference types enabled and
     warnings promoted to errors so that "no new compiler warnings" is enforced by the
-    build rather than by review.
+    build rather than by review. The runtime is .NET 10 LTS, and the language stays C# 12:
+    moving the runtime is a support decision, and moving the language is not part of it
+    (ADR 0024). A contract test holds this target, global.json, the image's base images,
+    and every workflow's SDK to one .NET version.
   -->
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      Restore audits packages for known vulnerabilities, and with warnings as errors an advisory fails
+      the build. On net10.0 the audit would cover every transitive package as well; this keeps it where
+      it was on .NET 8, to the packages Directory.Packages.props names. Otherwise an advisory published
+      against any of the rest would fail every build of an unchanged commit, a user's Compose build of a
+      release among them. Widening it is its own decision (ADR 0024).
+    -->
+    <NuGetAuditMode>direct</NuGetAuditMode>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <!--

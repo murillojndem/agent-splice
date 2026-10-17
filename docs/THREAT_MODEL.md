@@ -159,7 +159,7 @@ Status: residual. A version tag remains mutable to anyone who can push to the pa
 
 Threat: a .NET security fix ships, and installed packages keep running the vulnerable runtime, because a self-contained application carries its own copy and neither Windows Update nor a Linux distribution's updates patch it.
 
-Status: residual. Packages are built in CI with the current .NET 8 SDK, so each one carries the latest runtime patch at the time it was built, and `README.txt` in the package names that version. A fix reaches an installation only through a new AgentSplice release that the operator installs; there is no update check. Microsoft supports .NET 8 until November 10, 2026: after that date there are no .NET 8 fixes for any release to carry, until AgentSplice moves to a supported .NET.
+Status: residual. Packages are built in CI with the current .NET 10 SDK, so each one carries the latest runtime patch at the time it was built, and `README.txt` in the package names that version. A fix reaches an installation only through a new AgentSplice release that the operator installs; there is no update check. Microsoft supports .NET 10 until November 14, 2028: after that date there are no .NET 10 fixes for any release to carry, until AgentSplice moves to a supported .NET. AgentSplice left .NET 8 before its support ended on November 10, 2026, so that no release was built on an unsupported runtime (ADR 0024). The published image is the same: its .NET runtime and its Ubuntu 24.04 packages are those of `aspnet:10.0-noble` when CI built it, and only a new release's image updates them.
 
 ### Container health probe
 

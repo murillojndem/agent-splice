@@ -66,6 +66,11 @@ dotnet_diagnostic.CA2227.severity = none
 # by AgentSplice.PerformanceTests, not speculatively across the whole codebase.
 dotnet_diagnostic.CA1848.severity = none
 
+# CA1873 (.NET 10): the same position as CA1848. Every call it flagged logs once per start or per
+# retention sweep, never per request, and an IsEnabled guard around each would be a performance
+# claim that no measurement supports (ADR 0024).
+dotnet_diagnostic.CA1873.severity = none
+
 # Culture-sensitive APIs must be explicit: AgentSplice compares protocol tokens, not prose.
 dotnet_diagnostic.CA1304.severity = warning
 dotnet_diagnostic.CA1305.severity = warning

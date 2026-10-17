@@ -1,6 +1,6 @@
 # ADR 0020 — Stage 1D: the project is licensed under Apache-2.0
 
-- Status: Accepted
+- Status: Accepted, decision 3 extended by [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md) (ASP.NET Core's own license in `licenses/`)
 - Date: 2026-10-16
 - Related: [ADR 0017](0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md) (the package that
   bundles a runtime), [ADR 0018](0018-stage-1d-tagged-releases-as-reviewed-drafts.md) (decision 6: a
@@ -66,6 +66,10 @@ dashboard's bundle.
 - **The image.** The runtime stage copies the three files into `/app`. Its base image already carries
   the .NET runtime's notices in `/usr/share/dotnet`.
 - **The release.** The release workflow's first job refuses to run without the three files.
+
+> **Extended by ADR 0024.** Since .NET 10 the ASP.NET Core runtime pack carries its own `LICENSE.txt`.
+> The package copies it as `licenses/aspnetcore-runtime-LICENSE.TXT`, the script refuses to build without
+> any of the four runtime files, and the smoke test checks all seven.
 
 A contract test reads the gateway's restored dependency graph and the dashboard's production graph
 from its lockfile, transitive packages included. It fails for any package that is neither in the Packages

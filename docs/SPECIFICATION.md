@@ -2,7 +2,7 @@
 
 **Document status:** Foundational specification  
 **Target readers:** maintainers, contributors, coding agents, reviewers, future employers, integration authors  
-**Primary implementation language:** C# / .NET 8  
+**Primary implementation language:** C# / .NET 10  
 **Product form:** local-first modular monolith, extensible by provider and protocol adapters
 
 ---
@@ -1483,7 +1483,7 @@ and says so once at startup.
 Agent client -> localhost AgentSplice -> localhost LM Studio
 ```
 
-The direct process is either `dotnet run` from source, on any platform with the .NET 8 SDK, or a
+The direct process is either `dotnet run` from source, on any platform with the .NET 10 SDK, or a
 package: a self-contained, single-file build carrying its own .NET runtime and the dashboard, which runs
 on a machine with no .NET installed — win-x64 for Windows (ADR 0017) and linux-x64 for x64 distributions
 on glibc (ADR 0021). A package makes the directory its executable is in the content root, so it reads

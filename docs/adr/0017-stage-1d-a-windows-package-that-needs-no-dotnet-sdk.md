@@ -1,6 +1,7 @@
 # ADR 0017 — Stage 1D: a Windows package that needs no .NET SDK
 
-- Status: Accepted, extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (a Linux package; one script and one smoke test for both)
+- Status: Accepted, extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (a Linux package; one script and one smoke test for both),
+  its release SDK moved to 10.0 by [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (loopback as a fallback; the SDK
   pinned by feature band), [ADR 0013](0013-stage-1c-metadata-store.md) (the metadata store),
@@ -105,6 +106,9 @@ build stamps. As with the image, the .NET build never invokes Node (ADR 0015).
 `README.txt` names the .NET runtime the package carries, because a self-contained package is never
 serviced by Windows Update. Its runtime is the one the building SDK bundles, so CI builds releases with
 the current .NET 8 SDK.
+
+> **Superseded in part by ADR 0024.** CI builds releases with the current .NET 10 SDK, because .NET 8's
+> support ends on November 10, 2026.
 
 A new `package-windows` CI job on `windows-latest` builds the package and runs
 `.github/scripts/smoke-windows-package.ps1`, then uploads the zip and `SHA256SUMS` as the

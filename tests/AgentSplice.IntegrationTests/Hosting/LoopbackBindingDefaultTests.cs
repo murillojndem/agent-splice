@@ -39,7 +39,7 @@ public sealed class LoopbackBindingDefaultTests
     [Fact]
     public void A_container_http_ports_value_suppresses_the_default()
     {
-        // The .NET 8 ASP.NET base image sets ASPNETCORE_HTTP_PORTS. Honouring it is what lets a
+        // The ASP.NET base images since .NET 8 set ASPNETCORE_HTTP_PORTS. Honouring it is what lets a
         // container bind its own interface while a bare local run stays on loopback.
         Assert.False(LoopbackBindingDefault.ShouldApply(
             Configuration(("HTTP_PORTS", "8080"))));

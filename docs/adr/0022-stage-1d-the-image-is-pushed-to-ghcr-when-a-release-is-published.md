@@ -1,6 +1,6 @@
 # ADR 0022 — Stage 1D: the image is pushed to GHCR when a release is published
 
-- Status: Accepted
+- Status: Accepted, its consequence on the image's operating-system layer superseded by [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md) (Ubuntu 24.04, not Debian)
 - Date: 2026-10-16
 - Supersedes: decision 7 of [ADR 0018](0018-stage-1d-tagged-releases-as-reviewed-drafts.md), and extends
   its decisions 2 and 4
@@ -144,6 +144,9 @@ are what GHCR shows on the package page and how it links the package to the repo
 - The image's operating-system layer is Debian's, under the licenses of its packages, some of them GPL;
   `THIRD-PARTY-NOTICES.md` says where their notices and sources are.
 - No runtime behaviour changes.
+
+> **Superseded by ADR 0024.** The image is built on `aspnet:10.0-noble`, so its operating-system layer
+> is Ubuntu 24.04's.
 
 ## Tests proving these decisions
 

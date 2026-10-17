@@ -29,29 +29,47 @@ namespace AgentSplice.Infrastructure.Persistence;
 /// not have to work out which directory that was. A store that cannot be opened at all fails with an
 /// error naming the file, because SQLite's own message for a missing directory names nothing.
 /// Neither ever carries the connection string, which may hold a password.
+///
+/// Bringing the store up to date is bounded by <see cref="MigrationTimeout"/>. Since Entity Framework
+/// Core 9 a migration first takes a lock in the store itself, a row in <c>__EFMigrationsLock</c>, on
+/// every start whether or not anything is pending, and waits for as long as it finds one there. A
+/// gateway killed while it held the lock leaves the row behind, and every later start would then wait
+/// forever without logging anything that stands out — a gateway that never listens and never fails
+/// (ADR 0024). Bounded, the same store fails startup with an error that names the lock.
 /// </remarks>
 public sealed class MetadataStoreInitializer : IHostedService
 {
+    /// <summary>How long bringing the store up to date may take before startup fails.</summary>
+    /// <remarks>
+    /// Long enough for every migration this build carries: creating a store takes under a second. A
+    /// migration that could take longer on a large store must raise this with it.
+    /// </remarks>
+    internal static readonly TimeSpan MigrationTimeout = TimeSpan.FromSeconds(30);
+
     // SQLITE_CANTOPEN and SQLITE_READONLY: the store's file or directory is missing or not writable.
     private const int CantOpen = 14;
     private const int ReadOnly = 8;
 
     private readonly IDbContextFactory<AgentSpliceDbContext> contextFactory;
     private readonly IOptions<AgentSpliceOptions> options;
+    private readonly TimeProvider timeProvider;
     private readonly ILogger<MetadataStoreInitializer> logger;
 
     /// <summary>Creates the initializer.</summary>
     public MetadataStoreInitializer(
         IDbContextFactory<AgentSpliceDbContext> contextFactory,
         IOptions<AgentSpliceOptions> options,
+        TimeProvider timeProvider,
         ILogger<MetadataStoreInitializer> logger)
     {
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.contextFactory = contextFactory;
         this.options = options;
+        this.timeProvider = timeProvider;
         this.logger = logger;
     }
 
@@ -73,12 +91,22 @@ public sealed class MetadataStoreInitializer : IHostedService
         // the content root — the file actually opened, not the setting as written.
         var store = SqliteStoreLocation.DescribeStore(context.Database.GetConnectionString() ?? string.Empty);
 
+        using var timeout = new CancellationTokenSource(MigrationTimeout, timeProvider);
+        using var migrating = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+
         try
         {
             // Migrations rather than EnsureCreated: the schema has to be versioned for an existing
             // store to survive an upgrade, and EnsureCreated leaves no way to alter one that already
             // exists.
-            await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+            await context.Database.MigrateAsync(migrating.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException exception) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant(
+                    $"The metadata store '{store}' was not brought up to date within {MigrationTimeout.TotalSeconds} seconds. Entity Framework Core locks a store while it migrates it, with a row in its __EFMigrationsLock table, and waits for any lock it finds there; a gateway killed while it was starting leaves that row behind. If no other gateway uses this store, delete the row and start again, for example with: sqlite3 \"{store}\" \"DELETE FROM __EFMigrationsLock;\""),
+                exception);
         }
         catch (SqliteException exception) when (exception.SqliteErrorCode is CantOpen or ReadOnly)
         {

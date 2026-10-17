@@ -1,6 +1,6 @@
 # ADR 0014 — Stage 1D: the OpenTelemetry SDK and OTLP export
 
-- Status: Accepted
+- Status: Accepted, its consequence on `System.Diagnostics.DiagnosticSource` on `net8.0` lapsed with [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md) (every project targets `net10.0`)
 - Date: 2026-09-30
 - Implements decision 16 of [ADR 0013](0013-stage-1c-metadata-store.md), which moved the SDK to this
   stage; discharges decision 14 of [ADR 0008](0008-stage-1a-transparent-request-path.md) and decision

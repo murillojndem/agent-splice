@@ -37,7 +37,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: The tag names the build's version
         shell: pwsh
@@ -122,7 +122,7 @@ jobs:
 
           **Windows.** \`agentsplice-$version-win-x64.zip\` runs on 64-bit Windows 10 or 11 without Docker or a .NET installation. The package is not code signed. See docs/INSTALLATION.md.
 
-          **Linux.** \`agentsplice-$version-linux-x64.tar.gz\` runs on x64 distributions based on glibc, with OpenSSL, without Docker or a .NET installation. The package is not signed. See docs/INSTALLATION.md.
+          **Linux.** \`agentsplice-$version-linux-x64.tar.gz\` runs on x64 distributions based on glibc 2.34 or later, such as Ubuntu 22.04, Debian 12, or RHEL 9, with OpenSSL 1.1.1 or later, without Docker or a .NET installation. The package is not signed. See docs/INSTALLATION.md.
 
           **Checking a download.** \`SHA256SUMS\` lists every asset's SHA-256 digest; check the one you downloaded against its line before extracting it, as docs/INSTALLATION.md shows. GitHub shows each asset's digest too.
 

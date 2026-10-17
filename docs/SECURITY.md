@@ -76,7 +76,7 @@ starts them, from a folder that user extracted:
 - **The bundled runtime is not serviced.** A self-contained package carries the .NET runtime it was
   built with, and neither Windows Update nor a Linux distribution's updates patch it. .NET security
   fixes reach a package only through a new AgentSplice release; `README.txt` in each package names the
-  runtime version. Microsoft supports .NET 8 until November 10, 2026; after that date no .NET 8 build
+  runtime version. Microsoft supports .NET 10 until November 14, 2028; after that date no .NET 10 build
   receives runtime fixes.
 - **The packages are not signed.** Their integrity rests on the SHA-256 digests published beside them
   and verified as the installation guide describes.
@@ -238,6 +238,9 @@ What exists today:
 - **Pinned inputs.** Package versions are central and exact (`Directory.Packages.props`), the dashboard
   installs from a frozen lockfile with an exact `pnpm`, and the collector image is pinned by version.
   Base images are pinned by tag, not by digest.
+- **Known advisories fail the build.** Restore audits the packages `Directory.Packages.props` names
+  against NuGet's advisory database, and with warnings as errors an advisory against one fails every
+  build, the release's among them. The build does not audit transitive packages (ADR 0024).
 - **Run by digest.** A tag in a registry can be moved by whoever can push to the package; a digest
   cannot. The release notes end with the image's reference by digest, whose manifest the workflow fetched
   by that digest and checked against the archive, and the installation guide shows how to run by it. The
@@ -249,7 +252,8 @@ Not yet:
 
 - automated dependency updates with review;
 - SBOM generation;
-- vulnerability scanning;
+- vulnerability scanning of transitive packages, of the dashboard's dependencies, and of the image's
+  operating-system layer;
 - signed release artifacts — neither the packages nor the image are signed, and no build provenance is
   attested;
 - a tag ruleset limiting who may create `v*` tags: until then, write access to the repository is what

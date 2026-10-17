@@ -47,8 +47,9 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          # The SDK band is pinned by global.json; this installs a matching 8.0 SDK.
-          dotnet-version: '8.0.x'
+          # global.json asks for SDK 10.0.100 or any later 10.0 SDK; this installs the newest 10.0 SDK. A
+          # contract test holds every dotnet-version here and in release.yml to the version global.json pins.
+          dotnet-version: '10.0.x'
 
       - name: Restore
         run: dotnet restore
@@ -233,6 +234,14 @@ jobs:
             fi
             echo "::warning::The image's source label names $source, not https://github.com/$GITHUB_REPOSITORY."
           fi
+          # An image inherits every label its Dockerfile does not set, and Ubuntu's base labels itself
+          # with a version of its own. Only the labels the Dockerfile declares, and no version but the
+          # tag's (ADR 0024).
+          if ! docker image inspect --format '{{json .Config.Labels}}' "$image" \
+               | jq -e '([keys[] | select(startswith("org.opencontainers.image."))] == ["org.opencontainers.image.description", "org.opencontainers.image.licenses", "org.opencontainers.image.source", "org.opencontainers.image.title", "org.opencontainers.image.version"]) and ."org.opencontainers.image.version" == ""' > /dev/null; then
+            echo "The image carries an org.opencontainers.image label the Dockerfile does not declare, or a version label." >&2
+            exit 1
+          fi
 
       - name: Save the image a release carries
         # The image every step above checked, under the name the registry will give it, as the archive a
@@ -332,7 +341,7 @@ jobs:
             exit 1
           fi
           if ! docker image inspect --format '{{json .Config.Labels}}' "$reference" \
-               | jq -e '(keys | map(select(startswith("com.docker.compose."))) | length == 0) and ."org.opencontainers.image.licenses" == "Apache-2.0"' > /dev/null; then
+               | jq -e '(keys | map(select(startswith("com.docker.compose."))) | length == 0) and ."org.opencontainers.image.licenses" == "Apache-2.0" and ."org.opencontainers.image.version" == ""' > /dev/null; then
             echo "The image's labels are not the ones a published image carries." >&2
             exit 1
           fi
@@ -407,9 +416,9 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          # The package carries the runtime of the SDK that builds it, so this is also which .NET 8
+          # The package carries the runtime of the SDK that builds it, so this is also which .NET 10
           # patch — and which security fixes — a release ships with.
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -462,7 +471,7 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           # As for Windows: the package carries this SDK's runtime.
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4

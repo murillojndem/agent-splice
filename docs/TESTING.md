@@ -523,6 +523,37 @@ first trace report read it.
 
 Each fails against its reintroduced defect, listed in the changelog.
 
+## Delivered by Stage 1D, part 12: .NET 10 LTS
+
+`ToolchainContractTests` reads `global.json`, `Directory.Build.props`, every MSBuild file, the
+Dockerfile, and every workflow, `.yml` or `.yaml`. It fails unless the target framework, both .NET
+images, and every `actions/setup-dotnet` step name the version `global.json` pins, unless no project file
+sets its own target or language and the language stays C# 12, and unless THIRD-PARTY-NOTICES.md names the
+image the gateway runs on. `LicenseContractTests` holds the image's version label empty, and the image
+job refuses an `org.opencontainers.image` label the Dockerfile does not declare.
+
+The rest covers what .NET 10 changed in hosting, configuration, and Entity Framework Core:
+
+- `MetadataPersistenceFailureTests`: a writer stopped before its loop ever ran still writes what was
+  queued, and stopping it waits no longer than the shutdown token. A start token that is already
+  cancelled is what makes that ordering deterministic, and a store that never answers is what shows the
+  bound. The tests of the loop itself wait until the store has been asked for every batch before they
+  stop the writer, because a stop straight after `StartAsync` would usually reach a loop that had not
+  run yet.
+- `RetentionSweepTests`: the first sweep has finished when `StartAsync` returns, shown with a store that
+  answers only when the test lets it.
+- `MigrationLockTests`: a lock row left in a real SQLite store fails startup once the bound passes on the
+  injected clock, with an error naming the store and the lock, and a store without one starts with the
+  clock never moved.
+- `NullSettingValidatorTests`: settings read from JSON, because that is where a null comes from; a
+  value-typed setting given as null fails startup by name, and the validator leaves a null string,
+  section, or list alone, so a null section or list keeps its defaults and a required string is refused
+  by the options validator.
+- `AgentSpliceOptionsValidatorTests`: the retention windows and the sweep interval at, below, and above
+  their bounds.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

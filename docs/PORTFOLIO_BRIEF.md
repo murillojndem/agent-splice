@@ -18,7 +18,7 @@ The project is intended to demonstrate applied-AI systems engineering rather tha
 
 ## Durable technical proof points
 
-- OpenAI-compatible streaming proxy implemented in ASP.NET Core 8.
+- OpenAI-compatible streaming proxy implemented in ASP.NET Core 10.
 - Incremental SSE parsing without full-response buffering.
 - Trace timeline separating gateway overhead, upstream headers, first byte, first semantic token, stream delivery, and completion.
 - OpenTelemetry spans and metrics with explicit provenance.

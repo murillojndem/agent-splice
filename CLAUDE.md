@@ -75,7 +75,7 @@ Interfaces may be prepared only where they simplify the current slice. Do not bu
 
 ## Engineering constraints
 
-- Target .NET 8 and C# 12.
+- Target .NET 10 (LTS) and C# 12 (ADR 0024).
 - Enable nullable reference types.
 - Use `System.Text.Json`; do not add Newtonsoft.Json without an accepted ADR.
 - Use `TimeProvider` for time-dependent logic.

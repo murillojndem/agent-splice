@@ -21,7 +21,11 @@ COPY web/AgentSplice.Dashboard/ ./
 RUN pnpm build
 
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+# .NET 10's images are Ubuntu 24.04 LTS ("noble"); Microsoft publishes no Debian image for it. Both
+# tags name the distribution, so the operating-system layer THIRD-PARTY-NOTICES.md describes is the
+# one this file asks for, and a contract test holds both tags to the .NET version global.json pins
+# (ADR 0024).
+FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /source
 
 # Restore against the manifests first so that a source-only change reuses the package layer.
@@ -61,17 +65,23 @@ RUN dotnet publish src/AgentSplice.HealthProbe/AgentSplice.HealthProbe.csproj \
       --output /publish-probe
 
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 WORKDIR /app
 
 # What a registry shows for the image and links it to (ADR 0020). The source is the
 # repository Directory.Build.props names, and the license the SPDX identifier the dashboard's
 # package.json declares; a contract test holds all three to one value. GitHub's package page shows at
 # most 512 characters of the description.
+#
+# The version is declared empty because the image inherits every label this block does not set, and
+# Ubuntu's base image labels itself org.opencontainers.image.version=24.04: unset, the gateway's image
+# would claim to be version 24.04. Its tag names its version (ADR 0022). CI refuses any
+# org.opencontainers.image label but these, so the next base cannot add one unnoticed (ADR 0024).
 LABEL org.opencontainers.image.title="AgentSplice" \
       org.opencontainers.image.description="An experimental alpha: a local trace proxy for OpenAI-compatible model runtimes such as LM Studio. It forwards requests unchanged and records where the time went, never prompts or model output." \
       org.opencontainers.image.source="https://github.com/murillojndem/agent-splice" \
-      org.opencontainers.image.licenses="Apache-2.0"
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.version=""
 
 # The process binds to the container interface; loopback-only exposure is the operator's port
 # mapping (see docker-compose.yml and docs/SECURITY.md).
@@ -96,7 +106,7 @@ COPY --from=build /publish-probe ./probe/
 # in the base image under /usr/share/dotnet.
 COPY LICENSE NOTICE THIRD-PARTY-NOTICES.md ./
 
-# /data holds the SQLite metadata store. The image runs as the non-root user shipped in the .NET 8
+# /data holds the SQLite metadata store. The image runs as the non-root user shipped in the .NET
 # base image, so the volume mount point must be writable by it.
 RUN mkdir -p /data && chown -R app:app /data /app
 USER app

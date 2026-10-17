@@ -4,6 +4,75 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 12: .NET 10 LTS before the first alpha
+
+Microsoft ends support for .NET 8 on November 10, 2026, and every package and image the first alpha
+would ship carried .NET 8. ADR 0024 moves the repository to .NET 10 LTS, supported until November 14,
+2028, and supersedes CLAUDE.md's "Target .NET 8 and C# 12" and ADR 0007's pin of the 8.0 SDK.
+
+- `global.json` pins `10.0.100` with `latestFeature`, and every project targets `net10.0`. The
+  language stays C# 12. Microsoft.Extensions, Entity Framework Core, and the test host move to 10.0.13,
+  and the test time provider to 10.11.0. Every `actions/setup-dotnet` step, three in `ci.yml` and one
+  in `release.yml`, installs the 10.0 SDK.
+- The image builds on `sdk:10.0-noble` and runs on `aspnet:10.0-noble`, so its operating-system layer
+  is Ubuntu 24.04 LTS rather than Debian 12. THIRD-PARTY-NOTICES.md says so, and says where Ubuntu
+  publishes its sources. Ubuntu's base labels itself `org.opencontainers.image.version=24.04`, which
+  the image would have inherited as its own version: the Dockerfile declares the label empty, both image
+  jobs refuse a version label, and the image job refuses any `org.opencontainers.image` label the
+  Dockerfile does not declare.
+- `ToolchainContractTests` holds the SDK `global.json` pins, the target framework, both .NET images,
+  and every `actions/setup-dotnet` step of every workflow, `.yml` or `.yaml`, to one version. It
+  refuses a project file that sets its own target or language and a setup step that names no version,
+  and holds the notices to the image the gateway runs on.
+- .NET 10 runs a hosted service's loop on the thread pool, which review found mattered three times:
+  - The metadata writer can be stopped before its loop ever runs. It now flushes its queue in
+    `StopAsync` when that happens, on a pool thread and bounded by the shutdown token, as the loop's
+    flush is, so exchanges already accepted are still written; a test holds the one-reader rule.
+  - The first retention sweep would run after the listener started, and the administrative API would
+    serve exchanges past their window until it finished. It now finishes in `StartAsync`, before the
+    listener, as it did on .NET 8.
+  - A sweep interval out of range let the gateway report itself started, then stop with exit code 0,
+    and a window out of range failed startup with an exception naming nothing. The validator now bounds
+    the windows at 36,500 days and the interval between one millisecond and 49 days.
+- Entity Framework Core 10 locks a store while it migrates it, on every start, and waits forever on a
+  lock a killed gateway left behind. The migration is now bounded at 30 seconds, after which startup
+  fails with an error that names the store and the lock and says how to remove it.
+- .NET 10 binds a JSON `null` in a value-typed setting as its zero value, so `"mode": null` retained
+  nothing, silently, where .NET 8 failed startup. Startup now fails and names the setting.
+- Restore audits the packages `Directory.Packages.props` names, as it did on .NET 8, rather than all 86
+  a `net10.0` build would; `docs/DEVELOPMENT.md` says what to do when an advisory fails the build.
+- The packages carry ASP.NET Core's own license, which its .NET 10 runtime pack now ships, in
+  `licenses/`. The gateway disables static web assets, which it has none of, so no empty manifest is
+  published beside it, and the package smoke test refuses one. The framework-provided `System.*`
+  packages no longer ship and leave the notices.
+- The Linux package needs OpenSSL 1.1.1 or later, .NET 10's floor, and glibc 2.34 or later, the floor
+  of the SQLite library Entity Framework Core 10 requires, where the .NET 8 package needed 2.28: Ubuntu
+  20.04, Debian 11, and RHEL 8 no longer run it. The installation guide, the package's README, and the
+  release notes say so; the Linux smoke test fails if a native file in the package asks for a newer
+  glibc, and a contract test holds the documents to its floor.
+- CA1873, new in .NET 10, is waived for the reason CA1848 is. Entity Framework Core 10 reports no pending
+  model changes, and the migration is unchanged.
+- The README, `docs/DEVELOPMENT.md`, `docs/INSTALLATION.md` (four new troubleshooting rows among it),
+  `docs/SECURITY.md`, and `docs/THREAT_MODEL.md` name .NET 10 and its support date; SPECIFICATION,
+  `docs/PORTFOLIO_BRIEF.md`, the roadmap, and `docs/TESTING.md` name .NET 10; `tests/README.md` lists
+  the toolchain contract; and ADRs 0007, 0013, 0014, 0017, 0020, and 0022 say which of their decisions
+  moved.
+- No request-path behaviour, evidence, metric, or configuration key changes. AgentSplice's own log
+  events are unchanged; Entity Framework Core logs `20411` on every start, and ASP.NET Core no longer
+  logs its exception handler's error for a fault the gateway handled, which `1201` still records.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: the release workflow or
+one CI step installing another SDK, a `.yaml` workflow doing so, a setup step naming no version, the
+build or runtime image left on 8.0 with or without `--platform`, the target left on `net8.0`, a project
+file setting its own target or language, `LangVersion` moved off 12, `global.json` left on 8.0, the
+runtime image moved alone, notices naming another image, the image's version label inherited, a static
+web assets manifest published again, the writer's `StopAsync` without its flush, unbounded, or on the
+stopping thread, a stop starting a second reader, the writer's loop not writing, the first sweep back in
+`ExecuteAsync` or asking for a store with persistence off, the migration unbounded, any cancellation
+reported as the lock, the null-setting validator unregistered or not walking lists, either retention
+bound back to "greater than zero", and the Linux package's documents or smoke test stating another glibc
+floor.
+
 ### Stage 1D, part 11: the system endpoint reports the stage it implements
 
 `GET /api/v1/system` answered `stage: "1C"` through every Stage 1D change: the response held a literal,

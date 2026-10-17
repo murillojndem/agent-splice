@@ -16,6 +16,15 @@ namespace AgentSplice.Application.Configuration;
 /// </remarks>
 public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOptions>
 {
+    // A hundred years: beyond any retention anyone means, and near enough that the cutoff a window
+    // implies is still a date the clock can represent.
+    private static readonly TimeSpan MaxRetentionWindow = TimeSpan.FromDays(36500);
+
+    // PeriodicTimer's own limits are one millisecond and 4294967294 of them; 49 days is under the
+    // second and a number an operator can read.
+    private static readonly TimeSpan MinSweepInterval = TimeSpan.FromMilliseconds(1);
+    private static readonly TimeSpan MaxSweepInterval = TimeSpan.FromDays(49);
+
     /// <inheritdoc />
     public ValidateOptionsResult Validate(string? name, AgentSpliceOptions options)
     {
@@ -121,20 +130,27 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
     {
         var capture = options.Capture;
 
-        if (capture.Retention.Metadata <= TimeSpan.Zero)
+        // Bounded above as well as below, because both are used as given, and a value outside what uses
+        // it fails without naming the setting. A window is subtracted from the current time to find
+        // what has expired, by the sweep at startup, where one reaching back past the year 1 throws.
+        // The sweep interval drives a timer that accepts no period under a millisecond or over
+        // 2^32 - 2 of them, just under 49 days and 18 hours, and since .NET 10 that timer is created on
+        // the thread pool once the gateway is up: it reports itself started, then exits with code 0
+        // (ADR 0024).
+        if (capture.Retention.Metadata <= TimeSpan.Zero || capture.Retention.Metadata > MaxRetentionWindow)
         {
-            failures.Add("agentsplice:capture:retention:metadata must be greater than zero.");
+            failures.Add("agentsplice:capture:retention:metadata must be greater than zero and at most 36500 days.");
         }
 
-        if (capture.Retention.Content <= TimeSpan.Zero)
+        if (capture.Retention.Content <= TimeSpan.Zero || capture.Retention.Content > MaxRetentionWindow)
         {
-            failures.Add("agentsplice:capture:retention:content must be greater than zero.");
+            failures.Add("agentsplice:capture:retention:content must be greater than zero and at most 36500 days.");
         }
 
-        if (capture.Retention.SweepInterval <= TimeSpan.Zero)
+        if (capture.Retention.SweepInterval < MinSweepInterval || capture.Retention.SweepInterval > MaxSweepInterval)
         {
             failures.Add(
-                "agentsplice:capture:retention:sweepInterval must be greater than zero; a retention window nothing sweeps is a setting rather than a policy.");
+                "agentsplice:capture:retention:sweepInterval must be at least one millisecond and at most 49 days; a retention window nothing sweeps is a setting rather than a policy, and 49 days is about as long as the timer that drives the sweep can wait.");
         }
 
         // Refused, not merely constrained. No code sanitises or stores content, so accepting the flag

@@ -1,3 +1,4 @@
+using System.Globalization;
 using AgentSplice.Application.Configuration;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -315,22 +316,60 @@ public sealed class AgentSpliceOptionsValidatorTests
         AssertFailure(options, "has no provider in this build");
     }
 
-    [Fact]
-    public void The_retention_sweep_interval_must_be_positive()
+    [Theory]
+    [InlineData("00:00:00")]
+    [InlineData("00:00:00.0005")]
+    [InlineData("49.00:00:00.001")]
+    [InlineData("60.00:00:00")]
+    public void The_retention_sweep_interval_must_be_between_a_millisecond_and_49_days(string interval)
     {
+        // Not merely positive. The timer that drives the sweep refuses less than a millisecond and more
+        // than about 49 days and 17 hours, and since .NET 10 it refuses after startup rather than during
+        // it: the gateway reports itself started and then exits with code 0 (ADR 0024).
         var options = Valid();
-        options.Capture.Retention.SweepInterval = TimeSpan.Zero;
+        options.Capture.Retention.SweepInterval = TimeSpan.Parse(interval, CultureInfo.InvariantCulture);
 
-        AssertFailure(options, "sweepInterval must be greater than zero");
+        AssertFailure(options, "sweepInterval must be at least one millisecond and at most 49 days");
+    }
+
+    [Theory]
+    [InlineData("metadata", "00:00:00")]
+    [InlineData("metadata", "36500.00:00:00.001")]
+    [InlineData("metadata", "3650000.00:00:00")]
+    [InlineData("content", "00:00:00")]
+    [InlineData("content", "36500.00:00:00.001")]
+    public void Retention_windows_must_be_positive_and_at_most_a_hundred_years(string window, string length)
+    {
+        // Bounded above because a window is subtracted from the current time to find what expired, and
+        // one reaching back past the year 1 throws at the startup sweep with an error that names nothing.
+        var options = Valid();
+        var value = TimeSpan.Parse(length, CultureInfo.InvariantCulture);
+
+        if (window == "metadata")
+        {
+            options.Capture.Retention.Metadata = value;
+        }
+        else
+        {
+            options.Capture.Retention.Content = value;
+        }
+
+        AssertFailure(options, $"retention:{window} must be greater than zero and at most 36500 days");
     }
 
     [Fact]
-    public void Retention_windows_must_be_positive()
+    public void Retention_settings_at_their_bounds_are_accepted()
     {
         var options = Valid();
-        options.Capture.Retention.Metadata = TimeSpan.Zero;
+        options.Capture.Retention.Metadata = TimeSpan.FromDays(36500);
+        options.Capture.Retention.Content = TimeSpan.FromDays(36500);
+        options.Capture.Retention.SweepInterval = TimeSpan.FromDays(49);
 
-        AssertFailure(options, "retention:metadata must be greater than zero");
+        Assert.True(Validate(options).Succeeded);
+
+        options.Capture.Retention.SweepInterval = TimeSpan.FromMilliseconds(1);
+
+        Assert.True(Validate(options).Succeeded);
     }
 
     [Fact]

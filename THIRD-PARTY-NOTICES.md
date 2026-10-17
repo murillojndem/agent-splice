@@ -8,14 +8,16 @@ file. Direct NuGet dependencies are pinned in
 are pinned by `web/AgentSplice.Dashboard/pnpm-lock.yaml`.
 
 - **The Windows and Linux packages** are self-contained, so they also carry the .NET runtime and ASP.NET Core. Each
-  package's `licenses/` folder holds the runtime pack's own license and third-party notices and ASP.NET Core's third-party notices, as
-  Microsoft ships them in the runtime packs the package was published with. ASP.NET Core 8's pack carries no
-  separate license file: ASP.NET Core is MIT under the same holder as the runtime, whose notice is below.
-- **The container image** is built on Microsoft's `mcr.microsoft.com/dotnet/aspnet:8.0` image, which carries the
-  .NET notices under `/usr/share/dotnet/`. Its operating-system layer is Debian's: each package's copyright and
-  license are under `/usr/share/doc/<package>/copyright`, and some of those packages are under the GPL or the LGPL.
-  The image lists the exact packages and versions it holds in `/var/lib/dpkg/status`, and Debian publishes the
-  source of every version it has released at <https://snapshot.debian.org>.
+  package's `licenses/` folder holds the license and the third-party notices of both runtime packs it was published
+  with, the .NET runtime's and ASP.NET Core's, as Microsoft ships them.
+- **The container image** is built on Microsoft's `mcr.microsoft.com/dotnet/aspnet:10.0-noble` image, which carries
+  the .NET runtime's license and third-party notices under `/usr/share/dotnet/`; ASP.NET Core's own notices, which
+  the packages carry, are not in Microsoft's image. Its operating-system layer is Ubuntu 24.04 LTS: each package's
+  copyright and license are under `/usr/share/doc/<package>/copyright`, and some of those packages are under the GPL
+  or the LGPL. The image lists the exact packages and versions it holds in `/var/lib/dpkg/status`. Ubuntu publishes
+  each package's source on Launchpad, at `https://launchpad.net/ubuntu/+source/<source package>`, and the archive as
+  it stood at a given time at <https://snapshot.ubuntu.com>, which starts in March 2023 and which Ubuntu intends to
+  keep for at least two years back.
 
 A contract test fails if a package that ships a file in the gateway's restored dependency graph, or a package in the
 dashboard's production dependency graph, is in neither the Packages column of the table below nor the list of
@@ -29,9 +31,8 @@ precedes the asterisk.
 | .NET runtime and ASP.NET Core | in the Windows and Linux packages; in the image's base layer | MIT | .NET Foundation and Contributors |
 | Entity Framework Core and Microsoft.Data.Sqlite | `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.*`, `Microsoft.Data.Sqlite.Core` | MIT | .NET Foundation and Contributors |
 | Microsoft.Extensions | `Microsoft.Extensions.*` | MIT | .NET Foundation and Contributors |
-| System libraries | `System.Diagnostics.DiagnosticSource`, `System.Diagnostics.EventLog`, `System.Memory` | MIT | .NET Foundation and Contributors |
 | OpenTelemetry .NET | `OpenTelemetry`, `OpenTelemetry.*` | Apache-2.0 | The OpenTelemetry Authors |
-| SQLitePCLRaw | `SQLitePCLRaw.*` | Apache-2.0 | 2014-2023 SourceGear, LLC |
+| SQLitePCLRaw | `SQLitePCLRaw.*` | Apache-2.0 | 2014-2024 SourceGear, LLC |
 | SQLite | compiled into `SQLitePCLRaw.lib.e_sqlite3`: `e_sqlite3.dll` in the Windows package, `libe_sqlite3.so` in the Linux package and among the image's native libraries | Public domain | — |
 | React | `react`, `react-dom`, `scheduler`, bundled into the dashboard | MIT | Facebook, Inc. and its affiliates |
 | React Router | `react-router-dom`, `react-router`, `@remix-run/router`, bundled into the dashboard | MIT | React Training LLC 2015-2019; Remix Software Inc. 2020-2021; Shopify Inc. 2022-2023 |

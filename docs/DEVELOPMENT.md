@@ -2,8 +2,9 @@
 
 ## Prerequisites
 
-- .NET 8 SDK. `global.json` pins the 8.0 feature band, so a machine with only .NET 10 installed
-  cannot build this repository until an 8.0 SDK is present (ADR 0007).
+- .NET 10 SDK. `global.json` asks for SDK 10.0.100 or any later 10.0 SDK (`rollForward: latestFeature`)
+  and builds with the newest one installed, so a machine with only another major version's SDK cannot
+  build this repository until a 10.0 SDK is present (ADR 0007, ADR 0024).
 - Docker Desktop or a compatible Docker Engine
 - Git
 - PowerShell 7 recommended on Windows
@@ -214,7 +215,7 @@ Spans arrive within about five seconds of an exchange and metrics within a minut
 
 The packages are self-contained, single-file builds with the dashboard beside them, for machines with
 no .NET installed: win-x64 for Windows and linux-x64 for x64 distributions on glibc (ADR 0017, ADR 0021;
-installing them is in `docs/INSTALLATION.md`). Building one needs the .NET 8 SDK, Node 22, pnpm 10, and
+installing them is in `docs/INSTALLATION.md`). Building one needs the .NET 10 SDK, Node 22, pnpm 10, and
 PowerShell 7.4 or later, and the Linux package is built on Linux, whose smoke test also uses GNU tar,
 `ss` from iproute2, bash, and curl:
 
@@ -248,9 +249,9 @@ executable, nothing written to the working directory, and a listener on loopback
 token, running `smoke-gateway.sh` through Bash, which on Windows is Git Bash. Port 5280 must be free.
 
 A package carries the .NET runtime of the SDK that built it, and nothing patches that runtime
-afterwards, so a package built locally with an old 8.0 SDK carries an old runtime. Releases are built
-by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version. Microsoft
-supports .NET 8 until November 10, 2026.
+afterwards, so a package built locally with an old 10.0 SDK carries an old runtime. Releases are built
+by CI with the current 10.0 SDK, and `README.txt` in the package names the runtime version. Microsoft
+supports .NET 10 until November 14, 2028.
 
 CI's `release-assets` job then assembles what a release publishes from the two package artifacts and
 the image's archive: it verifies each, combines their digests into one `SHA256SUMS`, checks that the set
@@ -333,6 +334,14 @@ bundler takes whatever `src/` imports, whichever section of `package.json` decla
 in `devDependencies` — Vite, Rollup, esbuild — have a row of their own in the notices, because the code
 they generate is part of the bundle.
 
+Restore audits the packages `Directory.Packages.props` names for known vulnerabilities, and an advisory
+against one fails the build (`NU1901` to `NU1904`), as any warning does. Move the package to a version
+the advisory says is fixed. If there is none yet, or the advisory does not apply to how the gateway uses
+the package, suppress that one advisory with `<NuGetAuditSuppress Include="<advisory URL>" />` in
+`Directory.Build.props`, with a comment saying why. The build does not audit transitive packages, which
+.NET 10 would by default (ADR 0024); `dotnet list package --vulnerable --include-transitive` lists what
+is known against them.
+
 ## Database
 
 SQLite is the shipped store and is sufficient for local development. `agentsplice:persistence:mode`
@@ -345,6 +354,11 @@ dashboard's `rootPath` are, so the shipped `Data Source=agentsplice.db` is
 packages (ADR 0017, ADR 0021). Absolute paths, `:memory:`, `file:` URIs, and `|DataDirectory|` are used as
 written. The startup log names the file as `1305 MetadataStoreOpened`. The gateway never creates the
 store's directory: a missing or read-only one fails startup with a message naming the file.
+
+Since Entity Framework Core 9 a migration first takes a lock inside the store, a row in
+`__EFMigrationsLock`, and waits while it finds one. A gateway killed while it was starting can leave the
+row behind; the next start then fails after 30 seconds with an error naming the store and the lock,
+rather than waiting forever (`docs/INSTALLATION.md`, Troubleshooting; ADR 0024).
 
 The schema is versioned with EF Core migrations, applied at startup before anything reads or writes.
 To change it, edit the row types or `AgentSpliceDbContext`, then:

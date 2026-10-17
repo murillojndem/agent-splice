@@ -13,7 +13,7 @@ SHA256SUMS in the format `sha256sum --check` reads.
 
 The .NET build never invokes Node (ADR 0015), so this script is where the two builds meet, as the
 Dockerfile is for the image. CI runs it on windows-latest for win-x64 and on ubuntu-latest for
-linux-x64; it needs the .NET 8 SDK, Node 22, and pnpm 10 — the machine that runs the package needs
+linux-x64; it needs the .NET 10 SDK, Node 22, and pnpm 10 — the machine that runs the package needs
 none of them. The Linux package is built on Linux, where its archive can record that the executable is
 executable.
 
@@ -127,11 +127,10 @@ try {
         Copy-Item -Path $path -Destination $staging
     }
 
-    # The package also carries the .NET runtime and ASP.NET Core, so it carries their license and
+    # The package also carries the .NET runtime and ASP.NET Core, so it carries their licenses and
     # third-party notices as Microsoft ships them in the runtime packs. The SDK says which packs, and from
     # which directory, this publish used; asked right after the publish, it answers for the restore that
-    # publish ran. ASP.NET Core 8's pack has no license file of its own: it is MIT under the same holder,
-    # whose notice THIRD-PARTY-NOTICES.md carries.
+    # publish ran. Since .NET 10 both packs carry a license file (ADR 0024).
     $resolved = (& dotnet msbuild $project -nologo "-p:PublishProfile=$RuntimeIdentifier" '-p:Configuration=Release' `
             -t:ResolveFrameworkReferences -getItem:ResolvedRuntimePack | Out-String)
 
@@ -145,7 +144,7 @@ try {
 
     foreach ($pack in @(
             @{ Framework = 'Microsoft.NETCore.App'; Prefix = 'dotnet-runtime'; Required = @('LICENSE', 'THIRD-PARTY-NOTICES') },
-            @{ Framework = 'Microsoft.AspNetCore.App'; Prefix = 'aspnetcore-runtime'; Required = @('THIRD-PARTY-NOTICES') })) {
+            @{ Framework = 'Microsoft.AspNetCore.App'; Prefix = 'aspnetcore-runtime'; Required = @('LICENSE', 'THIRD-PARTY-NOTICES') })) {
         $item = @($packs | Where-Object { $_.FrameworkName -eq $pack.Framework })
 
         if ($item.Count -ne 1 -or -not $item[0].PackageDirectory -or -not (Test-Path $item[0].PackageDirectory)) {
@@ -171,7 +170,7 @@ try {
     $start = if ($windows) { '.\AgentSplice.Api.exe' } else { './AgentSplice.Api' }
     $platform = if ($windows) { 'Windows (x64)' } else { 'Linux (x64)' }
     $patching = if ($windows) { 'Windows Update does' } else { "your distribution's updates do" }
-    $requirement = if ($windows) { '' } else { "`nIt runs on x64 distributions based on glibc, with OpenSSL installed." }
+    $requirement = if ($windows) { '' } else { "`nIt runs on x64 distributions based on glibc 2.34 or later, with OpenSSL 1.1.1 or later installed." }
 
     # On Linux the folder's mode is what keeps the store to its owner: SQLite creates the file readable
     # by whomever the umask allows.
@@ -217,8 +216,8 @@ On a machine other people use, set an administrative token, as the instructions 
 without one, every account on it can read the trace metadata through /api/v1.
 
 AgentSplice is licensed under the Apache License 2.0: see LICENSE and NOTICE. The software
-it bundles is listed with its licenses in THIRD-PARTY-NOTICES.md, and the .NET runtime's
-own license and notices are in the licenses folder.
+it bundles is listed with its licenses in THIRD-PARTY-NOTICES.md, and the licenses and notices
+of the .NET runtime and ASP.NET Core it carries are in the licenses folder.
 
 Full instructions: $guide
 "@

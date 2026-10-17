@@ -79,6 +79,15 @@ public sealed partial class LicenseContractTests
     }
 
     [Fact]
+    public void The_image_claims_no_version_of_its_base()
+    {
+        // An image inherits every label its Dockerfile does not set, and Ubuntu's base image labels
+        // itself org.opencontainers.image.version=24.04. Declared empty, the gateway's image claims no
+        // version but the one its tag names (ADR 0022, ADR 0024).
+        Assert.Equal(string.Empty, ImageLabel("org.opencontainers.image.version"));
+    }
+
+    [Fact]
     public void The_notice_names_the_holder_the_build_declares()
     {
         var notice = RepositoryPaths.ReadText("NOTICE").Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');

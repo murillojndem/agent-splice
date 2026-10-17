@@ -53,6 +53,30 @@ public sealed class RetentionSweepService : BackgroundService
         this.logger = logger;
     }
 
+    /// <summary>Sweeps once, then starts the periodic sweep.</summary>
+    /// <remarks>
+    /// Once at startup, before the first tick. A process restarted more often than its sweep interval
+    /// would otherwise never sweep at all — which is the ordinary case for a local gateway someone
+    /// starts with their editor.
+    ///
+    /// And before the host goes on to start the listener, which is why it is here and not at the top of
+    /// <see cref="ExecuteAsync"/>. Since .NET 10 a <see cref="BackgroundService"/> runs
+    /// <see cref="ExecuteAsync"/> on the thread pool, so a sweep there would race the first requests,
+    /// and the administrative API would serve a backlog that expired while the gateway was stopped
+    /// until the sweep caught up with it. On .NET 8 it ran here in effect, because SQLite's
+    /// asynchronous calls complete synchronously (ADR 0024). The price is the one it always had: a
+    /// long backlog delays readiness by as long as it takes to remove.
+    /// </remarks>
+    public override async Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (PersistenceRegistration.Retains(options.Value))
+        {
+            await SweepAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await base.StartAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -61,14 +85,7 @@ public sealed class RetentionSweepService : BackgroundService
             return;
         }
 
-        var interval = options.Value.Capture.Retention.SweepInterval;
-
-        // Once at startup, before the first tick. A process restarted more often than its sweep
-        // interval would otherwise never sweep at all — which is the ordinary case for a local
-        // gateway someone starts with their editor.
-        await SweepAsync(stoppingToken).ConfigureAwait(false);
-
-        using var timer = new PeriodicTimer(interval, timeProvider);
+        using var timer = new PeriodicTimer(options.Value.Capture.Retention.SweepInterval, timeProvider);
 
         try
         {

@@ -238,6 +238,28 @@ try {
     if (-not $windows) {
         $mode = [IO.File]::GetUnixFileMode($exe)
         Check ($mode.HasFlag([IO.UnixFileMode]::UserExecute)) "$executableName is executable once extracted ($mode)"
+
+        # The oldest glibc the package runs on is the newest any of its native files asks for. Today
+        # that is the bundled SQLite library's, not the .NET runtime's, and nothing else would notice
+        # it rising: this runner's glibc is newer than either. The installation guide, the package's
+        # README, and the release notes state this floor, and a contract test holds them to it (ADR 0024).
+        $glibcFloor = [version]'2.34'
+        $elf = @(Get-ChildItem -Path $package -Recurse -File | Where-Object {
+                (@(Get-Content -Path $_.FullName -AsByteStream -TotalCount 4) -join ',') -eq '127,69,76,70'
+            })
+        $readelf = Get-Command readelf -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+        Check ($null -ne $readelf) "readelf is there to read which glibc the package needs"
+
+        if ($null -ne $readelf) {
+            $needed = $elf |
+                ForEach-Object { & $readelf.Source --version-info --wide $_.FullName } |
+                Select-String -Pattern 'GLIBC_(\d+\.\d+(?:\.\d+)?)' -AllMatches |
+                ForEach-Object { $_.Matches } |
+                ForEach-Object { [version]$_.Groups[1].Value } |
+                Sort-Object -Descending |
+                Select-Object -First 1
+            Check ($elf.Count -gt 0 -and $null -ne $needed -and $needed -le $glibcFloor) "the package's $($elf.Count) native files need glibc $needed, no later than the $glibcFloor its documents state"
+        }
     }
 
     Check (Test-Path (Join-Path $package $sqlite)) "SQLite's native library sits beside the executable"
@@ -263,7 +285,7 @@ try {
             (Get-FileHash (Join-Path $package $notice)).Hash -eq (Get-FileHash (Join-Path $repository $notice)).Hash) "the package carries the repository's $notice"
     }
 
-    foreach ($notice in @('dotnet-runtime-LICENSE.TXT', 'dotnet-runtime-THIRD-PARTY-NOTICES.TXT', 'aspnetcore-runtime-THIRD-PARTY-NOTICES.TXT')) {
+    foreach ($notice in @('dotnet-runtime-LICENSE.TXT', 'dotnet-runtime-THIRD-PARTY-NOTICES.TXT', 'aspnetcore-runtime-LICENSE.TXT', 'aspnetcore-runtime-THIRD-PARTY-NOTICES.TXT')) {
         Check (Test-Path (Join-Path $package 'licenses' $notice)) "the package carries the bundled runtime's licenses/$notice"
     }
 
@@ -272,6 +294,9 @@ try {
     Check (-not (Test-Path (Join-Path $package 'aspnetcorev2_inprocess.dll'))) "no IIS module"
     Check (-not (Test-Path (Join-Path $package 'appsettings.Development.json'))) "no development settings"
     Check (-not (Get-ChildItem -Path $package -Filter 'AgentSplice.*.dll')) "the gateway's assemblies are inside the executable"
+    # The Web SDK publishes an empty manifest of static web assets beside the gateway unless the project
+    # turns them off; the dashboard is a folder, not static web assets (ADR 0015, ADR 0024).
+    Check (-not (Get-ChildItem -Path $package -Recurse -Filter '*.staticwebassets.*')) "no static web assets manifest"
 
     # The package must run on what it carries: nothing inherited from this machine's .NET or from a
     # developer's AgentSplice settings.

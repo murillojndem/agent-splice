@@ -104,7 +104,61 @@ public sealed class RetentionSweepTests
         Assert.Empty(await context.Exchanges.ToListAsync());
     }
 
-    private static RetentionSweepService Sweep(TemporaryMetadataStore store, TimeSpan window)
+    [Fact]
+    public async Task The_startup_sweep_has_finished_when_the_service_has_started()
+    {
+        // The host starts the listener after its hosted services, so a first sweep still running when
+        // StartAsync returns races the first requests, and the administrative API serves evidence past
+        // its window until it finishes. Since .NET 10 ExecuteAsync runs on the thread pool, so that is
+        // where a sweep at its top would be (ADR 0024). A store that does not answer until the test lets
+        // it shows which side of StartAsync the sweep is on.
+        using var store = new TemporaryMetadataStore();
+        await InitialiseAsync(store);
+        await SeedAsync(store, Now.AddDays(-31));
+
+        var answer = new TaskCompletionSource();
+        var sweep = Sweep(store, TimeSpan.FromDays(30), new WaitingContextFactory(store.ContextFactory(), answer.Task));
+
+        var starting = sweep.StartAsync(CancellationToken.None);
+
+        Assert.False(starting.IsCompleted, "The service started before its first sweep had removed anything.");
+
+        answer.SetResult();
+        await starting.WaitAsync(TimeSpan.FromSeconds(30));
+
+        using (var context = store.OpenContext())
+        {
+            Assert.Empty(await context.Exchanges.ToListAsync());
+        }
+
+        await sweep.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_deployment_that_retains_nothing_starts_without_asking_for_a_store()
+    {
+        // With persistence off there is no store, and the startup sweep must not go looking for one: a
+        // context asked for here would fail, and log a failed sweep on every start (FR-DATA-001).
+        var options = new AgentSpliceOptions();
+        options.Persistence.Mode = PersistenceMode.None;
+
+        var store = new CountingContextFactory();
+        var sweep = new RetentionSweepService(
+            store,
+            Options.Create(options),
+            new FakeTimeProvider(Now),
+            NullLogger<RetentionSweepService>.Instance);
+
+        await sweep.StartAsync(CancellationToken.None);
+        await sweep.StopAsync(CancellationToken.None);
+
+        Assert.Equal(0, store.Requests);
+    }
+
+    private static RetentionSweepService Sweep(
+        TemporaryMetadataStore store,
+        TimeSpan window,
+        IDbContextFactory<AgentSpliceDbContext>? contextFactory = null)
     {
         var options = new AgentSpliceOptions();
         options.Persistence.Mode = PersistenceMode.Sqlite;
@@ -112,7 +166,7 @@ public sealed class RetentionSweepTests
         options.Capture.Retention.Metadata = window;
 
         return new RetentionSweepService(
-            store.ContextFactory(),
+            contextFactory ?? store.ContextFactory(),
             Options.Create(options),
             new FakeTimeProvider(Now),
             NullLogger<RetentionSweepService>.Instance);
@@ -166,5 +220,42 @@ public sealed class RetentionSweepTests
         await context.SaveChangesAsync();
 
         return exchangeId;
+    }
+
+    /// <summary>A factory with no store behind it, which counts how often it was asked for one.</summary>
+    private sealed class CountingContextFactory : IDbContextFactory<AgentSpliceDbContext>
+    {
+        private int requests;
+
+        internal int Requests => Volatile.Read(ref requests);
+
+        public AgentSpliceDbContext CreateDbContext()
+        {
+            Interlocked.Increment(ref requests);
+
+            throw new InvalidOperationException("A deployment that retains nothing asked for a store.");
+        }
+    }
+
+    /// <summary>The store's own contexts, each handed over only once <c>answer</c> has completed.</summary>
+    private sealed class WaitingContextFactory : IDbContextFactory<AgentSpliceDbContext>
+    {
+        private readonly IDbContextFactory<AgentSpliceDbContext> store;
+        private readonly Task answer;
+
+        internal WaitingContextFactory(IDbContextFactory<AgentSpliceDbContext> store, Task answer)
+        {
+            this.store = store;
+            this.answer = answer;
+        }
+
+        public AgentSpliceDbContext CreateDbContext() => store.CreateDbContext();
+
+        public async Task<AgentSpliceDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            await answer.WaitAsync(cancellationToken);
+
+            return store.CreateDbContext();
+        }
     }
 }

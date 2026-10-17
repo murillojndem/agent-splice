@@ -61,8 +61,9 @@ public sealed partial class SelfContainedPackageContractTests
         Assert.Equal("true", Property(profile, "SelfContained"));
         Assert.Equal("true", Property(profile, "PublishSingleFile"));
 
-        // Not trimmed — ASP.NET Core and EF Core are not trim-safe on .NET 8 — and not compressed,
-        // not ReadyToRun, with native libraries beside the executable rather than extracted at start.
+        // Not trimmed — ASP.NET Core and EF Core are not trim-safe, and a trimmed publish fails on its
+        // trim warnings — and not compressed, not ReadyToRun, with native libraries beside the
+        // executable rather than extracted at start.
         Assert.Equal("false", Property(profile, "PublishTrimmed"));
         Assert.Equal("false", Property(profile, "PublishReadyToRun"));
         Assert.Equal("false", Property(profile, "EnableCompressionInSingleFile"));
@@ -176,6 +177,44 @@ public sealed partial class SelfContainedPackageContractTests
 
     private static IEnumerable<XElement> Items(XDocument profile, string name) =>
         profile.Root!.Elements("ItemGroup").Elements(name);
+
+    [Fact]
+    public void Every_statement_of_the_Linux_packages_glibc_floor_is_the_one_its_smoke_test_enforces()
+    {
+        // The floor is the newest glibc any native file in the package asks for, which today is the
+        // bundled SQLite library's and not the runtime's, and no build shows it: CI's runner has a newer
+        // glibc than either, so the package runs there whatever it needs. The smoke test reads the files
+        // and fails past its floor (ADR 0024); what tells a user the floor must say the same.
+        var enforced = EnforcedGlibcFloor().Match(RepositoryPaths.ReadText(".github", "scripts", "smoke-package.ps1"));
+
+        Assert.True(enforced.Success, "smoke-package.ps1 must state the glibc floor it enforces.");
+
+        string[][] documents =
+        [
+            ["docs", "INSTALLATION.md"],
+            [".github", "scripts", "package.ps1"],
+            [".github", "workflows", "release.yml"],
+        ];
+
+        foreach (var document in documents)
+        {
+            var stated = StatedGlibcFloor()
+                .Matches(RepositoryPaths.ReadText(document))
+                .Select(match => match.Groups["version"].Value)
+                .Distinct()
+                .ToArray();
+
+            Assert.True(
+                stated.Length == 1 && stated[0] == enforced.Groups["version"].Value,
+                $"{string.Join('/', document)} states the glibc floor as [{string.Join(", ", stated)}]; the smoke test enforces {enforced.Groups["version"].Value}.");
+        }
+    }
+
+    [GeneratedRegex(@"\$glibcFloor = \[version\]'(?<version>[0-9]+\.[0-9]+)'")]
+    private static partial Regex EnforcedGlibcFloor();
+
+    [GeneratedRegex(@"glibc (?<version>[0-9]+\.[0-9]+) or later")]
+    private static partial Regex StatedGlibcFloor();
 
     [GeneratedRegex(@"\[ValidateSet\((?<platforms>[^)]*)\)\]")]
     private static partial Regex ValidateSet();

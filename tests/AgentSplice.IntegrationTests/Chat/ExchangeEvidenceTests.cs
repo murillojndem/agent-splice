@@ -411,7 +411,7 @@ public sealed class ExchangeEvidenceTests
             response.EnsureSuccessStatusCode();
         }
 
-        Assert.Equal(2, sink.Records.Count);
+        Assert.Equal(2, sink.Records.Length);
 
         return sink.Records;
     }
@@ -512,7 +512,7 @@ public sealed class ExchangeEvidenceTests
     {
         private readonly List<ExchangeRecord> records = [];
 
-        internal IReadOnlyList<ExchangeRecord> Records
+        internal ExchangeRecord[] Records
         {
             get
             {

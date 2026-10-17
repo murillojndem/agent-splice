@@ -9,6 +9,13 @@
     <Description>AgentSplice gateway host.</Description>
     <UserSecretsId>agentsplice-api</UserSecretsId>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!--
+      The gateway has no static web assets: it serves the dashboard from the folder
+      agentsplice:dashboard:rootPath names (ADR 0015). Since .NET 10 the Web SDK would otherwise
+      publish an empty AgentSplice.Api.staticwebassets.endpoints.json beside the executable, a file
+      no package listing names and nothing reads (ADR 0024).
+    -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
   </PropertyGroup>
 
   <ItemGroup>

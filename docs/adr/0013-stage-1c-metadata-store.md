@@ -1,6 +1,6 @@
 # ADR 0013 — The Stage 1C metadata store and the write path
 
-- Status: Accepted
+- Status: Accepted, decision 12 refined by [ADR 0024](0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md) (the writer also flushes in `StopAsync`, when its loop never ran)
 - Date: 2026-08-01
 - Supersedes decision 12 of [ADR 0009](0009-stage-1b-streaming-relay.md)
 - Discharges the Stage 1C consequence recorded in [ADR 0008](0008-stage-1a-transparent-request-path.md)
@@ -237,6 +237,12 @@ to the sink: the evidence for an interrupted operation is the evidence most wort
 The shutdown flush lives at the end of `ExecuteAsync` rather than in `StopAsync`, so one reader drains
 the channel. A second reader in `StopAsync` would race the loop whenever the shutdown timeout elapsed
 first.
+
+> **Refined by ADR 0024.** On .NET 10 a stop can cancel `ExecuteAsync` before its first line runs, and
+> the flush with it. `StopAsync` then flushes the queue itself, and only then: the loop and `StopAsync`
+> each claim the queue with a flag set once, and whichever claims it first is the one reader. That flush
+> is bounded by the shutdown token, as the loop's is, so the shutdown timeout still bounds how long
+> stopping takes.
 
 ### 13. Whether a store exists is decided at resolution, never at registration
 
