@@ -65,9 +65,16 @@ account can publish, and Compose now builds it rather than pulling it.
 `.github/workflows/publish-image.yml` runs on `release: published` — a maintainer publishing a draft —
 and on `workflow_dispatch` with a tag, because a `release` event runs the workflow file as it was at the
 tag, so a fix to the workflow reaches an already-published release only through dispatch, which runs
-main's copy. Either way it refuses a release that is not published, that the release workflow did not
-create, or whose image asset the release workflow did not upload. Pushing a tag can therefore never
-reach the registry, and nothing is public before a person has reviewed the draft (ADR 0018 decision 3).
+main's copy. Either way it refuses a release that is not published, that is not immutable (decision 5),
+or that GitHub Actions did not create or whose image asset it did not upload. Every workflow's token
+acts as `github-actions[bot]`, so that check tells a workflow's release from a person's upload, not one
+workflow from another.
+
+No other job of any workflow can write to the registry, so no workflow on `main` reaches it when a tag is
+pushed, and nothing is public before a person has reviewed the draft (ADR 0018 decision 3). A tag runs
+the workflows of the commit it names, so that holds for a tag on a reviewed commit on `main`; anyone with
+write access to the repository could push a commit whose workflow asks for `packages: write`, and that
+access stays the boundary.
 
 ### 3. It pushes exactly the reviewed archive, and never moves a tag
 
@@ -75,9 +82,16 @@ The `push` job downloads the image asset and `SHA256SUMS` from the release, chec
 its line there and against the digest GitHub recorded when the release workflow uploaded it, and reads
 the archive's `manifest.json` before loading anything: exactly one image, named exactly as this
 release's, and its config digest. It pushes only the version tag, never `latest`. If the registry
-already has that tag, it must name the same config, or the job fails rather than move it. Afterwards it
-checks that the registry holds a single image manifest whose config is the archive's, and that the image
-can be fetched by its digest anonymously.
+already has that tag, it must name the same config, or the job fails rather than move it. It pushes only
+on one of two answers to that lookup — the tag is not there, or the token cannot read the package, which
+then either does not exist yet or cannot be written by it either — and on any other failure it retries,
+then stops.
+
+Afterwards it asks the registry for the digest the tag names, fetches the manifest by that digest, and
+checks that its bytes hash to it, that it is a single image manifest, and that its config is the
+archive's: that digest is the one the notes name, so it is the manifest checked even if the tag moved in
+between. Last, it checks that the image can be fetched by its digest anonymously, and the `notes` job
+writes the digest into the release notes, editing them only when they do not already end with it.
 
 ### 4. Each job that writes, writes one kind of thing
 
@@ -100,6 +114,10 @@ cannot change, and GitHub attests the release; `gh release verify` and `gh relea
 it. A draft stays editable, so retrying a release before it is published still means deleting the draft
 and the tag; after publication, a tag is never reused.
 
+The `push` job refuses a release that is not immutable, so the archive the pushed image must match can no
+longer be replaced. A release published while the setting was off is deleted, with its tag, and released
+again.
+
 ### 6. Pinned to the classic image store, amd64 only
 
 The `image`, `image-archive`, and `push` jobs run on `ubuntu-24.04`, whose Docker uses the classic image
@@ -115,7 +133,7 @@ are what GHCR shows on the package page and how it links the package to the repo
 ## Consequences
 
 - `docker pull ghcr.io/murillojndem/agent-splice:<version>` installs a release with nothing from the
-  repository, and the release notes name the digest to pull it by.
+  repository, and the release notes name the digest to run it by.
 - The first publication creates the package; whether it is public and linked as the documentation says
   can only be seen then, and the release runbook checks it.
 - A release carries the image twice — in the registry and as an archive — and the archive is for
@@ -131,22 +149,33 @@ are what GHCR shows on the package page and how it links the package to the repo
 
 - `ImagePublicationContractTests`:
   - `publish-image.yml` runs only on a published release and on dispatch with a tag;
+  - every workflow declares its permissions, and no job of any workflow but `push` can write packages or
+    runs a registry command;
   - its jobs are exactly `push` and `notes`, with exactly `packages: write` and `contents: write`, and
     the workflow's default is read;
-  - no step uses an action, and none builds, tags anew, or installs anything;
-  - the `push` job verifies the archive against `SHA256SUMS` and reads its manifest before it loads it,
-    and pushes once;
-  - no `run:` in any workflow contains an expression, and none pushes or tags `latest`;
-  - the jobs that build, load, and push the image run on `ubuntu-24.04`;
-  - the `image` job builds with `docker build --provenance=false --sbom=false`, starts with
-    `--no-build`, refuses Compose labels, and saves after the smoke test;
+  - no job declares an action, a container, or services, and no step uses an action, installs or
+    downloads anything, or builds, runs, pulls, or tags an image;
+  - the `push` job refuses a release that is not published, not immutable, or not made by GitHub
+    Actions, and verifies the archive against `SHA256SUMS` and GitHub's record of it and reads its
+    manifest before it loads it;
+  - it pushes once, only on the lookup's two answers, refuses to move a tag, stops on any other failure,
+    and names the digest whose manifest it fetched and hashed;
+  - no `run:` in any workflow contains an expression, and no value in any workflow names `latest`;
+  - the jobs that build, load, and push the image run on `ubuntu-24.04`, and the `image` job stops on the
+    containerd store before it builds;
+  - the `image` job builds once, with `docker build --provenance=false --sbom=false`, starts with
+    `--no-build`, refuses Compose labels, and saves the running container's image after the smoke test;
   - the Compose service names an image no registry namespace can claim, and builds it rather than
     pulling;
-  - the `docker run` in the installation guide and the one CI runs use the same flags, and every port
-    the guides publish is on loopback.
+  - the bash and the PowerShell `docker run` in the installation guide are, word for word, the one CI
+    runs but for the image; every port a document's `docker` command or Compose publishes is on loopback;
+    and every image name a document gives is this repository's.
 - `ImagePublicationContractTests` also holds the release to the image: `release-assets` needs
-  `image-archive` and expects the image's archive, and so does the release's `publish` job.
-- `ReleaseWorkflowContractTests` — the image artifact is one `release-assets` must take by its ID.
+  `image-archive` and expects the image's archive, and so does the release's `publish` job, and every
+  step that makes, loads, or pushes the archive spells its name and the image's the same way.
+- `ReleaseWorkflowContractTests` — the image artifact is one `release-assets` must take by its ID, every
+  job `release-assets` needs can be neither switched off nor allowed to fail, and the release's `publish`
+  job holds `contents: write` and nothing more.
 - The CI `image`, `image-archive`, and `release-assets` jobs — the image saved, loaded elsewhere, run as
   the guide runs it, and assembled into the release, on every change.
 

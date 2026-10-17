@@ -432,27 +432,42 @@ release, so `ImagePublicationContractTests` reads the workflows on every build i
 
 - `publish-image.yml` runs on a published release and on dispatch with a required tag, and on nothing
   else;
+- every workflow declares its permissions, and no job of any workflow but `publish-image.yml`'s `push`
+  can write packages or runs a registry command such as `docker push`;
 - its default is read, its only jobs are `push`, with `contents: read` and `packages: write`, and
   `notes`, with `contents: write`, which runs after it;
-- no step of it uses an action, builds, commits, or installs anything;
-- the `push` job downloads the archive, verifies it against `SHA256SUMS`, and reads its manifest before
-  it loads it; it pushes once, refuses to move a tag, and refuses a draft;
-- no step of any workflow puts an expression into a script, and none tags or pushes `latest`;
-- the jobs that build, load, and push the image run on `ubuntu-24.04`, and the `image` job refuses the
-  containerd image store;
-- the `image` job builds with `docker build --provenance=false --sbom=false`, starts with `--no-build`,
-  smoke-tests, and only then saves, refusing Compose's labels;
+- no job of it declares an action, a container, or services, and no step uses an action, installs or
+  downloads anything, or builds, runs, pulls, or tags an image;
+- the `push` job refuses a release that is not published, not immutable, or not made — with its image —
+  by GitHub Actions, and downloads the archive, verifies it against `SHA256SUMS` and GitHub's record, and
+  reads its manifest before it loads it;
+- it pushes once, only when the lookup answered that the tag is absent or unreadable, refuses to move a
+  tag, stops on any other answer, and names the digest whose manifest it fetched and hashed;
+- no step of any workflow puts an expression into a script, and no value in any workflow names `latest`;
+- the jobs that build, load, and push the image run on `ubuntu-24.04`, and the `image` job stops on the
+  containerd image store before it builds;
+- the `image` job builds once, with `docker build --provenance=false --sbom=false`, starts with
+  `--no-build`, smoke-tests, and only then saves the running container's image, refusing Compose's
+  labels;
 - Compose's image has no account namespace and is built, never pulled, and CI builds it under that name;
-- the `docker run` in the installation guide and the one `image-archive` runs use the same flags, and
-  every port the guides publish is on loopback;
+- the bash and the PowerShell `docker run` in the installation guide are, word for word, the one
+  `image-archive` runs but for the image they name; every port a document's `docker` command or Compose
+  publishes is on loopback; and every image name a document gives is the repository's;
 - `release-assets` needs `image-archive` and expects the image's archive, and so does the step of the
-  release's `publish` job that verifies the draft.
+  release's `publish` job that verifies the draft; every step that makes, loads, or pushes the archive
+  spells its name and the image's the same way;
+- every job `release-assets` needs, `image` and `image-archive` among them, can be neither switched off
+  nor allowed to fail, and the release's `publish` job holds `contents: write` and nothing more.
 
 What only Docker can prove runs in CI on every change: the `image` job saves the image it checked, and
 `image-archive` loads that archive on another runner, checks its manifest, labels, and platform, runs it
 with the guide's `docker run`, smoke-tests it, and checks that the store is on the volume. The push itself
 runs only at a release; before this change it was rehearsed against a local registry, where it pushed,
-left an unchanged tag alone on a second run, and refused to move a tag that named another image.
+left an unchanged tag alone on a second run, and refused to move a tag that named another image. Its
+lookup, its check of what it pushed, and the `notes` job were also run against a fake registry and a fake
+`gh`: it refused to push while the registry failed and the tag named another image, refused a tag that
+moved after the push, and edited the notes once over repeated runs, and not at all when they already
+named the digest.
 
 Each fails against its reintroduced defect, listed in the changelog.
 

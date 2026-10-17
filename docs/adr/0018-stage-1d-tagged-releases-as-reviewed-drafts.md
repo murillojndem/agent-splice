@@ -40,6 +40,9 @@ its own concurrency group, because a reusable workflow that waits on its caller'
 > `release-assets` job assembles from both packages, taken by the artifact ID CI reports, and creates
 > the draft from the files its `SHA256SUMS` lists.
 
+> **Extended by ADR 0022.** The release also carries the image's archive, which the CI `image` job saves
+> and `image-archive` loads and runs before `release-assets` takes it.
+
 ### 3. Drafts, published by a person
 
 The release is created with `gh release create --draft --prerelease --verify-tag`. Nobody else sees
@@ -52,6 +55,10 @@ The workflow's default permission is `contents: read`, and only the final job ha
 That job checks nothing out and runs no restore, install, or build. It downloads the artifact,
 verifies it with `sha256sum --check --strict SHA256SUMS`, and creates the draft. A dependency's install
 script therefore never runs with the token in reach.
+
+> **Extended by ADR 0022.** `publish-image.yml` adds two more jobs that write, each with one permission
+> and neither checking anything out or installing anything: `push`, with `packages: write`, and `notes`,
+> with `contents: write`. This job's permission is `contents: write` and nothing more.
 
 ### 5. Digests, not yet signatures
 

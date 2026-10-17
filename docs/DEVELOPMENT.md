@@ -252,10 +252,10 @@ afterwards, so a package built locally with an old 8.0 SDK carries an old runtim
 by CI with the current 8.0 SDK, and `README.txt` in the package names the runtime version. Microsoft
 supports .NET 8 until November 10, 2026.
 
-CI's `release-assets` job then assembles what a release publishes from the two package artifacts: it
-verifies each, combines their digests into one `SHA256SUMS`, checks that the set is one archive per
-platform of one version, and uploads `agentsplice-release`. It runs on every change, so a defect in
-assembling a release fails a pull request.
+CI's `release-assets` job then assembles what a release publishes from the two package artifacts and
+the image's archive: it verifies each, combines their digests into one `SHA256SUMS`, checks that the set
+is one archive per platform and the image's, all of one version, and uploads `agentsplice-release`. It
+runs on every change, so a defect in assembling a release fails a pull request.
 
 ## Releasing
 
@@ -266,8 +266,10 @@ the draft pushes the image (ADR 0018, ADR 0022):
    in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ. Move the
    `Unreleased` entries in `CHANGELOG.md` under a heading for the version.
 2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
-   the tag. Release immutability is on, so a tag whose release has been published can never be used
-   again; until then, a draft and its tag can still be deleted and made again.
+   the tag. Tag only a reviewed commit on `main`: a tag runs the workflows of the commit it names, as they
+   are there, with whatever permissions they ask for. Release immutability is on, so a tag whose release
+   has been published can never be used again; until then, a draft and its tag can still be deleted and
+   made again.
 3. `.github/workflows/release.yml` checks that the tag names the build's version and that `LICENSE`,
    `NOTICE`, and `THIRD-PARTY-NOTICES.md` exist (ADR 0020), runs the whole CI suite against the tag, and
    creates a **draft pre-release** from the `agentsplice-release` artifact that run assembled: the
@@ -281,14 +283,30 @@ the draft pushes the image (ADR 0018, ADR 0022):
    release notes. Check that run, then:
    - the package page shows the image as public, linked to this repository, with its description and
      license — the first push creates the package, and only then can that be seen;
-   - `docker pull ghcr.io/<owner>/<repository>@<digest>` works without signing in;
+   - `docker pull ghcr.io/<owner>/<repository>@sha256:<digest>`, the reference the notes now end with,
+     works without signing in;
    - `gh release verify v<version>` and `gh release verify-asset v<version> <file>` accept the release
      and its assets.
 
-If `publish-image.yml` fails for a cause in the workflow itself, fix it on `main` and run it for the tag
-with `gh workflow run publish-image.yml -f tag=v<version>`: a release event runs the file as it was at
-the tag, and a dispatch runs `main`'s. It refuses a release that is not published or that the release
-workflow did not create, and it never moves a tag that already names another image.
+If `publish-image.yml` fails, its log names the check that stopped it; nothing is pushed until the
+release and its archive have passed theirs.
+
+- **The image is not anonymously readable.** The package was created private. In the package's settings,
+  make it public — that cannot be undone — and check that it is linked to this repository. Then re-run the
+  failed jobs: the push finds the tag already naming this image and pushes nothing, checks anonymous
+  access again, and `notes` writes the digest.
+- **The release is not immutable.** Release immutability was off when it was published, so its archive
+  could still be replaced, and the image is not pushed from it. Turn immutability on, delete the release
+  and its tag — a release that is not immutable allows both — and release the version again.
+- **It cannot tell whether the tag exists.** The registry failed the lookup three times, the last time
+  with neither the tag's manifest, "not found", nor a refusal. Re-run the failed jobs once it answers
+  again.
+- **A cause in the workflow itself.** Fix it on `main` and run it for the tag with
+  `gh workflow run publish-image.yml -f tag=v<version>`: a release event runs the file as it was at the
+  tag, and a dispatch runs `main`'s.
+
+Every way in, it refuses a release that is not published, that GitHub Actions did not create, or that is
+not immutable, and it never moves a tag that already names another image.
 
 To retry a release before it is published, delete the draft and the tag, fix the cause, and tag again:
 `gh release create` refuses a tag that already has a release. After publication, a release's tag is

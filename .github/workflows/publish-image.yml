@@ -1,15 +1,15 @@
 name: Publish image
 
 # When a maintainer publishes a release, push the image that release carries to GitHub Container
-# Registry (ADR 0022). Pushing a tag never reaches the registry: the release workflow only drafts, and
-# the draft carries the image CI built and tested as an archive. This workflow pushes exactly that
-# archive, after checking it against the release's own SHA256SUMS, under the release's version — never
-# `latest` — and then writes the registry's digest into the release notes.
+# Registry (ADR 0022). No workflow on main reaches the registry when a tag is pushed: the release
+# workflow only drafts, and the draft carries the image CI built and tested as an archive. This workflow
+# pushes exactly that archive, after checking it against the release's own SHA256SUMS, under the
+# release's version — never `latest` — and then writes the registry's digest into the release notes.
 #
 # It checks nothing out, installs nothing, and uses no action: every step is the runner's own docker,
 # gh, jq, and coreutils. A `release` event runs this file as it was at the tag, so a fix to it reaches an
 # already-published release only through workflow_dispatch, which runs main's copy; both paths refuse a
-# release that is not published, or that the release workflow did not create.
+# release that is not published, that GitHub Actions did not create, or that is not immutable.
 
 on:
   release:
@@ -45,7 +45,7 @@ jobs:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
 
     steps:
-      - name: The release is published, and the release workflow made it
+      - name: The release is published, immutable, and made by GitHub Actions
         id: release
         run: |
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -56,12 +56,19 @@ jobs:
           asset="agentsplice-$version-image-linux-amd64.tar.gz"
           # This endpoint answers only for a published release: a draft, or no release at all, is a 404.
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          # Created, and its image uploaded, by GitHub Actions — the identity every workflow's token
+          # shares, which no person's upload has — rather than by hand.
           if ! jq -e --arg asset "$asset" '
                 .draft == false
                 and .author.login == "github-actions[bot]"
                 and ([.assets[] | select(.name == $asset and .uploader.login == "github-actions[bot]")] | length == 1)
               ' "$RUNNER_TEMP/release.json" > /dev/null; then
-            echo "$TAG is not a published release that the release workflow created with $asset." >&2
+            echo "$TAG is not a published release that GitHub Actions created with $asset." >&2
+            exit 1
+          fi
+          # Immutable, so the archive the pushed image must match can no longer be replaced.
+          if ! jq -e '.immutable == true' "$RUNNER_TEMP/release.json" > /dev/null; then
+            echo "$TAG is not immutable: release immutability was off when it was published, so its archive can still be replaced. See docs/DEVELOPMENT.md." >&2
             exit 1
           fi
           {
@@ -118,27 +125,55 @@ jobs:
           docker load --input "$RUNNER_TEMP/image/$ASSET"
           printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           # A version tag is never moved: if the registry already has this one, it must be this image.
-          if existing="$(docker buildx imagetools inspect --raw "$REFERENCE" 2> /dev/null)"; then
-            if ! jq -e --arg config "$CONFIG" '.config.digest == $config' <<< "$existing" > /dev/null; then
-              echo "$REFERENCE already names another image; refusing to move it." >&2
-              exit 1
+          # Only two answers lead to a push: the tag is not there, or this token cannot read the package,
+          # which then either does not exist yet or cannot be written by it either. Any other failure,
+          # after retries, stops the job rather than push past a tag the lookup could not see.
+          lookup=unknown
+          for attempt in 1 2 3; do
+            [ "$attempt" -eq 1 ] || sleep 10
+            if existing="$(docker buildx imagetools inspect --raw "$REFERENCE" 2> "$RUNNER_TEMP/lookup.err")"; then
+              lookup=found
+              break
+            elif grep -q ': not found$' "$RUNNER_TEMP/lookup.err"; then
+              lookup=absent
+              break
+            elif grep -Eq '401 Unauthorized|403 Forbidden|denied' "$RUNNER_TEMP/lookup.err"; then
+              lookup=unreadable
+            else
+              lookup=unknown
             fi
-            echo "$REFERENCE already names this image."
-          else
-            docker push "$REFERENCE"
-          fi
-          # What the registry now holds: a single image manifest whose config is the archive's.
-          pushed="$(docker buildx imagetools inspect --raw "$REFERENCE")"
-          if ! jq -e --arg config "$CONFIG" '
-                (.mediaType | test("manifest\\.v2\\+json$|image\\.manifest\\.v1\\+json$")) and .config.digest == $config
-              ' <<< "$pushed" > /dev/null; then
-            echo "The registry does not hold the archive's image as a single manifest." >&2
-            exit 1
-          fi
-          # The digest as the registry names the manifest, not one recomputed from a printed copy of it.
+          done
+          case "$lookup" in
+            found)
+              if ! jq -e --arg config "$CONFIG" '.config.digest == $config' <<< "$existing" > /dev/null; then
+                echo "$REFERENCE already names another image; refusing to move it." >&2
+                exit 1
+              fi
+              echo "$REFERENCE already names this image."
+              ;;
+            absent|unreadable)
+              docker push "$REFERENCE"
+              ;;
+            *)
+              cat "$RUNNER_TEMP/lookup.err" >&2
+              echo "Cannot tell whether $REFERENCE exists; refusing to push." >&2
+              exit 1
+              ;;
+          esac
+          # What the registry now holds, fetched by the digest it names for the tag: a single image
+          # manifest whose config is the archive's, and whose bytes hash to that digest — so the digest
+          # the notes will name is the manifest checked here, even if the tag moved in between.
           digest="$(docker buildx imagetools inspect "$REFERENCE" --format '{{json .Manifest}}' | jq -r .digest)"
           if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "The registry named no digest for $REFERENCE." >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect --raw "${REFERENCE%:*}@$digest" > "$RUNNER_TEMP/pushed.json"
+          if [ "sha256:$(sha256sum < "$RUNNER_TEMP/pushed.json" | cut -d' ' -f1)" != "$digest" ] \
+             || ! jq -e --arg config "$CONFIG" '
+                  (.mediaType | test("manifest\\.v2\\+json$|image\\.manifest\\.v1\\+json$")) and .config.digest == $config
+                ' "$RUNNER_TEMP/pushed.json" > /dev/null; then
+            echo "The manifest the registry names $digest is not the archive's image as a single manifest." >&2
             exit 1
           fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -184,9 +219,12 @@ jobs:
             exit 1
           fi
           image="ghcr.io/${GITHUB_REPOSITORY,,}@$DIGEST"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/body.md"
-          grep -v '^\*\*Image digest\.\*\*' "$RUNNER_TEMP/body.md" > "$RUNNER_TEMP/notes.md" || true
-          printf '\n**Image digest.** `%s`\n' "$image" >> "$RUNNER_TEMP/notes.md"
-          if ! cmp --silent "$RUNNER_TEMP/body.md" "$RUNNER_TEMP/notes.md"; then
+          # Compared as text, with line endings normalized and trailing newlines dropped, so a re-run or a
+          # dispatch leaves notes that already end by naming this digest as they are.
+          current="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body | tr -d '\r')"
+          kept="$(grep -v '^\*\*Image digest\.\*\*' <<< "$current" || true)"
+          notes="$(printf '%s\n\n**Image digest.** `%s`' "$kept" "$image")"
+          if [ "$notes" != "$current" ]; then
+            printf '%s\n' "$notes" > "$RUNNER_TEMP/notes.md"
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
           fi

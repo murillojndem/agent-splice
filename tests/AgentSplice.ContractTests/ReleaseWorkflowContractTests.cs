@@ -21,8 +21,8 @@ public sealed partial class ReleaseWorkflowContractTests
 {
     private const string ReleaseArtifact = "agentsplice-release";
 
-    /// <summary>What a job that only handles artifacts never runs.</summary>
-    private static readonly string[] InstallCommands = ["pnpm", "npm ", "npx ", "dotnet ", "apt-get", "pip "];
+    /// <summary>What a job that only handles artifacts, or that holds a write token, never runs.</summary>
+    internal static readonly string[] InstallCommands = ["pnpm", "npm ", "npx ", "dotnet ", "apt-get", "pip "];
 
     [Fact]
     public void A_release_is_only_ever_created_as_a_draft_pre_release()
@@ -59,6 +59,12 @@ public sealed partial class ReleaseWorkflowContractTests
             }
 
             Assert.True(writes, "The publish job needs contents: write to create the release.");
+
+            // And nothing more: packages: write here would let a pushed tag reach the registry before
+            // anyone reviewed the draft (ADR 0022).
+            Assert.Equal(
+                ["contents=write"],
+                permissions!.Children.Select(entry => ((YamlScalarNode)entry.Key).Value + "=" + (entry.Value as YamlScalarNode)?.Value));
 
             // What holds the write token must run nothing fetched from a registry: no checkout to build
             // from, and no restore or install whose scripts would run with the token in reach.
@@ -142,6 +148,13 @@ public sealed partial class ReleaseWorkflowContractTests
 
         Assert.All(built, upload => Assert.Contains(upload.Job, needs));
 
+        // Every job the release waits for decides it: none can be switched off or allowed to fail,
+        // including the ones that only check what another built, such as image-archive.
+        foreach (var gate in needs)
+        {
+            AssertGates(jobs[gate!]);
+        }
+
         // It handles only what those jobs built: no action but the artifacts' own, nothing checked out,
         // nothing installed, nothing switched off.
         foreach (var step in Steps(assembly))
@@ -217,6 +230,10 @@ public sealed partial class ReleaseWorkflowContractTests
     }
 
     /// <summary>Neither the job nor any of its steps can be skipped by a condition or allowed to fail.</summary>
+    /// <remarks>
+    /// A step may run <c>always()</c>, as a cleanup step does: that runs it after a failure too, and the
+    /// failure still fails the job.
+    /// </remarks>
     private static void AssertGates(YamlMappingNode job)
     {
         Assert.False(job.Children.ContainsKey(new YamlScalarNode("if")), "A job that gates the release must not be conditional.");
@@ -224,7 +241,9 @@ public sealed partial class ReleaseWorkflowContractTests
 
         foreach (var step in Steps(job))
         {
-            Assert.False(step.Children.ContainsKey(new YamlScalarNode("if")), FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be conditional."));
+            Assert.True(
+                Scalar(step, "if") is null or "always()",
+                FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be conditional."));
             Assert.False(step.Children.ContainsKey(new YamlScalarNode("continue-on-error")), FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be allowed to fail."));
         }
     }

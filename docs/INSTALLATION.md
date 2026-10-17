@@ -29,14 +29,16 @@ Docker Desktop, or Docker Engine 25 or later. There are two ways in:
   OpenTelemetry collector.
 
 Either way an administrative token is required: the container binds every interface inside itself and
-cannot tell that the port is published on loopback only, so the gateway refuses to serve stored
-evidence without one (`docs/SECURITY.md`).
+cannot tell that the port is published on loopback only, so the gateway refuses to start without one
+(`docs/SECURITY.md`).
 
 ### Published image
 
 The image is `ghcr.io/murillojndem/agent-splice`, tagged with each release's version — never `latest` —
 and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation. Until
-the first release is published, a pull answers `manifest unknown`: use Compose from a clone instead.
+the first release is published there is no package at all, so a pull fails — `denied`, or `403 Forbidden`
+while fetching a token — and signing in to the registry does not help: use Compose from a clone instead.
+After that, `manifest unknown` means that the version you named has no image.
 
 Choose a token, then start it:
 
@@ -78,23 +80,34 @@ Each flag matters, and CI runs this command, flag for flag, against the image a 
   container finds again — without them it lives inside the container and goes with it;
 - `--add-host` and the runtime address reach LM Studio on the host, as the Compose file does;
 - `--env AGENTSPLICE_ADMIN_API_KEY`, with no value, passes the token from your shell rather than writing
-  it into the command line.
+  it into the command line. Docker copies it only from the environment of the shell that runs
+  `docker run` — the `export` above in bash, `$env:` in PowerShell — and otherwise sets nothing, without a
+  warning, so the gateway exits at startup. `sudo` clears that environment: use
+  `sudo --preserve-env=AGENTSPLICE_ADMIN_API_KEY docker run …`, or run Docker as a member of the `docker`
+  group.
 
 `docker ps` shows the image's own health check once the gateway answers (ADR 0016); open
 `http://127.0.0.1:5280/` for the dashboard. Do not start it with `--env-file .env.example`: that file is
 for Compose and development, and it would turn on development settings.
 
-**Pinning the image.** A version tag names the image a release pushed, and the release notes name its
-digest: `docker pull ghcr.io/murillojndem/agent-splice@sha256:<digest>` fetches exactly that image,
-whatever a later push might put under the tag. Each release also carries the same image as
-`agentsplice-<version>-image-linux-amd64.tar.gz`, for a machine without registry access: check it
-against its line in `SHA256SUMS`, as for the packages, then `docker load --input` it.
+**Pinning the image.** A version tag can be moved by whoever can push to the package; a digest cannot.
+Once the image is pushed, the release notes end with its reference by digest,
+`ghcr.io/murillojndem/agent-splice@sha256:<digest>`. Put that reference in place of the tagged one at the
+end of the `docker run` above, and Docker runs exactly that image, pulling it if it must. A
+`docker pull` by digest on its own leaves no tag behind, so a `docker run` that names the tag looks the
+tag up again. The notes stay editable after publication, so their digest is a convenience; what cannot
+change is the release's own copy of the image, `agentsplice-<version>-image-linux-amd64.tar.gz`, which is
+also the way in for a machine without registry access. Check it with
+`gh release verify-asset v<version> agentsplice-<version>-image-linux-amd64.tar.gz`, or against its line
+in `SHA256SUMS` as for the packages, then `docker load --input` it.
 
 **Data.** As with Compose below, but with `docker stop agentsplice`, `docker cp
 agentsplice:/data/agentsplice.db ./agentsplice-backup.db`, and `docker start agentsplice`.
 
 **Upgrading and removing.** `docker rm --force agentsplice`, then the same `docker run` with the new
-version; the volume is kept. `docker volume rm agentsplice-data` deletes the data too.
+version; the volume is kept. Nothing keeps the token for you, so in a new shell export
+`AGENTSPLICE_ADMIN_API_KEY` again first: the value you used before, or a new one to paste into the
+dashboard. `docker volume rm agentsplice-data` deletes the data too.
 
 ### Compose from a clone
 
@@ -416,5 +429,6 @@ curl.exe -i http://127.0.0.1:5280/health/live
 | On Linux, `/api/v1` answers `401` with the token you set | The gateway did not see the variable: its name differs in case from the one `agentsplice:administration:apiKeyEnvironmentVariable` names, which on Linux must match exactly, or it was not exported in the shell that started the gateway. Export it, then start the gateway from that shell. |
 | `Failed to bind to address http://127.0.0.1:5280` | Something else is using the port. Stop it, or pass `--urls http://127.0.0.1:<another port>`. |
 | Startup refuses a binding beyond loopback | Serving stored evidence to a network requires an administrative token (`docs/SECURITY.md`). |
+| The container exits at once, and `docker logs agentsplice` says the variable `AGENTSPLICE_ADMIN_API_KEY` is unset or empty | Docker set nothing, because the variable was not exported in the shell that ran `docker run`, or `sudo` cleared it. Export it, `docker rm agentsplice`, and run the same command again ([Published image](#published-image)). |
 | A setting seems to be ignored | Environment variables use double underscores (`AGENTSPLICE__PERSISTENCE__MODE`), and a command-line argument wins over both a variable and `appsettings.json`. |
 | Requests fail with `agentsplice_runtime_unavailable` | The runtime is not listening where the gateway was told. Check that its server is started and the URL, including `/v1`. |

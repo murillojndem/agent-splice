@@ -202,8 +202,9 @@ What exists today:
 
 - **Releases are built by CI from the tag, never on a workstation** (ADR 0018). A `v<version>` tag that
   names the build's version runs the whole CI suite against the tagged commit. The Windows and Linux
-  packages that run builds and smoke-tests, assembled into one artifact by a read-only job that checks
-  nothing out (ADR 0021), are what the release carries; nothing is rebuilt for it. Each artifact is
+  packages that run builds and smoke-tests, and the image it builds and runs, saved as an archive and run
+  again from it, assembled into one artifact by a read-only job that checks nothing out (ADR 0021,
+  ADR 0022), are what the release carries; nothing is rebuilt for it. Each artifact is
   taken by the ID the job that uploaded it reported, so one that another job of the run re-uploaded
   under the same name is refused rather than published. The package builds restore no dependency
   cache: what they bundle comes from the lockfile and the registry, never from a store another run
@@ -212,11 +213,16 @@ What exists today:
   and a person reviews it before it becomes visible. Release immutability is on: once published, a
   release's assets and tag cannot change, and `gh release verify` checks GitHub's attestation of them.
 - **The image reaches the registry only when a person publishes a release** (ADR 0022). The release
-  carries the image CI built and tested as an archive. Publishing it starts a workflow that checks the
-  archive against the release's `SHA256SUMS` and against the digest GitHub recorded at upload, reads what
-  the archive holds before loading it, pushes it under the release's version — never `latest` — and
-  refuses to move a version tag that already names another image. Pushing a tag cannot reach the
-  registry at all.
+  carries the image CI built and tested as an archive. Publishing it starts a workflow that refuses a
+  release GitHub Actions did not create or that is not immutable, checks the archive against the
+  release's `SHA256SUMS` and against the digest GitHub recorded at upload, reads what the archive holds
+  before loading it, pushes it under the release's version — never `latest` — and refuses to move a
+  version tag that already names another image, stopping rather than pushing when the registry's answer
+  leaves that open. No other job of any workflow can write to the registry, and a contract test holds
+  every workflow to that, so no workflow on `main` reaches it when a tag is pushed. A tag runs the
+  workflows of the commit it names, so only reviewed commits on `main` are tagged: anyone with write
+  access to the repository could push a commit whose workflow asks for `packages: write`, and that access
+  is the boundary.
 - **Each job that writes, writes one kind of thing,** and none checks anything out or installs anything,
   so no dependency's install script runs with a write token in reach: the release's `publish` job
   creates the draft (`contents: write`), `publish-image.yml`'s `push` job pushes the image
@@ -232,9 +238,11 @@ What exists today:
 - **Pinned inputs.** Package versions are central and exact (`Directory.Packages.props`), the dashboard
   installs from a frozen lockfile with an exact `pnpm`, and the collector image is pinned by version.
   Base images are pinned by tag, not by digest.
-- **Pull by digest.** A tag in a registry can be moved by whoever can push to the package; the digest a
-  release's notes name cannot. The installation guide shows how to pull by it, and the release carries
-  the same image as an archive, for `docker load`.
+- **Run by digest.** A tag in a registry can be moved by whoever can push to the package; a digest
+  cannot. The release notes end with the image's reference by digest, whose manifest the workflow fetched
+  by that digest and checked against the archive, and the installation guide shows how to run by it. The
+  notes stay editable after publication, so the anchor is the release's own copy of the image, immutable
+  once published: `gh release verify-asset` checks it before `docker load`.
 - **No unreviewed dynamic plugin loading.**
 
 Not yet:
@@ -244,6 +252,8 @@ Not yet:
 - vulnerability scanning;
 - signed release artifacts — neither the packages nor the image are signed, and no build provenance is
   attested;
+- a tag ruleset limiting who may create `v*` tags: until then, write access to the repository is what
+  decides who can start a release;
 - provenance for community adapters and profiles, which arrive with the stages that add them.
 
 ## Disclosure

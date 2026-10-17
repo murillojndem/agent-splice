@@ -21,22 +21,28 @@ not pushing the tag — pushes exactly that image to GitHub Container Registry (
   is on the volume. `release-assets` takes the archive by its artifact ID once `image-archive` has passed,
   so every draft carries it, covered by the same `SHA256SUMS`.
 - New `.github/workflows/publish-image.yml`, on a published release and on dispatch with a tag. Its
-  `push` job, with `packages: write` alone, refuses a release that is not published or that the release
-  workflow did not create, checks the archive against `SHA256SUMS` and the digest GitHub recorded, reads
-  its manifest before loading it, pushes the version tag only — never `latest` — refuses to move a tag
-  that names another image, and checks the result anonymously by digest. Its `notes` job, with
-  `contents: write` alone, writes the registry's digest into the release notes. Neither checks anything
-  out, installs anything, or uses an action.
+  `push` job, with `packages: write` alone, refuses a release that is not published, that is not
+  immutable, or that GitHub Actions did not create, checks the archive against `SHA256SUMS` and the
+  digest GitHub recorded, reads its manifest before loading it, pushes the version tag only — never
+  `latest` — refuses to move a tag that names another image, and stops rather than push when the
+  registry's answer leaves that open. It then fetches the manifest by the digest the registry names,
+  checks that its bytes hash to it and that its config is the archive's, and checks that it can be read
+  anonymously. Its `notes` job, with `contents: write` alone, writes that digest into the release notes,
+  editing them only when they do not already end with it. Neither checks anything out, installs
+  anything, or uses an action, and no job of any other workflow can write packages.
 - Release immutability is enabled for the repository: once published, a release's assets and tag cannot
   change, and `gh release verify` checks them.
 - Compose's image is renamed `agentsplice:dev`, with `pull_policy: build`: the old
   `agentsplice/agentsplice:dev` belonged to a Docker Hub account anyone could register.
 - `docs/INSTALLATION.md`'s Docker section now has the published image — `docker run` in bash and
-  PowerShell, pulling by digest, the archive for `docker load`, upgrading — beside Compose from a clone.
-  `docs/DEVELOPMENT.md`'s release runbook adds publishing, checking the package, and recovering through
-  dispatch. `docs/SECURITY.md`, `docs/THREAT_MODEL.md` (a registry trust boundary and an image
-  substitution threat), SPECIFICATION section 20.2, the roadmap, the README, and
-  `THIRD-PARTY-NOTICES.md` (the image's Debian packages and where their source is) say what changed.
+  PowerShell, with the token exported in the shell that runs it, running by digest, the archive for
+  `docker load`, upgrading — beside Compose from a clone. `docs/DEVELOPMENT.md`'s release runbook adds
+  publishing, checking the package, tagging only reviewed commits, and what to do when `publish-image.yml`
+  stops: a private package, a release that is not immutable, a registry that does not answer, or a defect
+  in the workflow, fixed and run again through dispatch. `docs/SECURITY.md`, `docs/THREAT_MODEL.md` (a
+  registry trust boundary and an image substitution threat), SPECIFICATION section 20.2, the roadmap, the
+  README, and `THIRD-PARTY-NOTICES.md` (the image's Debian packages and where their source is) say what
+  changed.
 - No runtime behaviour changes.
 
 Every new guard was verified to fail against a deliberately reintroduced defect:
@@ -50,11 +56,30 @@ Every new guard was verified to fail against a deliberately reintroduced defect:
 - Compose's image under an account namespace, or pulled;
 - the guide's `docker run` without the volume, or publishing on every interface;
 - `release-assets` without `image-archive`, or taking the image by name;
-- the release's verification no longer expecting the image's archive.
+- the release's verification no longer expecting the image's archive;
+- another workflow's job granted `packages: write` or `write-all`, or running `docker push`; a workflow
+  without permissions; such a workflow saved as `.yaml`; the release's `publish` job granted
+  `packages: write`;
+- every lookup failure taken for "not found", the lookup's error discarded, a failure that pushes, or the
+  push outside the lookup's answers;
+- the pushed manifest read by its tag again, or not hashed against its digest;
+- the release's immutability, author, uploader, or GitHub's digest not checked;
+- `latest` passed through `env`, a tag made anew, `--all-tags`, `imagetools create`, a job container or
+  service, `apt`, `curl`, or `docker run` in the publishing jobs;
+- the containerd check only warning, or made after the build; the saved image built anew;
+- the archive's or the image's name spelled differently in one step;
+- `image` or `image-archive` conditional, or one of their steps allowed to fail or made conditional;
+- the guide's PowerShell command without the volume, either command with a flag CI does not use,
+  `-p 5280:5280`, `-dp 0.0.0.0:5280:5280`, `-P`, or `--network host`; Compose publishing the gateway or
+  PostgreSQL on every interface;
+- the installation guide, the README, or the Compose file naming the image in another namespace.
 
 The image's path was rehearsed locally against Docker Desktop and a local registry before CI ran it: the
 save step, `image-archive`'s load, `docker run`, smoke test, and store check, and the push step's push,
-its second run, and its refusal to move a tag.
+its second run, and its refusal to move a tag. After review, the push step and the `notes` job ran against
+a fake registry and `gh`, as they were at the first commit of this part and as they are now: the first
+pushed over a tag that named another image when the registry failed, named the digest of a tag that moved
+after the push, and edited the notes on every run; the second refused, failed, and edited them once.
 
 ### Stage 1D, part 8: a Linux package that needs no .NET installation
 
