@@ -8,8 +8,9 @@ namespace AgentSplice.ContractTests.Documents;
 /// </summary>
 /// <remarks>
 /// Reads the YAML representation model directly instead of an OpenAPI object model. The document is
-/// OpenAPI 3.1 and the assertions only need path keys and enum members, so a schema-aware reader
-/// would add a dependency without adding confidence.
+/// OpenAPI 3.1 and the assertions need path keys, operations, security, enum members, and the
+/// properties a schema requires — following <c>allOf</c> and local <c>$ref</c>s for that last one —
+/// so a full schema-aware reader would add a dependency without adding confidence.
 /// </remarks>
 internal sealed class OpenApiDocument
 {
@@ -46,6 +47,49 @@ internal sealed class OpenApiDocument
             .Children
             .Select(child => ((YamlScalarNode)child).Value!)
             .ToArray();
+    }
+
+    /// <summary>
+    /// The properties a component schema requires, including those of every schema it is composed of
+    /// through <c>allOf</c>.
+    /// </summary>
+    internal IReadOnlyList<string> SchemaRequired(string schemaName)
+    {
+        var required = Required(Mapping(Mapping(Mapping(root, "components"), "schemas"), schemaName)).Distinct(StringComparer.Ordinal).ToArray();
+
+        if (required.Length == 0)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant($"The OpenAPI schema '{schemaName}' requires no property, directly or through allOf."));
+        }
+
+        return required;
+    }
+
+    private IEnumerable<string> Required(YamlMappingNode schema)
+    {
+        if (schema.Children.TryGetValue(new YamlScalarNode("$ref"), out var reference))
+        {
+            var name = ((YamlScalarNode)reference).Value!;
+            const string Local = "#/components/schemas/";
+
+            if (!name.StartsWith(Local, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(FormattableString.Invariant($"The OpenAPI reference '{name}' is not to a local component schema."));
+            }
+
+            return Required(Mapping(Mapping(Mapping(root, "components"), "schemas"), name[Local.Length..]));
+        }
+
+        var own = schema.Children.TryGetValue(new YamlScalarNode("required"), out var list)
+            ? ((YamlSequenceNode)list).Children.Select(child => ((YamlScalarNode)child).Value!)
+            : [];
+
+        var composed = schema.Children.TryGetValue(new YamlScalarNode("allOf"), out var parts)
+            ? ((YamlSequenceNode)parts).Children.Cast<YamlMappingNode>().SelectMany(Required)
+            : [];
+
+        return own.Concat(composed);
     }
 
     /// <summary>The operations under a path, keyed by verb.</summary>

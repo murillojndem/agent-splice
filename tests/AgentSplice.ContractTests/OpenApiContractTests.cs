@@ -131,11 +131,7 @@ public sealed class OpenApiContractTests
             .SchemaPropertyEnum(schemaName, propertyName)
             .ToHashSet(StringComparer.Ordinal);
 
-        var domain = Enum.GetNames<TEnum>()
-            .Select(ToSnakeCase)
-            .ToHashSet(StringComparer.Ordinal);
-
-        Assert.Equal(domain, declared);
+        Assert.Equal(WireNames.Of<TEnum>(), declared);
     }
 
     /// <summary>
@@ -166,25 +162,6 @@ public sealed class OpenApiContractTests
 
                     break;
             }
-        }
-
-        return builder.ToString();
-    }
-
-    private static string ToSnakeCase(string pascalCase)
-    {
-        var builder = new StringBuilder(pascalCase.Length + 4);
-
-        for (var index = 0; index < pascalCase.Length; index++)
-        {
-            var character = pascalCase[index];
-
-            if (index > 0 && char.IsAsciiLetterUpper(character))
-            {
-                builder.Append('_');
-            }
-
-            builder.Append(char.ToLowerInvariant(character));
         }
 
         return builder.ToString();

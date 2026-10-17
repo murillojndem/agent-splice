@@ -379,11 +379,13 @@ public sealed partial class ImagePublicationContractTests
     public void Every_image_name_the_documents_give_is_this_repositorys()
     {
         // The workflows derive the name from the repository; the documents spell it out, and after a
-        // rename or a transfer they would send users to a namespace the project no longer owns.
+        // rename or a transfer they would send users to a namespace the project no longer owns. A trace
+        // report is the exception: it records the image one session ran, and is never edited afterwards
+        // (ADR 0023), so a name in it stays the name it ran.
         var expected = PublishedImage();
         var named = 0;
 
-        foreach (var (path, text) in Documents().Append(("docker-compose.yml", RepositoryPaths.ReadText("docker-compose.yml"))))
+        foreach (var (path, text) in Documents().Where(document => !IsTraceReport(document.Path)).Append(("docker-compose.yml", RepositoryPaths.ReadText("docker-compose.yml"))))
         {
             foreach (Match name in ImageName().Matches(text))
             {
@@ -550,6 +552,13 @@ public sealed partial class ImagePublicationContractTests
     private static IEnumerable<(string Language, string Body)> CodeBlocks(string text) =>
         CodeBlock().Matches(text.Replace("\r\n", "\n", StringComparison.Ordinal))
             .Select(block => (block.Groups["language"].Value, block.Groups["body"].Value));
+
+    /// <summary>A file inside a trace report's folder — not the reports' index, which is a living document.</summary>
+    private static bool IsTraceReport(string relativePath)
+    {
+        var segments = relativePath.Replace('\\', '/').Split('/');
+        return segments.Length > 3 && segments[0] == "docs" && segments[1] == "reports";
+    }
 
     /// <summary>Every document a user or a maintainer reads; not the changelog, which records names as they were.</summary>
     private static IEnumerable<(string Path, string Text)> Documents() =>

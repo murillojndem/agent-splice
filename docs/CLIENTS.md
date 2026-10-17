@@ -84,6 +84,14 @@ Why the file looks the way it does:
 - **One prompt, several exchanges.** Each time the model calls a tool, OpenCode runs it and sends the
   result back as a new request, so a prompt produces one exchange per model turn, and a session's
   first prompt one more, for the session's title.
+- **The title request comes first.** OpenCode sends it beside the session's first request. A model
+  LM Studio serves one request at a time — loaded with `--parallel 1` — answers the title first and
+  processes the other request's prompt after it, sending nothing on that stream meanwhile. With a model
+  that reasons before it answers, that can outlast `idleStream`, and the gateway closes the stream
+  before its first byte (see [Troubleshooting](#troubleshooting)); OpenCode then retries, which its
+  log records and its output does not. The first trace report shows it happening
+  ([finding 2](reports/2026-10-17-opencode-lm-studio/README.md#2-a-request-that-waited-and-processed-for-a-minute-met-idlestream)):
+  load the model with more than one parallel slot, or raise `idleStream` as shown below.
 - **Other providers stay available.** Any other provider OpenCode is configured with remains in its
   model picker, and requests to it do not pass through AgentSplice.
 

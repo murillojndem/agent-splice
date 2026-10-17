@@ -148,7 +148,10 @@ Status: in progress. Done so far:
   release's assets assembled and verified on every change (ADR 0021);
 - the image saved as the archive a release carries, run from that archive the way the installation guide
   runs it, and pushed to GitHub Container Registry only when a person publishes the release, with
-  release immutability on (ADR 0022).
+  release immutability on (ADR 0022);
+- the first dated trace report: OpenCode through the Windows package to LM Studio with two models, its
+  evidence as the administrative API answered it, and a contract test holding every report to its
+  format (ADR 0023).
 
 The rest of the list below is not done.
 
@@ -166,8 +169,11 @@ The rest of the list below is not done.
 - sample OpenCode, Cline, and generic client configurations (done);
 - close the streaming gap recorded in ADR 0019: a stream that times out or loses its runtime after the
   runtime's headers but before its first relayed byte must reach the client as more than a bare
-  connection reset;
-- first dated trace report;
+  connection reset — the first trace report met it in a real session;
+- record a runtime error that arrives inside a `200` stream as the failure it is, not as a completion,
+  and an exchange's error code only when an envelope carried it to the client (both found by the first
+  trace report);
+- first dated trace report (done, ADR 0023);
 - documentation and demo capture.
 
 Exit criteria:

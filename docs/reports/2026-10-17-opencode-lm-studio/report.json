@@ -1,0 +1,336 @@
+{
+  "report": "2026-10-17-opencode-lm-studio",
+  "capturedFrom": "2026-10-17T01:02:58.506Z",
+  "capturedUntil": "2026-10-17T01:24:42.721Z",
+  "environment": {
+    "agentsplice": {
+      "version": {
+        "value": "0.2.0-alpha+b17d169ec0d6cbbfca1a07d734b698cbaa0817eb",
+        "source": "GET /api/v1/system"
+      },
+      "commit": {
+        "value": "b17d169ec0d6cbbfca1a07d734b698cbaa0817eb",
+        "source": "the build metadata of the version"
+      },
+      "package": {
+        "value": "agentsplice-0.2.0-alpha-win-x64.zip",
+        "source": "the agentsplice-win-x64 artifact of the CI run for that commit, run 38987013797"
+      },
+      "packageSha256": {
+        "value": "fef15c23640ba84b7efbf477c813a118c7631fa845358b5e795366e20dcc6fcc",
+        "source": "the artifact's SHA256SUMS, checked with sha256sum --check --strict before extracting"
+      },
+      "dotnetRuntime": {
+        "value": "8.0.32",
+        "source": "README.txt in the package"
+      },
+      "configuration": {
+        "value": "appsettings.json as the package ships it, and one argument: --agentsplice:administration:apiKeyEnvironmentVariable=AGENTSPLICE_ADMIN_API_KEY, naming a variable that held a token generated for these sessions",
+        "source": "the command that started the gateway"
+      },
+      "contentCapture": {
+        "value": false,
+        "source": "GET /api/v1/system: contentRetentionEnabled; agentsplice:capture:contentEnabled and agentsplice:diagnostics:storeBodies are false in the shipped appsettings.json"
+      },
+      "timeouts": {
+        "value": {
+          "connect": "00:00:05",
+          "responseHeaders": "00:00:30",
+          "idleStream": "00:01:00",
+          "total": "00:10:00"
+        },
+        "source": "agentsplice:runtimes:0:timeouts in the shipped appsettings.json"
+      },
+      "listenAddress": {
+        "value": "http://127.0.0.1:5280",
+        "source": "the gateway's startup log"
+      }
+    },
+    "machine": {
+      "operatingSystem": {
+        "value": "Windows 11 Pro 10.0.26200, 64-bit",
+        "source": "Win32_OperatingSystem"
+      },
+      "cpu": {
+        "value": "AMD Ryzen 7 5800X3D, 8 cores, 16 threads",
+        "source": "Win32_Processor"
+      },
+      "memoryBytes": {
+        "value": 68626886656,
+        "source": "Win32_ComputerSystem.TotalPhysicalMemory"
+      },
+      "gpu": {
+        "value": "AMD Radeon RX 7900 XT",
+        "source": "Win32_VideoController"
+      },
+      "gpuMemory": {
+        "value": "19.98 GiB",
+        "source": "the display adapter's HardwareInformation.qwMemorySize registry value"
+      },
+      "gpuDriver": {
+        "value": "32.0.32015.2008",
+        "source": "Win32_VideoController.DriverVersion"
+      }
+    },
+    "runtime": {
+      "name": {
+        "value": "LM Studio",
+        "source": "the installed application"
+      },
+      "version": {
+        "value": "0.4.20+1",
+        "source": "the installed application's package.json"
+      },
+      "cli": {
+        "value": "lms, commit 71bd99c",
+        "source": "lms version"
+      },
+      "engine": {
+        "value": "llama.cpp-win-x86_64-amd-rocm-avx2@2.31.2",
+        "source": "lms runtime ls, the selected engine"
+      },
+      "server": {
+        "value": "http://127.0.0.1:1234, started for these sessions and stopped after them",
+        "source": "lms server start --port 1234 --bind 127.0.0.1"
+      }
+    },
+    "models": [
+      {
+        "id": {
+          "value": "qwen3-coder-30b-apex",
+          "source": "lms ps --json: identifier"
+        },
+        "file": {
+          "value": "mudler/Qwen3-Coder-30B-APEX-GGUF/Qwen3-Coder-30B-APEX-I-Compact.gguf",
+          "source": "lms ps --json: path"
+        },
+        "bytes": {
+          "value": 14781815968,
+          "source": "lms ps --json: sizeBytes"
+        },
+        "sha256": {
+          "value": "e883cea614708d6f0ef26c1d7e6409c56b4a7182ad1e36b5fba3598e1bcf7788",
+          "source": "sha256sum of the file"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+          "source": "the GGUF header: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen3moe, 48 blocks, 128 experts with 8 used",
+          "source": "the GGUF header"
+        },
+        "quantization": {
+          "value": "APEX I-Compact, with an importance matrix; the GGUF header's file type is 15, mostly Q4_K_M",
+          "source": "the file name, and the GGUF header: general.file_type and quantize.imatrix.*"
+        },
+        "contextLength": {
+          "value": 32768,
+          "source": "lms load --context-length 32768; lms ps --json: contextLength"
+        },
+        "gpuOffload": {
+          "value": "max, 100%",
+          "source": "lms load --gpu max"
+        },
+        "parallel": {
+          "value": 4,
+          "source": "LM Studio's default, not set on the command line; lms ps --json: parallel"
+        },
+        "flashAttention": {
+          "value": "unknown",
+          "source": "not set on the command line, no saved configuration for this file, and neither lms ps nor the server log reports it"
+        },
+        "kvCacheType": {
+          "value": "unknown",
+          "source": "not set on the command line, no saved configuration for this file, and neither lms ps nor the server log reports it"
+        },
+        "speculativeDecoding": {
+          "value": "not requested",
+          "source": "no speculative option on the command line"
+        },
+        "threads": {
+          "value": 6,
+          "source": "LM Studio's server log: llama threadpool init"
+        }
+      },
+      {
+        "id": {
+          "value": "qwen3.6-35b-a3b",
+          "source": "lms ps --json: identifier"
+        },
+        "file": {
+          "value": "unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf",
+          "source": "lms ps --json: path"
+        },
+        "bytes": {
+          "value": 13211155424,
+          "source": "the model file's size; lms ls --json reports 14997460672, the model and its projector together"
+        },
+        "visionProjector": {
+          "value": "mmproj-F32.gguf, 1786305248 bytes, loaded with the model",
+          "source": "the file beside the model; LM Studio's server log: loaded multimodal model"
+        },
+        "sha256": {
+          "value": "9c964e657212fea1f24905dd7b0a89b82fd807d19fab0b41da14251b07b88fbe",
+          "source": "sha256sum of the model file, not the projector"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3.6-35B-A3B",
+          "source": "the GGUF header: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen35moe, 40 blocks with full attention every fourth, 256 experts with 8 used",
+          "source": "the GGUF header"
+        },
+        "quantization": {
+          "value": "UD-IQ3_XXS, with an importance matrix; the GGUF header's file type is 23",
+          "source": "GET /api/v0/models/qwen3.6-35b-a3b on LM Studio: quantization; the GGUF header: general.file_type and quantize.imatrix.*"
+        },
+        "contextLength": {
+          "value": 262144,
+          "source": "the saved per-model configuration in LM Studio; lms ps --json: contextLength"
+        },
+        "gpuOffload": {
+          "value": "max, 100%",
+          "source": "lms load --gpu max"
+        },
+        "parallel": {
+          "value": 1,
+          "source": "the saved per-model configuration; lms ps --json: parallel"
+        },
+        "flashAttention": {
+          "value": "on",
+          "source": "the saved per-model configuration: llm.load.llama.flashAttention"
+        },
+        "kvCacheType": {
+          "value": "q8_0 for keys and values",
+          "source": "the saved per-model configuration: llm.load.llama.kCacheQuantizationType and vCacheQuantizationType"
+        },
+        "contextCheckpoints": {
+          "value": 32,
+          "source": "the saved per-model configuration: llm.load.llama.contextCheckpoints"
+        },
+        "speculativeDecoding": {
+          "value": "not requested",
+          "source": "no speculative option on the command line or in the saved configuration"
+        },
+        "threads": {
+          "value": 6,
+          "source": "LM Studio's server log: llama threadpool init"
+        }
+      }
+    ],
+    "client": {
+      "name": {
+        "value": "OpenCode",
+        "source": "opencode-ai, installed with npm"
+      },
+      "version": {
+        "value": "1.18.7",
+        "source": "opencode --version"
+      },
+      "invocation": {
+        "value": "opencode run --format json --model agentsplice/<model id> \"<prompt>\", with stdin closed, from a new directory holding calc.py and opencode.json",
+        "source": "the script that ran each attempt"
+      },
+      "configuration": {
+        "value": {
+          "$schema": "https://opencode.ai/config.json",
+          "provider": {
+            "agentsplice": {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "AgentSplice",
+              "options": {
+                "baseURL": "http://127.0.0.1:5280/v1"
+              },
+              "models": {
+                "<model id>": {
+                  "name": "<model id> through AgentSplice",
+                  "limit": {
+                    "context": "<the context length the model was loaded with>",
+                    "output": 8192
+                  }
+                }
+              }
+            }
+          },
+          "model": "agentsplice/<model id>",
+          "small_model": "agentsplice/<model id>",
+          "permission": {
+            "edit": "allow",
+            "bash": "deny",
+            "webfetch": "deny"
+          },
+          "share": "disabled",
+          "autoupdate": false
+        },
+        "source": "opencode.json in each attempt's directory, from examples/opencode/opencode.json, with the model's display name generalized: attempts 1 and 2 named it 'Qwen3 Coder 30B through AgentSplice' and 'Qwen3.6 35B A3B through AgentSplice', a name OpenCode does not send; the account's global OpenCode configuration holds only $schema"
+      },
+      "environment": {
+        "value": "Attempts 1 and 2 ran with OPENCODE_CONFIG_DIR pointing at a terminal integration's own configuration directory, which holds a plugin; attempts 3 and 4 ran with that directory and the integration's variables unset. In every attempt that reached OpenCode's agent, it found 18 skills, 17 installed for the account and one built in, and every agent request carried their descriptions in its system message: 15,322 characters, about 63% of that message, and between 35% and 39% of each agent request's body. The title requests carry none.",
+        "source": "OpenCode's own log, which shows that directory's configuration loading in attempts 1 and 2 only, and 'init count=18' in attempts 1, 3, and 4; the directory itself, which holds a plugins folder; LM Studio's server log of the request bodies, read for their structure only"
+      }
+    }
+  },
+  "scenario": {
+    "prompt": {
+      "value": "calc.py's mean() returns the wrong result. Fix the bug, then add test_calc.py with unittest tests for mean() and clamp(). Do not run any commands. Session marker: <a random trace-canary-* marker, different for each attempt>.",
+      "source": "the script that ran each attempt"
+    },
+    "startingFiles": {
+      "value": "calc.py, as reproduced in README.md, and opencode.json",
+      "source": "the script that ran each attempt"
+    }
+  },
+  "attempts": [
+    {
+      "name": "1",
+      "model": "qwen3-coder-30b-apex",
+      "clientEnvironment": "with the terminal integration",
+      "from": "2026-10-17T01:02:58.506Z",
+      "until": "2026-10-17T01:03:16.264Z",
+      "clientExit": "1, after one UnknownError event",
+      "exchanges": [
+        "0cefe890-f0b2-4883-b044-9670565a3a2f",
+        "2c1a02eb-250b-49a1-9e8e-ba9a144937bb"
+      ]
+    },
+    {
+      "name": "2",
+      "model": "qwen3.6-35b-a3b",
+      "clientEnvironment": "with the terminal integration",
+      "from": "2026-10-17T01:06:40.236Z",
+      "until": "2026-10-17T01:21:13.394Z",
+      "clientExit": "none: OpenCode logged its own initialization at 01:06:41.930Z and then nothing for 14 minutes, with no connection open, and was stopped",
+      "exchanges": []
+    },
+    {
+      "name": "3",
+      "model": "qwen3.6-35b-a3b",
+      "clientEnvironment": "without the terminal integration",
+      "from": "2026-10-17T01:21:38.677Z",
+      "until": "2026-10-17T01:23:30.978Z",
+      "clientExit": "0, after four agent steps",
+      "exchanges": [
+        "af90733b-c3a6-4146-b664-0b12f5be94bf",
+        "d8f5a743-d01c-4429-b981-8dc292f23d41",
+        "dc091e35-1726-4410-a38a-9760af83f207",
+        "cf1fdd40-b1a3-4783-98f1-3afd78125845",
+        "a49c74bd-29e6-486a-85f3-e5c57c686762",
+        "33df5efa-4a6b-4bb8-9db4-ac8f46b3bcac"
+      ]
+    },
+    {
+      "name": "4",
+      "model": "qwen3-coder-30b-apex",
+      "clientEnvironment": "without the terminal integration",
+      "from": "2026-10-17T01:24:39.152Z",
+      "until": "2026-10-17T01:24:42.721Z",
+      "clientExit": "1, after one UnknownError event",
+      "exchanges": [
+        "14a88306-0893-4e15-8996-22ba36b885e1",
+        "8f1665ea-f163-45e8-a6a3-de1e007ffccf"
+      ]
+    }
+  ]
+}

@@ -2,6 +2,8 @@
 
 This file is a template. Every status must be supported by a dated conformance report and environment snapshot.
 
+Evidence so far: [the first trace report](reports/2026-10-17-opencode-lm-studio/README.md) records OpenCode sessions through AgentSplice to LM Studio with two models. It changes no status below: a trace report is evidence, not a conformance run (ADR 0023).
+
 | Client | Ingress protocol | Runtime | Model/profile | Basic chat | Streaming | Native tools | Adapter tools | Replay | Cache evidence | Status |
 |---|---|---|---|---|---|---|---|---|---|---|
 | OpenCode | OpenAI Chat Completions | LM Studio | Generic transparent | Unknown | Unknown | Unknown | N/A | Planned | Planned | Not tested |

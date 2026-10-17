@@ -163,8 +163,10 @@ release, and CI assembles a release's assets on every change
 A release carries the image as an archive, and publishing the release pushes exactly that image to
 GitHub Container Registry, never under `latest`
 ([ADR 0022](docs/adr/0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md)). The
-first dated trace report is still to come, and the first release waits for it (SPECIFICATION section 22,
-criterion 17).
+first dated trace report records OpenCode sessions through the Windows package to LM Studio: what the
+gateway recorded, what that showed, and no compatibility claim
+([ADR 0023](docs/adr/0023-stage-1d-the-first-dated-trace-report.md),
+[docs/reports](docs/reports/README.md)).
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 

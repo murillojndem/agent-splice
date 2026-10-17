@@ -10,7 +10,7 @@
 - conformance and evaluation fixtures;
 - model/runtime configuration;
 - benchmark and regression data;
-- host/GPU metadata;
+- host/GPU metadata — published in trace reports, by the maintainer's choice (ADR 0023);
 - adapter/profile integrity;
 - evaluation-worker authority.
 
@@ -60,6 +60,8 @@ Mitigations: administrative configuration only, URI validation, target allowlist
 Threat: logs, traces, metrics, dashboard, replay, or issue bundles expose private content.
 
 Mitigations: metadata-only default, bounded attributes, content authorization, sanitization, retention, export review, automated leakage tests.
+
+Status: trace reports are a published channel (ADR 0023). Their evidence is the administrative API's metadata, exported with content capture off; each attempt's prompt carries a marker that the author searches for in the gateway's log, store, and evidence, with the runtime's own log as the control that the search works; and `TraceReportContractTests` rejects, in the evidence, a key on a list of names an API puts content under and a value holding four consecutive words of the scenario's prompt or a file it names, and, in every report file, a path under a home directory, a bearer token, a 64-digit value that is not a declared digest, a session marker, and, outside CI, the account and machine names of whoever runs the test. Residual: other content reaching an evidence value is caught by the author's marker search, not by the test, and a user or host name written into prose only when it is the test machine's own, so the author's review is the control for both.
 
 ### Telemetry sent somewhere unintended
 
@@ -170,6 +172,8 @@ Mitigations: the probe takes its one target from the image configuration, never 
 Threat: estimates are presented as measurements, unsupported runs are omitted, or a report overgeneralizes from one environment.
 
 Mitigations: provenance, immutable raw results, environment snapshots, status taxonomy, unsupported-result retention, report validation.
+
+Status: partly addressed. Trace reports exist (ADR 0023): every value of a report's environment gives its source, an unknown value says why, failed attempts are kept, and every report says that it makes no compatibility claim. `TraceReportContractTests` checks what a program can in a report's files — their shape and vocabularies, that the evidence holds every exchange its own list names, that every exchange belongs to an attempt inside its time, that every value has a source — while whether the export was complete, whether a value was guessed, and whether a failed attempt was left out rest on the author and the reviewer (`docs/reports/README.md`). Until a conformance report exists, the compatibility matrix holds only untested values. Conformance reports and benchmarks do not exist yet.
 
 ### Denial of service
 

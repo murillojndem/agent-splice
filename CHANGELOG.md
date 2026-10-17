@@ -4,6 +4,83 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 10: the first dated trace report
+
+SPECIFICATION section 22 criterion 17 asked for at least one real client and runtime trace report
+before the first public alpha, and nothing defined one. ADR 0023 does, and
+`docs/reports/2026-10-17-opencode-lm-studio/` is the first.
+
+- A trace report is a folder under `docs/reports`, named for the UTC day its first session began and
+  for its client and runtime, holding `README.md`, `report.json` — the environment and the scenario,
+  every value with where it came from, and the attempts — and `exchanges.json`, what the administrative API
+  answered: its system information, every page of its exchange list, and every listed exchange's detail
+  and timeline, unchanged. It makes no compatibility claim, keeps failed attempts, and holds no content:
+  its prompt is a fixture, and the random markers in it were checked absent from the gateway's log,
+  store, and evidence. `docs/reports/README.md` lists every report, names the keys of both JSON files,
+  and says which rules the contract test checks and which rest on the author and the reviewer.
+- The first report ran OpenCode 1.18.7 through the Windows package of commit `b17d169` to LM Studio
+  0.4.20, with `qwen3-coder-30b-apex` and `qwen3.6-35b-a3b`, four times. It found that LM Studio could not
+  render the chat template embedded in the first model's file for OpenCode's agent requests — the
+  template reaches a filter LM Studio lacks through one of OpenCode's tool schemas — and reported that
+  inside a `200`, which the gateway records as a completion; that with the second model the first agent
+  request waited and processed for a minute and met `idleStream` before its first byte — the ADR 0019
+  gap — so OpenCode received a closed socket and retried, which its log records and its session output
+  does not, while the exchange names an error code that was never sent; that cancellation reached the
+  runtime; that every exchange that streamed holds every boundary, with the gateway forwarding each first
+  event within 2 milliseconds; that usage and tool calls agree with what OpenCode recorded; that
+  OpenCode sent 18 skill descriptions, between a third and two fifths of each agent request; and that `/api/v1/system`
+  reported stage `1C`. Those become follow-ups on the roadmap; none is fixed here.
+- `docs/CLIENTS.md` says what OpenCode's title request does to a runtime that serves one request at a
+  time, `docs/COMPATIBILITY_MATRIX.md` points at the report without changing a status, and
+  `docs/THREAT_MODEL.md` records reports as a published channel, what guards them, and what the
+  misleading-evidence threat now has. The roadmap, the README, `docs/TESTING.md`, and `tests/README.md`
+  say what changed.
+- No runtime behaviour changes.
+
+Every new guard was verified to fail against a deliberately reintroduced defect:
+
+- no report published; one missing from the index, or an index row naming another client, another
+  model too, or a report that does not exist;
+- a fourth file in a report, a folder named for another client and runtime, a report dated for another
+  day, a timestamp without a time zone, a covered time that is not the attempts', or an evidence
+  exported before the sessions ended;
+- an exchange, a measurement, or an observation without what the OpenAPI document requires; a timeline
+  out of sequence, swapped with another exchange's, cut short, or ending at an observation that is
+  neither `persistence_completed` nor `metadata_queued`; a provenance the OpenAPI document does not
+  declare, in a measurement or in usage, or usage without provenance; a status, an observation type, or
+  a source the domain lacks; an exchange that retained content; a key added to the evidence or to an
+  exchange; an exchange the list names left out, or one held twice;
+- a content key in the evidence — tool declarations or a response format among them — four consecutive
+  words of the scenario's prompt in a value, or the prompt's opening;
+- an exchange in no attempt or in two, asked of another attempt's model, outside its attempt's time, or
+  served by a model the environment does not describe; two attempts with one name, or one that ends
+  before it begins;
+- an environment value without a source, with a placeholder source, null, empty, or unknown without
+  saying why; a required value, the driver, or the scenario missing; a version, commit, or content
+  capture that is not the evidence's; a package digest that is unknown, or a model digest that is
+  neither a digest nor `unknown`;
+- a report without its no-claim statement, its commit, a section, or an Exchange-column row for an
+  exchange, even one another row's prose names;
+- a path under a home directory — with or without a drive, in any case, with backslashes or slashes, in a
+  `file:` or `vscode:` address, on Linux, or with a name that is not ASCII — a bearer token, a 64-digit
+  value that is not a declared digest, a session marker, or the test machine's account or machine name
+  in a report;
+- a compatibility row given `Verified`, in bold or with a note, or `Broken`, as a status or a dimension;
+- a report publishing `docker run` on every interface, which the loopback rule still reads.
+
+Legitimate shapes were checked to still pass: a web address with a `users` segment; a version without
+build metadata; an exchange recorded before its model was read; an alias the client asked for; a digest
+written `sha256:<hex>`; a prompt naming `e.g.` and `stream.c`; a timeline whose clock steps back, or that
+ends at `metadata_queued`; a second report of the same day, named `-2`; a second table in the index, or a
+legend table under the matrix; a matrix status moved between untested values; the test machine's
+account name while running in CI; and another image named inside a report, which the image-name rule no
+longer reads — it still reads the reports' index.
+
+Two adversarial reviews of this part, before it was committed, found the first draft of the report
+overstating several of its findings, the guards weaker than the documents said, and some guards
+refusing legitimate reports; all were corrected, and the evidence was exported again with the exchange
+list's own pages, identical in every other answer.
+
 ### Stage 1D, part 9: the image is pushed to GHCR when a release is published
 
 The roadmap's "Docker image published to a registry" was open: a release's image had to be built from

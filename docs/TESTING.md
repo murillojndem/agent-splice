@@ -471,6 +471,49 @@ named the digest.
 
 Each fails against its reintroduced defect, listed in the changelog.
 
+## Delivered by Stage 1D, part 10: the first dated trace report
+
+A trace report is written once, by hand, from a machine CI never sees, so `TraceReportContractTests`
+reads every report under `docs/reports` on every build instead (ADR 0023):
+
+- at least one report is published (SPECIFICATION section 22, criterion 17), and the index has one row
+  per report, giving its date, client, runtime, and models as `report.json` does;
+- each report is exactly `README.md`, `report.json`, and `exchanges.json`, named for the UTC day of its
+  first attempt and for its client and runtime, with an optional `-<n>`; the time it covers is its
+  attempts', every timestamp states its time zone, and the evidence was exported after the sessions;
+- the evidence's top level and each exchange hold only the API's answers and the export time; it holds
+  every exchange its own list names, once; system information, every exchange, every measurement, and
+  every observation has what the OpenAPI document requires; statuses, terminations, failure classes,
+  protocols, units, observation types, and sources are the domain's; usage keeps its provenance; each
+  timeline runs in sequence from `request_accepted` at the exchange's start to `persistence_completed`,
+  or `metadata_queued` where the completion stamp failed; and every exchange is `metadata_only`;
+- no key in the evidence is on a list of names an API puts content under, and no value holds four
+  consecutive words of the scenario's prompt or a file it names;
+- every exchange belongs to exactly one attempt, inside that attempt's time, asked of its model and
+  served by a model the environment describes;
+- every value of the environment and the scenario has a source that names one, none is empty, an
+  unknown one has a source long enough to give a reason, the environment gives the values
+  `docs/reports/README.md` lists, its version and content capture are the evidence's, its commit is the
+  version's build metadata when there is any, and its package digest is a digest;
+- the report says that it makes no compatibility claim, names its commit, has its sections, and its
+  exchanges table's Exchange column names every exchange once;
+- no file of a report holds a path under a home directory, in any case, with or without a drive, a
+  bearer token, a 64-digit value that is not a declared digest, a session marker, or, outside CI, the
+  account or machine name of whoever runs the test;
+- every row of the compatibility matrix holds only untested values while no conformance report exists.
+
+What no program can check stays with the author and the reviewer, and `docs/reports/README.md` says so:
+that the export covered every exchange the sessions produced, that no failed attempt was left out, that
+no value was guessed, that no other content reached an evidence value, and that prose names nobody.
+
+What only a real machine can show was the report itself: OpenCode 1.18.7 ran a small coding task through
+the Windows package CI built, to LM Studio 0.4.20 with two models, four times, and the evidence is what
+the gateway's administrative API answered. The markers in each attempt's prompt were searched for in the
+gateway's log, its store, and the evidence, which held none of them, and in LM Studio's own log, which
+held the three that were sent.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

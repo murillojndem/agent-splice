@@ -1,0 +1,2350 @@
+{
+  "exportedAt": "2026-10-17T03:03:55.292Z",
+  "system": {
+    "version": "0.2.0-alpha+b17d169ec0d6cbbfca1a07d734b698cbaa0817eb",
+    "stage": "1C",
+    "enabledModules": [
+      "AgentSplice.Protocols.OpenAI",
+      "AgentSplice.Providers.LmStudio",
+      "AgentSplice.Observability",
+      "AgentSplice.Infrastructure.Persistence"
+    ],
+    "contentRetentionEnabled": false,
+    "metadataRetentionEnabled": true,
+    "telemetryExportEnabled": false
+  },
+  "list": [
+    {
+      "items": [
+        {
+          "exchangeId": "8f1665ea-f163-45e8-a6a3-de1e007ffccf",
+          "requestId": "030e5134-ec43-4c19-a2bb-d2ea6c0b3883",
+          "traceId": "d793044f6500c91aced67ec7c32a83ae",
+          "startedAt": "2026-10-17T01:24:42.4793467+00:00",
+          "completedAt": "2026-10-17T01:24:42.5149962+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3-coder-30b-apex",
+          "upstreamModelId": "qwen3-coder-30b-apex",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "14a88306-0893-4e15-8996-22ba36b885e1",
+          "requestId": "257677b3-b827-409a-bd72-35a828cb4e33",
+          "traceId": "102c4d03deee534a6e7fec370d28df59",
+          "startedAt": "2026-10-17T01:24:41.5657664+00:00",
+          "completedAt": "2026-10-17T01:24:42.572115+00:00",
+          "status": "cancelled",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3-coder-30b-apex",
+          "upstreamModelId": "qwen3-coder-30b-apex",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "33df5efa-4a6b-4bb8-9db4-ac8f46b3bcac",
+          "requestId": "f592679f-9001-43f3-a4be-f74e45a34efe",
+          "traceId": "4532ff0557476cfd8cbb5e42d655ef1d",
+          "startedAt": "2026-10-17T01:23:26.7013674+00:00",
+          "completedAt": "2026-10-17T01:23:30.7928263+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "a49c74bd-29e6-486a-85f3-e5c57c686762",
+          "requestId": "0902e790-d5a6-427e-901e-f7ae377b67b6",
+          "traceId": "9a323b4e50b53cb7b536054520c612a8",
+          "startedAt": "2026-10-17T01:23:01.7182586+00:00",
+          "completedAt": "2026-10-17T01:23:26.6247753+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "cf1fdd40-b1a3-4783-98f1-3afd78125845",
+          "requestId": "f5440520-e0f1-4561-9ca3-78d194db7702",
+          "traceId": "105bbb08cf8933c7ad325a76cbdbea4d",
+          "startedAt": "2026-10-17T01:22:57.331228+00:00",
+          "completedAt": "2026-10-17T01:23:01.6045032+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "dc091e35-1726-4410-a38a-9760af83f207",
+          "requestId": "add15131-442a-48f6-a37f-05cdd4176938",
+          "traceId": "64ffa3dcf67b3287383130b2a123f850",
+          "startedAt": "2026-10-17T01:22:43.9587855+00:00",
+          "completedAt": "2026-10-17T01:22:57.1701559+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "d8f5a743-d01c-4429-b981-8dc292f23d41",
+          "requestId": "81310bd2-d499-480f-8fe6-886a37bc81ba",
+          "traceId": "b4eaff8ed657ebcbe6568cc33a289751",
+          "startedAt": "2026-10-17T01:21:41.8989441+00:00",
+          "completedAt": "2026-10-17T01:22:41.9210508+00:00",
+          "status": "failed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "af90733b-c3a6-4146-b664-0b12f5be94bf",
+          "requestId": "a659d754-d378-421e-b00c-085a0f5efb9e",
+          "traceId": "ac8ce8a8807dbf34b6c73eec17a33774",
+          "startedAt": "2026-10-17T01:21:41.0646796+00:00",
+          "completedAt": "2026-10-17T01:22:19.7011873+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3.6-35b-a3b",
+          "upstreamModelId": "qwen3.6-35b-a3b",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "2c1a02eb-250b-49a1-9e8e-ba9a144937bb",
+          "requestId": "56aa206e-45a0-4422-b3a6-c40d8bc519dc",
+          "traceId": "c38d9691b874ef4ba45888894da48e41",
+          "startedAt": "2026-10-17T01:03:15.9848786+00:00",
+          "completedAt": "2026-10-17T01:03:16.0355802+00:00",
+          "status": "completed",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3-coder-30b-apex",
+          "upstreamModelId": "qwen3-coder-30b-apex",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        },
+        {
+          "exchangeId": "0cefe890-f0b2-4883-b044-9670565a3a2f",
+          "requestId": "87634edb-f117-4715-9a38-368c534eadf7",
+          "traceId": "ffce4339dab187227f4a2d927ed9df14",
+          "startedAt": "2026-10-17T01:03:14.7906999+00:00",
+          "completedAt": "2026-10-17T01:03:16.1149114+00:00",
+          "status": "cancelled",
+          "runtimeId": "lmstudio-local",
+          "clientModelId": "qwen3-coder-30b-apex",
+          "upstreamModelId": "qwen3-coder-30b-apex",
+          "streaming": true,
+          "contentRetentionState": "metadata_only"
+        }
+      ],
+      "nextCursor": null
+    }
+  ],
+  "exchanges": [
+    {
+      "detail": {
+        "exchangeId": "0cefe890-f0b2-4883-b044-9670565a3a2f",
+        "requestId": "87634edb-f117-4715-9a38-368c534eadf7",
+        "traceId": "ffce4339dab187227f4a2d927ed9df14",
+        "startedAt": "2026-10-17T01:03:14.7906999+00:00",
+        "completedAt": "2026-10-17T01:03:16.1149114+00:00",
+        "status": "cancelled",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3-coder-30b-apex",
+        "upstreamModelId": "qwen3-coder-30b-apex",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "client_cancelled",
+        "failureClass": "request_cancelled",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "gateway.routing.duration",
+            "value": 10.0274,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 21.4784,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 272.3433,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 0,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 0,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 14.2066,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 3,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 2
+          },
+          "toolDeclarationCount": 0,
+          "toolChoicePresent": false,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 2654,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 0,
+          "finishReasons": [],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 0,
+          "streamEventCount": 0,
+          "usageReported": false
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:03:14.7906999+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:03:14.7944795+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:03:14.8159579+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:03:14.8179538+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:03:14.8279812+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:03:14.8317026+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:03:14.8459092+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "client_cancelled",
+          "timestamp": "2026-10-17T01:03:16.1148459+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "cancellation.source": "client"
+          }
+        },
+        {
+          "sequence": 8,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:03:16.115224+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:03:16.3875673+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "2c1a02eb-250b-49a1-9e8e-ba9a144937bb",
+        "requestId": "56aa206e-45a0-4422-b3a6-c40d8bc519dc",
+        "traceId": "c38d9691b874ef4ba45888894da48e41",
+        "startedAt": "2026-10-17T01:03:15.9848786+00:00",
+        "completedAt": "2026-10-17T01:03:16.0355802+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3-coder-30b-apex",
+        "upstreamModelId": "qwen3-coder-30b-apex",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "normal_completion",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 41.4172,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 50.6425,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 0.0975,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.7161,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 332.6561,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 1098,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 1,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.connect.duration",
+            "value": 0.6122,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 37.759,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.4888,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 2,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 39543,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 0,
+          "finishReasons": [],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 1098,
+          "streamEventCount": 1,
+          "usageReported": false
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:03:15.9848786+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:03:15.9860406+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:03:15.9867567+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:03:15.986767+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:03:15.9868645+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:03:15.9868959+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_connection_started",
+          "timestamp": "2026-10-17T01:03:15.9873786+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 7,
+          "type": "upstream_connection_established",
+          "timestamp": "2026-10-17T01:03:15.9879908+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:03:15.9933847+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 9,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:03:16.0246549+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:03:16.0262958+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:03:16.0287077+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:03:16.0311023+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 13,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:03:16.0355211+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "absent",
+            "stream.events": "1"
+          }
+        },
+        {
+          "sequence": 14,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:03:16.0449842+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 15,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:03:16.3776403+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "af90733b-c3a6-4146-b664-0b12f5be94bf",
+        "requestId": "a659d754-d378-421e-b00c-085a0f5efb9e",
+        "traceId": "ac8ce8a8807dbf34b6c73eec17a33774",
+        "startedAt": "2026-10-17T01:21:41.0646796+00:00",
+        "completedAt": "2026-10-17T01:22:19.7011873+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "protocol_terminator_received",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 2703.3271,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.first_semantic_event.duration",
+            "value": 2703.9056,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 38636.5051,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 6.0406,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.1212,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 9.5371,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 479197,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 1884,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 2696.8488,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.9589,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "usage.completion.tokens",
+            "value": 1881,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.generation.tokens_per_second",
+            "value": 52.34831843049623,
+            "unit": "tokens_per_second",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.prompt.tokens",
+            "value": 600,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 3,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 2
+          },
+          "toolDeclarationCount": 0,
+          "toolChoicePresent": false,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 2649,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 1,
+          "finishReasons": [
+            "stop"
+          ],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 479197,
+          "streamEventCount": 1884,
+          "usageReported": true
+        },
+        "usage": {
+          "promptTokens": {
+            "value": 600,
+            "provenance": "upstream_reported"
+          },
+          "completionTokens": {
+            "value": 1881,
+            "provenance": "upstream_reported"
+          },
+          "totalTokens": {
+            "value": 2481,
+            "provenance": "upstream_reported"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:21:41.0646796+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:21:41.0647491+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:21:41.0648703+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:21:41.064875+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:21:41.0709156+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:21:41.070937+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:21:41.0778959+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:21:43.7677858+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:21:43.7680067+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:21:43.7680186+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_semantic_event",
+          "timestamp": "2026-10-17T01:21:43.7685852+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:22:19.7009715+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:22:19.7011847+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "observed",
+            "stream.events": "1884"
+          }
+        },
+        {
+          "sequence": 13,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:22:19.7014179+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 14,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:22:19.710955+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "d8f5a743-d01c-4429-b981-8dc292f23d41",
+        "requestId": "81310bd2-d499-480f-8fe6-886a37bc81ba",
+        "traceId": "b4eaff8ed657ebcbe6568cc33a289751",
+        "startedAt": "2026-10-17T01:21:41.8989441+00:00",
+        "completedAt": "2026-10-17T01:22:41.9210508+00:00",
+        "status": "failed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "timeout",
+        "failureClass": "upstream_timeout",
+        "errorCode": "agentsplice_upstream_timeout",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "gateway.routing.duration",
+            "value": 0.0586,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.2201,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 6.4032,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 0,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 0,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.connect.duration",
+            "value": 0.3973,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 5.0576,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 2,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 39536,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 0,
+          "finishReasons": [],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 0,
+          "streamEventCount": 0,
+          "usageReported": false
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:21:41.8989441+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:21:41.8991541+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:21:41.8993742+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:21:41.8993842+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:21:41.8994428+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:21:41.8994587+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_connection_started",
+          "timestamp": "2026-10-17T01:21:41.8997957+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 7,
+          "type": "upstream_connection_established",
+          "timestamp": "2026-10-17T01:21:41.900193+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:21:41.9045163+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 9,
+          "type": "timeout_fired",
+          "timestamp": "2026-10-17T01:22:41.9095444+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "timeout.phase": "IdleStream"
+          }
+        },
+        {
+          "sequence": 10,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:22:41.9214412+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:22:41.9278444+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "dc091e35-1726-4410-a38a-9760af83f207",
+        "requestId": "add15131-442a-48f6-a37f-05cdd4176938",
+        "traceId": "64ffa3dcf67b3287383130b2a123f850",
+        "startedAt": "2026-10-17T01:22:43.9587855+00:00",
+        "completedAt": "2026-10-17T01:22:57.1701559+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "protocol_terminator_received",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 9136.5282,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.first_semantic_event.duration",
+            "value": 9136.5548,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 13211.3681,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 3.371,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.2932,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 6.0301,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 19278,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 75,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 9132.6811,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.648,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "usage.completion.tokens",
+            "value": 125,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.generation.tokens_per_second",
+            "value": 30.677253378627032,
+            "unit": "tokens_per_second",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.prompt.tokens",
+            "value": 9828,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 2,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 39536,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 1,
+          "finishReasons": [
+            "tool_calls"
+          ],
+          "nativeToolCallCount": 2,
+          "responseBodyBytes": 19278,
+          "streamEventCount": 75,
+          "usageReported": true
+        },
+        "usage": {
+          "promptTokens": {
+            "value": 9828,
+            "provenance": "upstream_reported"
+          },
+          "completionTokens": {
+            "value": 125,
+            "provenance": "upstream_reported"
+          },
+          "totalTokens": {
+            "value": 9953,
+            "provenance": "upstream_reported"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:22:43.9587855+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:22:43.958921+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:22:43.9592142+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:22:43.9592219+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:22:43.9625929+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:22:43.9626102+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:22:43.9692582+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:22:53.0952913+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:22:53.0953137+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:22:53.0953174+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_semantic_event",
+          "timestamp": "2026-10-17T01:22:53.0953403+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "native_tool_call_observed",
+          "timestamp": "2026-10-17T01:22:55.2081954+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "native_tool_call_observed",
+          "timestamp": "2026-10-17T01:22:56.0294825+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 13,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:22:57.1700206+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 14,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:22:57.1701536+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "observed",
+            "stream.events": "75"
+          }
+        },
+        {
+          "sequence": 15,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:22:57.1702669+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 16,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:22:57.176297+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "cf1fdd40-b1a3-4783-98f1-3afd78125845",
+        "requestId": "f5440520-e0f1-4561-9ca3-78d194db7702",
+        "traceId": "105bbb08cf8933c7ad325a76cbdbea4d",
+        "startedAt": "2026-10-17T01:22:57.331228+00:00",
+        "completedAt": "2026-10-17T01:23:01.6045032+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "protocol_terminator_received",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 740.5786,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.first_semantic_event.duration",
+            "value": 740.6141,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 4273.2739,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 0.046,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.2338,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 4.843,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 6273,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 24,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 740.041,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 8.6891,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "usage.completion.tokens",
+            "value": 114,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.generation.tokens_per_second",
+            "value": 32.2712332613147,
+            "unit": "tokens_per_second",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.prompt.tokens",
+            "value": 10048,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 5,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1,
+            "assistant": 1,
+            "tool": 2
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 40349,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 1,
+          "finishReasons": [
+            "tool_calls"
+          ],
+          "nativeToolCallCount": 1,
+          "responseBodyBytes": 6273,
+          "streamEventCount": 24,
+          "usageReported": true
+        },
+        "usage": {
+          "promptTokens": {
+            "value": 10048,
+            "provenance": "upstream_reported"
+          },
+          "completionTokens": {
+            "value": 114,
+            "provenance": "upstream_reported"
+          },
+          "totalTokens": {
+            "value": 10162,
+            "provenance": "upstream_reported"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:22:57.331228+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:22:57.3313572+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:22:57.331591+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:22:57.3315975+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:22:57.3316435+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:22:57.3316577+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:22:57.3403468+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:22:58.0716987+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:22:58.0718066+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:22:58.0718114+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_semantic_event",
+          "timestamp": "2026-10-17T01:22:58.0718421+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "native_tool_call_observed",
+          "timestamp": "2026-10-17T01:22:58.8675394+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:23:01.6044+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 13,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:23:01.6045019+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "observed",
+            "stream.events": "24"
+          }
+        },
+        {
+          "sequence": 14,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:23:01.6045831+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 15,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:23:01.6094261+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "a49c74bd-29e6-486a-85f3-e5c57c686762",
+        "requestId": "0902e790-d5a6-427e-901e-f7ae377b67b6",
+        "traceId": "9a323b4e50b53cb7b536054520c612a8",
+        "startedAt": "2026-10-17T01:23:01.7182586+00:00",
+        "completedAt": "2026-10-17T01:23:26.6247753+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "protocol_terminator_received",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 1398.3748,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.first_semantic_event.duration",
+            "value": 1398.4042,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 24906.512,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 0.043,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.1623,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 4.1248,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 33459,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 125,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 1398.0521,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.0453,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "usage.completion.tokens",
+            "value": 730,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.generation.tokens_per_second",
+            "value": 31.05441382466952,
+            "unit": "tokens_per_second",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.prompt.tokens",
+            "value": 10411,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 7,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1,
+            "assistant": 2,
+            "tool": 3
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 41506,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 1,
+          "finishReasons": [
+            "tool_calls"
+          ],
+          "nativeToolCallCount": 2,
+          "responseBodyBytes": 33459,
+          "streamEventCount": 125,
+          "usageReported": true
+        },
+        "usage": {
+          "promptTokens": {
+            "value": 10411,
+            "provenance": "upstream_reported"
+          },
+          "completionTokens": {
+            "value": 730,
+            "provenance": "upstream_reported"
+          },
+          "totalTokens": {
+            "value": 11141,
+            "provenance": "upstream_reported"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:23:01.7182586+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:23:01.7183467+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:23:01.718509+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:23:01.7185145+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:23:01.7185575+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:23:01.7185689+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:23:01.7246142+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:23:03.116621+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:23:03.1166334+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:23:03.1166378+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_semantic_event",
+          "timestamp": "2026-10-17T01:23:03.1166628+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "native_tool_call_observed",
+          "timestamp": "2026-10-17T01:23:06.7951644+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "native_tool_call_observed",
+          "timestamp": "2026-10-17T01:23:11.3766632+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 13,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:23:26.6237882+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 14,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:23:26.6247706+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "observed",
+            "stream.events": "125"
+          }
+        },
+        {
+          "sequence": 15,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:23:26.6248346+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 16,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:23:26.6289594+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "33df5efa-4a6b-4bb8-9db4-ac8f46b3bcac",
+        "requestId": "f592679f-9001-43f3-a4be-f74e45a34efe",
+        "traceId": "4532ff0557476cfd8cbb5e42d655ef1d",
+        "startedAt": "2026-10-17T01:23:26.7013674+00:00",
+        "completedAt": "2026-10-17T01:23:30.7928263+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3.6-35b-a3b",
+        "upstreamModelId": "qwen3.6-35b-a3b",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "protocol_terminator_received",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 540.2535,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.first_semantic_event.duration",
+            "value": 540.2813,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 4091.4556,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 2.1921,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.1706,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 4.4857,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 27108,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 107,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 537.729,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.8111,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "usage.completion.tokens",
+            "value": 104,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.generation.tokens_per_second",
+            "value": 29.287312677010476,
+            "unit": "tokens_per_second",
+            "provenance": "upstream_reported"
+          },
+          {
+            "name": "usage.prompt.tokens",
+            "value": 11170,
+            "unit": "tokens",
+            "provenance": "upstream_reported"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 10,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1,
+            "assistant": 3,
+            "tool": 5
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 44069,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 1,
+          "finishReasons": [
+            "stop"
+          ],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 27108,
+          "streamEventCount": 107,
+          "usageReported": true
+        },
+        "usage": {
+          "promptTokens": {
+            "value": 11170,
+            "provenance": "upstream_reported"
+          },
+          "completionTokens": {
+            "value": 104,
+            "provenance": "upstream_reported"
+          },
+          "totalTokens": {
+            "value": 11274,
+            "provenance": "upstream_reported"
+          }
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:23:26.7013674+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:23:26.701491+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:23:26.7016616+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:23:26.701667+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:23:26.7038591+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:23:26.7038786+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:23:26.7106897+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:23:27.2416076+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:23:27.2416209+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:23:27.2416256+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_semantic_event",
+          "timestamp": "2026-10-17T01:23:27.2416487+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:23:30.7926744+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:23:30.792823+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "observed",
+            "stream.events": "107"
+          }
+        },
+        {
+          "sequence": 13,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:23:30.792895+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 14,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:23:30.7973807+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "14a88306-0893-4e15-8996-22ba36b885e1",
+        "requestId": "257677b3-b827-409a-bd72-35a828cb4e33",
+        "traceId": "102c4d03deee534a6e7fec370d28df59",
+        "startedAt": "2026-10-17T01:24:41.5657664+00:00",
+        "completedAt": "2026-10-17T01:24:42.572115+00:00",
+        "status": "cancelled",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3-coder-30b-apex",
+        "upstreamModelId": "qwen3-coder-30b-apex",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "client_cancelled",
+        "failureClass": "request_cancelled",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "gateway.routing.duration",
+            "value": 3.0116,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.0991,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 4.217,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 0,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 0,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.0499,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 3,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 2
+          },
+          "toolDeclarationCount": 0,
+          "toolChoicePresent": false,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 2654,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 0,
+          "finishReasons": [],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 0,
+          "streamEventCount": 0,
+          "usageReported": false
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:24:41.5657664+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:24:41.5658086+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:24:41.5659077+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:24:41.5659133+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:24:41.5689249+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:24:41.5689522+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:24:41.5750021+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 7,
+          "type": "client_cancelled",
+          "timestamp": "2026-10-17T01:24:42.5720997+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "cancellation.source": "client"
+          }
+        },
+        {
+          "sequence": 8,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:24:42.5722575+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 9,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:24:42.5764745+00:00",
+          "source": "gateway"
+        }
+      ]
+    },
+    {
+      "detail": {
+        "exchangeId": "8f1665ea-f163-45e8-a6a3-de1e007ffccf",
+        "requestId": "030e5134-ec43-4c19-a2bb-d2ea6c0b3883",
+        "traceId": "d793044f6500c91aced67ec7c32a83ae",
+        "startedAt": "2026-10-17T01:24:42.4793467+00:00",
+        "completedAt": "2026-10-17T01:24:42.5149962+00:00",
+        "status": "completed",
+        "runtimeId": "lmstudio-local",
+        "clientModelId": "qwen3-coder-30b-apex",
+        "upstreamModelId": "qwen3-coder-30b-apex",
+        "streaming": true,
+        "contentRetentionState": "metadata_only",
+        "ingressProtocol": "open_ai_chat_completions",
+        "streamTermination": "normal_completion",
+        "upstreamStatusCode": 200,
+        "measurements": [
+          {
+            "name": "exchange.first_client_event.duration",
+            "value": 35.5264,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "exchange.total.duration",
+            "value": 35.6481,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.routing.duration",
+            "value": 0.0631,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "gateway.validation.duration",
+            "value": 0.268,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "persistence.duration",
+            "value": 5.5973,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.bytes",
+            "value": 1098,
+            "unit": "bytes",
+            "provenance": "measured"
+          },
+          {
+            "name": "stream.client.events",
+            "value": 1,
+            "unit": "count",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.connect.duration",
+            "value": 0.7798,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.first_byte.duration",
+            "value": 34.9826,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          },
+          {
+            "name": "upstream.headers.duration",
+            "value": 6.9271,
+            "unit": "milliseconds",
+            "provenance": "measured"
+          }
+        ],
+        "structuralSummary": {
+          "messageCount": 2,
+          "messageCountsByRole": {
+            "system": 1,
+            "user": 1
+          },
+          "toolDeclarationCount": 8,
+          "toolChoicePresent": true,
+          "streamRequested": true,
+          "streamOptionsPresent": true,
+          "requestBodyBytes": 39556,
+          "unknownTopLevelFieldNames": [],
+          "droppedFieldNames": [],
+          "unknownFieldNamesTruncated": false
+        },
+        "responseSummary": {
+          "choiceCount": 0,
+          "finishReasons": [],
+          "nativeToolCallCount": 0,
+          "responseBodyBytes": 1098,
+          "streamEventCount": 1,
+          "usageReported": false
+        }
+      },
+      "timeline": [
+        {
+          "sequence": 0,
+          "type": "request_accepted",
+          "timestamp": "2026-10-17T01:24:42.4793467+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 1,
+          "type": "request_body_read",
+          "timestamp": "2026-10-17T01:24:42.4795234+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 2,
+          "type": "validation_completed",
+          "timestamp": "2026-10-17T01:24:42.4797914+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 3,
+          "type": "structural_summary_created",
+          "timestamp": "2026-10-17T01:24:42.4797992+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 4,
+          "type": "model_resolved",
+          "timestamp": "2026-10-17T01:24:42.4798623+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "resolution.source": "discovered",
+            "runtime.id": "lmstudio-local"
+          }
+        },
+        {
+          "sequence": 5,
+          "type": "upstream_request_opened",
+          "timestamp": "2026-10-17T01:24:42.4798774+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "runtime.id": "lmstudio-local",
+            "provider.type": "lmstudio"
+          }
+        },
+        {
+          "sequence": 6,
+          "type": "upstream_connection_started",
+          "timestamp": "2026-10-17T01:24:42.4802376+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 7,
+          "type": "upstream_connection_established",
+          "timestamp": "2026-10-17T01:24:42.4810174+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 8,
+          "type": "upstream_headers_received",
+          "timestamp": "2026-10-17T01:24:42.4868045+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "upstream.status": "200",
+            "upstream.content_type": "text/event-stream",
+            "upstream.streamed": "true"
+          }
+        },
+        {
+          "sequence": 9,
+          "type": "first_upstream_byte",
+          "timestamp": "2026-10-17T01:24:42.51486+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 10,
+          "type": "first_client_event_flushed",
+          "timestamp": "2026-10-17T01:24:42.5148731+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 11,
+          "type": "first_decoded_event",
+          "timestamp": "2026-10-17T01:24:42.5148784+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 12,
+          "type": "upstream_completed",
+          "timestamp": "2026-10-17T01:24:42.5149149+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 13,
+          "type": "client_completed",
+          "timestamp": "2026-10-17T01:24:42.5149948+00:00",
+          "source": "gateway",
+          "safeDetails": {
+            "stream.terminator": "absent",
+            "stream.events": "1"
+          }
+        },
+        {
+          "sequence": 14,
+          "type": "metadata_queued",
+          "timestamp": "2026-10-17T01:24:42.5150834+00:00",
+          "source": "gateway"
+        },
+        {
+          "sequence": 15,
+          "type": "persistence_completed",
+          "timestamp": "2026-10-17T01:24:42.5206807+00:00",
+          "source": "gateway"
+        }
+      ]
+    }
+  ]
+}
