@@ -679,6 +679,15 @@ components:
         startedAt: { type: string, format: date-time }
         completedAt: { type: [string, 'null'], format: date-time }
         status: { type: string }
+        upstreamOutcome:
+          type: string
+          enum: [success, error_status, error_reported]
+          description: >-
+            What the runtime's answer said about how it went: a success, an error status (4xx or 5xx),
+            or an error reported inside a success, in the protocol's own error shape. Absent when the
+            exchange did not complete or no response was observed. A completed status says only that
+            the transport cycle finished, so this, not the status, is what tells a runtime's failure
+            from its success.
         runtimeId: { type: string }
         clientModelId: { type: string }
         upstreamModelId: { type: string }

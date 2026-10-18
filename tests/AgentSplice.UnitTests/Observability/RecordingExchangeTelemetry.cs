@@ -44,7 +44,7 @@ internal sealed class RecordingExchangeTelemetry : IExchangeTelemetry
         {
         }
 
-        public void SetOutcome(ExchangeStatus status, string? errorType)
+        public void SetOutcome(ExchangeStatus status, string? errorType, UpstreamOutcome? upstreamOutcome)
         {
         }
 

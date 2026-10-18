@@ -34,8 +34,10 @@ public static class ObservationTypeRules
         ObservationType.ClientCancelled,
         ObservationType.ClientResponseAbandoned,
 
-        // One upstream request, so at most one way it failed.
+        // One upstream request, so at most one way it failed, and its first reported error is the
+        // one worth dating.
         ObservationType.UpstreamFailed,
+        ObservationType.UpstreamErrorReported,
     ];
 
     /// <summary>True when the boundary may appear at most once per exchange.</summary>

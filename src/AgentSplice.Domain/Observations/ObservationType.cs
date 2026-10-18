@@ -117,4 +117,12 @@ public enum ObservationType
     /// <c>upstream.stream=connection.lost</c>, never a message or a host.
     /// </remarks>
     UpstreamFailed = 25,
+
+    /// <summary>The runtime reported an error in the protocol's own shape, inside its answer.</summary>
+    /// <remarks>
+    /// Recognised by structure — a top-level <c>error</c> object — and never by reading it, because
+    /// its message can echo the prompt. For a stream it is stamped when the event was interpreted;
+    /// for a body, when the body was read (ADR 0026).
+    /// </remarks>
+    UpstreamErrorReported = 26,
 }

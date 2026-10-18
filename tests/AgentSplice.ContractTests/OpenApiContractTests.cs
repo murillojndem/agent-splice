@@ -107,6 +107,14 @@ public sealed class OpenApiContractTests
     }
 
     [Fact]
+    public void The_upstream_outcome_enum_matches_the_domain()
+    {
+        // A client switches on these to tell a runtime's failure from its success; a member the
+        // domain gains and the schema does not would be one no client can handle (ADR 0026).
+        AssertEnumMatchesDomain<UpstreamOutcome>("ExchangeSummary", "upstreamOutcome");
+    }
+
+    [Fact]
     public void The_runtime_health_status_enum_matches_the_domain()
     {
         AssertEnumMatchesDomain<RuntimeHealthStatus>("RuntimeHealth", "status");

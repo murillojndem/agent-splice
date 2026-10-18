@@ -32,6 +32,7 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
         private int choiceCount;
         private int toolCallCount;
         private bool sawSemanticOutput;
+        private bool sawUpstreamError;
 
         public UsageObservation Usage { get; private set; } = UsageObservation.Unknown;
 
@@ -82,12 +83,16 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
                 toolCallCount,
                 responseBodyBytes,
                 streamEventCount,
-                usageReported: !Usage.IsUnknown);
+                usageReported: !Usage.IsUnknown,
+                upstreamErrorReported: sawUpstreamError);
 
         private StreamEventFacts ReadChunk(JsonElement root)
         {
             var carriedOutput = false;
             var toolCallsStarted = 0;
+            var reportedError = OpenAiErrorShape.Reports(root);
+
+            sawUpstreamError |= reportedError;
 
             if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array)
             {
@@ -115,6 +120,7 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
             {
                 IsFirstSemanticOutput = firstOutput,
                 NativeToolCallsStarted = toolCallsStarted,
+                IsUpstreamError = reportedError,
             };
         }
 

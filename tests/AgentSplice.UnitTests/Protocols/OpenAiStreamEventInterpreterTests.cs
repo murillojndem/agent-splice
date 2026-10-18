@@ -246,6 +246,55 @@ public sealed class OpenAiStreamEventInterpreterTests
         Assert.True(second.Usage.IsUnknown);
     }
 
+    [Fact]
+    public void A_top_level_error_object_is_the_runtime_reporting_an_error()
+    {
+        // LM Studio's answer when it cannot render a chat template: a 200 stream carrying one event
+        // like this, and no [DONE]. Valid protocol, so not malformed, and not output (ADR 0026).
+        var state = New();
+        var facts = Read(state, """{"error":{"message":"Error rendering prompt with jinja template","type":"server_error"}}""");
+
+        Assert.True(facts.IsUpstreamError);
+        Assert.False(facts.IsMalformed);
+        Assert.False(facts.IsFirstSemanticOutput);
+        Assert.True(state.Summarise(responseBodyBytes: 90, streamEventCount: 1).UpstreamErrorReported);
+    }
+
+    [Theory]
+    [InlineData("""{"error":null,"choices":[{"delta":{"content":"hi"}}]}""")]
+    [InlineData("""{"error":"a string is not the protocol's shape"}""")]
+    [InlineData("""{"choices":[{"delta":{"content":"{\"error\":{\"message\":\"x\"}}"}}]}""")]
+    [InlineData("""{"choices":[{"delta":{"error":{"message":"nested, not top-level"}}}]}""")]
+    public void Nothing_but_a_top_level_error_object_counts(string data)
+    {
+        // Structure only. Model output that happens to spell an error object, a null member, and an
+        // error nested anywhere but the top are not the runtime reporting one, and reading text to
+        // decide otherwise would be reinterpreting content (FR-CHAT-014).
+        var state = New();
+
+        Assert.False(Read(state, data).IsUpstreamError);
+        Assert.False(state.Summarise(responseBodyBytes: 90, streamEventCount: 1).UpstreamErrorReported);
+    }
+
+    [Fact]
+    public void A_chunk_carrying_both_output_and_an_error_reports_both()
+    {
+        var facts = Interpret("""{"choices":[{"index":0,"delta":{"content":"partial"}}],"error":{"message":"m"}}""");
+
+        Assert.True(facts.IsUpstreamError);
+        Assert.True(facts.IsFirstSemanticOutput);
+    }
+
+    [Fact]
+    public void A_stream_without_an_error_reports_none()
+    {
+        var state = New();
+
+        Read(state, """{"choices":[{"index":0,"delta":{"content":"hello"},"finish_reason":"stop"}]}""");
+
+        Assert.False(state.Summarise(responseBodyBytes: 90, streamEventCount: 1).UpstreamErrorReported);
+    }
+
     private static IStreamEventInterpreterState New() => new OpenAiStreamEventInterpreter().Begin();
 
     private static StreamEventFacts Interpret(string data) => Read(New(), data);

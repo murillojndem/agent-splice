@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import type { ExchangeStatus } from '../api/types';
 import { UNKNOWN, timestamp } from '../format/evidence';
 import { Loading, Problem } from '../components/Status';
+import { Outcome } from '../components/Outcome';
 
 const STATUSES: ExchangeStatus[] = ['completed', 'failed', 'cancelled', 'streaming', 'forwarding', 'accepted'];
 
@@ -61,6 +62,7 @@ export function Exchanges() {
               <th scope="col">Model</th>
               <th scope="col">Runtime</th>
               <th scope="col">Status</th>
+              <th scope="col">Runtime said</th>
               <th scope="col">Streaming</th>
               <th scope="col">Retained</th>
             </tr>
@@ -76,6 +78,7 @@ export function Exchanges() {
                 <td><code>{exchange.clientModelId ?? UNKNOWN}</code></td>
                 <td>{exchange.runtimeId ?? UNKNOWN}</td>
                 <td><span className={`pill pill-${exchange.status}`}>{exchange.status}</span></td>
+                <td data-testid={`outcome-${exchange.exchangeId}`}><Outcome outcome={exchange.upstreamOutcome} /></td>
                 {/* Null is a third value: the client never stated a preference. */}
                 <td data-testid={`streaming-${exchange.exchangeId}`}>
                   {exchange.streaming === null ? UNKNOWN : exchange.streaming ? 'yes' : 'no'}

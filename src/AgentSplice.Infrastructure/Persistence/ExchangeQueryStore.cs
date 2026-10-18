@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Domain.Exchanges;
@@ -165,12 +166,46 @@ internal sealed class ExchangeQueryStore : IExchangeQueryStore
         StartedAt = new DateTimeOffset(row.StartedAtTicks, TimeSpan.Zero),
         CompletedAt = row.CompletedAtTicks is { } ticks ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
         Status = (ExchangeStatus)row.Status,
+
+        // Classified on read by the rule the exchange itself uses, from what the row already holds,
+        // so a row written before the field existed is classified the same way as a new one.
+        UpstreamOutcome = UpstreamOutcomeRules.Classify(
+            (ExchangeStatus)row.Status,
+            row.UpstreamStatusCode,
+            ReportsUpstreamError(row.ResponseSummaryJson)),
         RuntimeId = row.RuntimeEndpointId,
         ClientModelId = row.ClientModelId,
         UpstreamModelId = row.UpstreamModelId,
         Streaming = row.Streaming,
         ContentRetentionState = (ContentRetentionState)row.ContentRetentionState,
     };
+
+    /// <summary>Whether a stored response summary says the runtime reported an error.</summary>
+    /// <remarks>
+    /// One member of a document this store wrote, read without turning the document back into a
+    /// domain summary. A row from before the member existed has none, which is the answer that store
+    /// held: no error was recognised. A document that is not JSON at all says nothing either way.
+    /// </remarks>
+    private static bool ReportsUpstreamError(string? responseSummaryJson)
+    {
+        if (responseSummaryJson is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(responseSummaryJson);
+
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("upstreamErrorReported", out var reported)
+                && reported.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static MeasurementView Project(ExchangeMeasurementRow row) => new()
     {

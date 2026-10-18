@@ -1,7 +1,9 @@
 /*
  * Restrained on purpose. This is a diagnostic surface: an operator reads it while something is wrong,
- * so density and legibility matter and decoration does not. The one place colour carries meaning is
- * the status pill, and the one place it carries a warning is a weak provenance.
+ * so density and legibility matter and decoration does not. Colour carries meaning on the pills — a
+ * runtime's health, an exchange that failed or was cancelled, and what the runtime's answer said — and
+ * a warning on a weak provenance. `completed` is not painted as a success: it means the transport
+ * cycle finished, and a runtime that answered with an error completed too (ADR 0026).
  */
 
 :root {
@@ -94,8 +96,10 @@ code { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-siz
 .confidence { font-size: 0.7rem; color: var(--muted); }
 
 .pill { font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid var(--line); text-transform: lowercase; }
-.pill-completed, .pill-healthy { color: var(--good); border-color: var(--good); }
-.pill-failed, .pill-unreachable, .pill-authentication_failed, .pill-incompatible_response { color: var(--bad); border-color: var(--bad); }
+.pill-completed { color: var(--text); border-color: var(--muted); }
+.pill-healthy, .pill-success { color: var(--good); border-color: var(--good); }
+.pill-failed, .pill-unreachable, .pill-authentication_failed, .pill-incompatible_response,
+.pill-error_status, .pill-error_reported { color: var(--bad); border-color: var(--bad); }
 .pill-cancelled, .pill-no_models, .pill-unknown { color: var(--warn); border-color: var(--warn); }
 
 .retention { color: var(--muted); font-size: 0.85rem; border-left: 2px solid var(--line); padding-left: 0.75rem; }

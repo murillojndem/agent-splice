@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { NAMES, UNKNOWN, measurement, measurementValue, timestamp } from '../format/evidence';
 import { Loading, Problem } from '../components/Status';
 import { MeasurementTable } from '../components/MeasurementTable';
+import { Outcome } from '../components/Outcome';
 import { RetentionNotice } from '../components/RetentionNotice';
 import { Timeline } from '../components/Timeline';
 import { Waterfall } from '../components/Waterfall';
@@ -44,6 +45,7 @@ export function ExchangeDetail() {
       <h1>
         <code>{exchange.clientModelId ?? UNKNOWN}</code>
         <span className={`pill pill-${exchange.status}`}>{exchange.status}</span>
+        {exchange.upstreamOutcome !== undefined && <Outcome outcome={exchange.upstreamOutcome} />}
       </h1>
 
       <RetentionNotice state={exchange.contentRetentionState} />
@@ -71,6 +73,10 @@ export function ExchangeDetail() {
           <div>
             <dt>Upstream status</dt>
             <dd>{exchange.upstreamStatusCode ?? UNKNOWN}</dd>
+          </div>
+          <div>
+            <dt>Runtime said</dt>
+            <dd data-testid="runtime-outcome"><Outcome outcome={exchange.upstreamOutcome} /></dd>
           </div>
           <div>
             <dt>Failure</dt>
@@ -116,7 +122,19 @@ export function ExchangeDetail() {
         {exchange.structuralSummary === undefined ? (
           <p className="empty">No structural summary was built for this request.</p>
         ) : (
-          <StructuralSummary summary={exchange.structuralSummary} />
+          <StructuralSummary summary={exchange.structuralSummary} testId="structural-summary" />
+        )}
+      </section>
+
+      {/* The runtime's answer, as counts and closed-vocabulary tokens. It is the part of the record
+          that tells an answer with no choices, no finish reason, and an error object from one that
+          worked, so it is shown rather than left in the API alone. */}
+      <section className="panel">
+        <h2>What came back</h2>
+        {exchange.responseSummary === undefined ? (
+          <p className="empty">No response summary was built: nothing of the runtime's answer could be interpreted.</p>
+        ) : (
+          <StructuralSummary summary={exchange.responseSummary} testId="response-summary" />
         )}
       </section>
 
@@ -137,9 +155,9 @@ export function ExchangeDetail() {
  * one should show it without a dashboard release. Nothing in it is content: the gateway stores counts,
  * closed-vocabulary tokens, and hashed field names, and this renders whatever of those it finds.
  */
-function StructuralSummary({ summary }: { summary: Record<string, unknown> }) {
+function StructuralSummary({ summary, testId }: { summary: Record<string, unknown>; testId: string }) {
   return (
-    <dl className="facts" data-testid="structural-summary">
+    <dl className="facts" data-testid={testId}>
       {Object.entries(summary).map(([key, value]) => (
         <div key={key}>
           <dt>{key.replace(/([A-Z])/g, ' $1').toLowerCase()}</dt>

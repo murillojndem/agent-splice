@@ -323,6 +323,14 @@ internal sealed class AdministrativeJsonWriter : IAdministrativeEnvelopeWriter
         }
 
         writer.WriteString("status", ExchangeQuery.WireName(summary.Status));
+
+        // Absent rather than null when there is no outcome to describe, like every other member a
+        // row may not have: the exchange did not complete, or heard nothing from the runtime.
+        WriteOptionalString(
+            writer,
+            "upstreamOutcome",
+            summary.UpstreamOutcome is { } outcome ? EnumWireNames.ToSnakeCase(outcome) : null);
+
         WriteOptionalString(writer, "runtimeId", summary.RuntimeId);
         WriteOptionalString(writer, "clientModelId", summary.ClientModelId);
         WriteOptionalString(writer, "upstreamModelId", summary.UpstreamModelId);

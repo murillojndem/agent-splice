@@ -70,6 +70,7 @@ internal sealed class StreamRelayPump
     private bool sawSemanticEvent;
     private bool sawTerminator;
     private bool sawMalformedEvent;
+    private bool sawUpstreamError;
     private bool responseStarted;
 
     internal StreamRelayPump(
@@ -280,6 +281,15 @@ internal sealed class StreamRelayPump
                 Defer(ref decoded, ObservationType.NativeToolCallObserved, timeProvider.GetUtcNow());
             }
 
+            if (facts.IsUpstreamError && !sawUpstreamError)
+            {
+                // The runtime said, in its protocol's own shape, that it failed. The event has been
+                // relayed unchanged and the client's parser decides what it means to the client; the
+                // evidence records that it was said, and when (ADR 0026).
+                sawUpstreamError = true;
+                Defer(ref decoded, ObservationType.UpstreamErrorReported, timeProvider.GetUtcNow());
+            }
+
             sawMalformedEvent |= facts.IsMalformed;
 
             if (facts.IsProtocolTerminator)
@@ -357,12 +367,23 @@ internal sealed class StreamRelayPump
     {
         recorder.Observe(ObservationType.UpstreamCompleted, terminatorAt);
 
-        // The anomaly still outranks the tidy ending: a stream that carried a malformed event and
-        // then terminated properly is more usefully described by the first fact.
-        return Finish(
-            sawMalformedEvent ? StreamTermination.MalformedEvent : StreamTermination.ProtocolTerminatorReceived,
-            error: null);
+        // The anomaly still outranks the tidy ending: a stream that carried a malformed event, or
+        // reported an error, and then terminated properly is more usefully described by that fact.
+        return Finish(Anomaly() ?? StreamTermination.ProtocolTerminatorReceived, error: null);
     }
+
+    /// <summary>
+    /// The anomaly a stream that ended by itself carried, if any, the runtime's own error first.
+    /// </summary>
+    /// <remarks>
+    /// A reported error outranks a malformed event: it is the runtime saying what went wrong, while a
+    /// payload that could not be read says only that something did. Neither replaces the facts the
+    /// completion details keep, such as whether a terminator was observed.
+    /// </remarks>
+    private StreamTermination? Anomaly() =>
+        sawUpstreamError ? StreamTermination.UpstreamError
+        : sawMalformedEvent ? StreamTermination.MalformedEvent
+        : null;
 
     private async Task<StreamRelayOutcome> EndOfStreamAsync(CancellationToken cancellationToken)
     {
@@ -408,11 +429,8 @@ internal sealed class StreamRelayPump
         // The anomaly outranks the tidy ending. A stream that both misbehaved and terminated
         // properly is more usefully described by the first fact; the second survives in the
         // completion details rather than being lost.
-        var termination = sawMalformedEvent
-            ? StreamTermination.MalformedEvent
-            : sawTerminator
-                ? StreamTermination.ProtocolTerminatorReceived
-                : StreamTermination.NormalCompletion;
+        var termination = Anomaly()
+            ?? (sawTerminator ? StreamTermination.ProtocolTerminatorReceived : StreamTermination.NormalCompletion);
 
         return Finish(termination, error: null);
     }

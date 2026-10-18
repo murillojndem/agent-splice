@@ -69,7 +69,12 @@ public sealed class OpenAiChatCompletionResponseCodec : IChatCompletionResponseC
 
             // A non-streamed exchange has no events. Zero here is a defined fact, not a placeholder.
             streamEventCount: 0,
-            usageReported: !usage.IsUnknown);
+            usageReported: !usage.IsUnknown,
+
+            // The same shape a stream event carries, in a body. A 2xx body that is an error object is
+            // the buffered form of the in-stream error, and the envelope of a relayed 4xx or 5xx has
+            // the shape too, which its status already says (ADR 0026).
+            upstreamErrorReported: OpenAiErrorShape.Reports(root));
 
         return new ChatCompletionResponseFacts(summary, usage);
     }

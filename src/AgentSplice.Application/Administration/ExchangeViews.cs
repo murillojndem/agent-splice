@@ -37,6 +37,17 @@ public sealed record ExchangeSummaryView
     /// <summary>Terminal lifecycle state.</summary>
     public required ExchangeStatus Status { get; init; }
 
+    /// <summary>
+    /// What the runtime's answer said about how it went, or <c>null</c> when the exchange did not
+    /// complete or heard no response (ADR 0026).
+    /// </summary>
+    /// <remarks>
+    /// On the list as well as the detail, because <c>completed</c> says only that the transport cycle
+    /// finished: a runtime that answered 500, or reported an error inside a 200, completed too, and a
+    /// list showing only the status showed both as healthy.
+    /// </remarks>
+    public UpstreamOutcome? UpstreamOutcome { get; init; }
+
     /// <summary>The runtime that served it, when routing chose one.</summary>
     public string? RuntimeId { get; init; }
 

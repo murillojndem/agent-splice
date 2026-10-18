@@ -79,6 +79,8 @@ Verbatim within limits, and the limits refuse rather than repair. A content type
 
 The gateway commits the client's status with the runtime's first body byte — or at the end of a response that had none — and not when the runtime's headers arrive. Until that byte nothing has been sent, so a runtime that times out or drops the connection after its headers and before its first byte is answered with the gateway's own error envelope and every correlation header, as it would be before its headers (ADR 0025). From the first byte a failure is expressed by abandoning the response rather than by an error envelope, because a stream that stops early but closes cleanly is indistinguishable from a complete one; the same holds for an ordinary body sent in answer to a streaming request. The exchange then records why it failed and no error code, because no envelope carried one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
 
+A runtime that reports an error inside a success — an event, or a `200` body, that is the protocol's own `{"error": {...}}` object — is relayed unchanged too. The exchange completes, because AgentSplice did not fail, and records the runtime's failure beside that: `responseSummary.upstreamErrorReported`, an `upstream_error_reported` timeline event, for a stream the termination `upstream_error`, and `upstreamOutcome: error_reported` on the exchange. The error object is recognised by its shape alone; nothing inside it is read or recorded, because its message can echo the prompt (ADR 0026).
+
 ## Gateway headers
 
 Accepted request headers:
@@ -153,6 +155,12 @@ make the second skip or repeat one. `limit` is 1–200 and defaults to 50. `stat
 validated against the published vocabularies and refused with `agentsplice_invalid_query` when they do
 not match — a filter that is silently ignored returns a page that looks like an answer to the question
 asked and is an answer to a different one.
+
+Each listed exchange carries `upstreamOutcome` beside its `status` when it completed and heard a
+response: `success`, `error_status` for a 4xx or 5xx, or `error_reported` for a success whose answer
+carried the protocol's error object (ADR 0026). `completed` says only that the transport cycle finished,
+so this is the field that tells a runtime's failure from its success. It is absent for an exchange that
+failed or was cancelled, whose `failureClass` says why.
 
 An exchange identifier that does not parse and one that is not retained both answer `404`. They are
 indistinguishable to a caller who cannot see the store, and separating them would tell anyone probing

@@ -32,5 +32,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
+    // Vitest replaces CSS with an empty string unless told otherwise. The stylesheet's pill colours
+    // are a contract a test reads (tests/styles.test.ts), so it is the one file kept.
+    css: { include: [/styles\.css/] },
   },
 });

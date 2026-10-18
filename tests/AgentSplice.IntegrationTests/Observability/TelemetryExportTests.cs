@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Text;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.IntegrationTests.Hosting;
+using AgentSplice.Observability;
 using AgentSplice.TestSupport.FakeUpstream;
 using AgentSplice.TestSupport.Logging;
 using AgentSplice.TestSupport.Otlp;
@@ -93,6 +95,47 @@ public sealed class TelemetryExportTests
         Assert.True(metrics.Contains("agentsplice.exchange.duration"));
         Assert.True(metrics.Contains("agentsplice.exchange.status"));
         Assert.True(metrics.Contains("agentsplice.prompt.tokens"));
+    }
+
+    [Fact]
+    public async Task A_runtime_error_inside_a_200_is_exported_as_the_runtimes_error()
+    {
+        // The status class said 2xx, the exchange said completed, and the span was not marked: a
+        // backend counted a runtime that reported its failure as a success (ADR 0026).
+        await using var collector = await FakeOtlpCollector.StartAsync(OtlpReceiverTransport.HttpProtobuf);
+        await using var fixture = await StartAsync(collector, "HttpProtobuf");
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.Json("""{"error":{"message":"The model crashed","type":"server_error"}}"""));
+
+        var stopped = new ConcurrentQueue<Activity>();
+
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == TelemetryNames.ActivitySources.Exchange,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = stopped.Enqueue,
+        };
+
+        ActivitySource.AddActivityListener(listener);
+
+        using var response = await CompleteAsync(fixture, scripted: true);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var traceId = response.Headers.GetValues("x-agentsplice-trace-id").Single();
+
+        var metrics = await WaitForExportAsync(fixture, collector, FakeOtlpCollector.HttpMetricsPath, TelemetryNames.Attributes.UpstreamOutcome);
+
+        Assert.True(metrics.Contains("ErrorReported"));
+
+        var span = await WaitForSpanAsync(stopped, traceId);
+
+        Assert.Equal(ActivityStatusCode.Error, span.Status);
+        Assert.Equal("ErrorReported", span.GetTagItem(TelemetryNames.Attributes.UpstreamOutcome));
+
+        // AgentSplice did not fail, so the error type stays absent: it names AgentSplice's own failures.
+        Assert.Null(span.GetTagItem(TelemetryNames.Attributes.ErrorType));
     }
 
     [Fact]
@@ -362,6 +405,27 @@ public sealed class TelemetryExportTests
             }
 
             await Task.Delay(50);
+        }
+    }
+
+    /// <summary>Waits for the exchange span of one trace to stop, which follows the response's write.</summary>
+    private static async Task<Activity> WaitForSpanAsync(ConcurrentQueue<Activity> stopped, string traceId)
+    {
+        var elapsed = Stopwatch.StartNew();
+
+        while (true)
+        {
+            if (stopped.FirstOrDefault(activity => activity.TraceId.ToHexString() == traceId) is { } span)
+            {
+                return span;
+            }
+
+            if (elapsed.Elapsed > ExportDeadline)
+            {
+                throw new TimeoutException($"The exchange span of trace {traceId} did not stop within {ExportDeadline}.");
+            }
+
+            await Task.Delay(20);
         }
     }
 

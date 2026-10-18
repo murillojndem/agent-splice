@@ -44,6 +44,17 @@ public sealed record StructuralResponseSummary
     /// <summary>True when the runtime reported a usage object.</summary>
     public bool UsageReported { get; private init; }
 
+    /// <summary>
+    /// True when the runtime reported an error in the protocol's own shape: a top-level <c>error</c>
+    /// object, in a stream event or in a body.
+    /// </summary>
+    /// <remarks>
+    /// Presence only. The error's message can echo the prompt or a template, so nothing inside the
+    /// object is read, and it is recognised by its structure the way <c>[DONE]</c> or <c>usage</c> is,
+    /// never by what any text says (ADR 0026).
+    /// </remarks>
+    public bool UpstreamErrorReported { get; private init; }
+
     /// <summary>Creates a validated structural response summary.</summary>
     public static StructuralResponseSummary Create(
         int choiceCount = 0,
@@ -51,7 +62,8 @@ public sealed record StructuralResponseSummary
         int nativeToolCallCount = 0,
         long responseBodyBytes = 0,
         int streamEventCount = 0,
-        bool usageReported = false)
+        bool usageReported = false,
+        bool upstreamErrorReported = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(choiceCount);
         ArgumentOutOfRangeException.ThrowIfNegative(nativeToolCallCount);
@@ -66,6 +78,7 @@ public sealed record StructuralResponseSummary
             ResponseBodyBytes = responseBodyBytes,
             StreamEventCount = streamEventCount,
             UsageReported = usageReported,
+            UpstreamErrorReported = upstreamErrorReported,
         };
     }
 

@@ -164,6 +164,26 @@ public sealed class ChatCompletionResponseCodecTests
         Assert.Equal(3, facts.Usage.CompletionTokens?.Value);
     }
 
+    [Fact]
+    public void A_body_that_is_the_protocols_error_object_reports_an_error()
+    {
+        // The buffered form of the in-stream error: a 2xx body that is an error envelope. Relayed
+        // verbatim like any other answer, and recorded as the runtime's report (ADR 0026).
+        var facts = Read("""{"error":{"message":"The model crashed","type":"server_error"}}""");
+
+        Assert.True(facts.Summary?.UpstreamErrorReported);
+        Assert.Equal(0, facts.Summary?.ChoiceCount);
+    }
+
+    [Theory]
+    [InlineData(Simple)]
+    [InlineData("""{"choices":[],"error":null}""")]
+    [InlineData("""{"choices":[{"message":{"role":"assistant","content":"{\"error\":{}}"}}]}""")]
+    public void A_body_without_a_top_level_error_object_reports_none(string body)
+    {
+        Assert.False(Read(body).Summary?.UpstreamErrorReported);
+    }
+
     private Application.Protocols.ChatCompletionResponseFacts Read(string body) =>
         codec.Read(Encoding.UTF8.GetBytes(body), "application/json");
 }

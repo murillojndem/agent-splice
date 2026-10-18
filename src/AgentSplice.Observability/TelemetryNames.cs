@@ -170,6 +170,17 @@ public static class TelemetryNames
         /// <summary>The coarse class of the upstream status, such as <c>2xx</c>.</summary>
         public const string UpstreamStatusClass = "agentsplice.upstream.status_class";
 
+        /// <summary>
+        /// What the runtime's answer said about how it went: <c>Success</c>, <c>ErrorStatus</c>, or
+        /// <c>ErrorReported</c>.
+        /// </summary>
+        /// <remarks>
+        /// Present only for a completed exchange that heard a response, so it costs a failed or
+        /// cancelled exchange's series nothing. It is what the runtime's success is classified from;
+        /// the status class alone counted an error inside a <c>200</c> as one (ADR 0026).
+        /// </remarks>
+        public const string UpstreamOutcome = "agentsplice.upstream.outcome";
+
         /// <summary>The stable error type, when the exchange produced one.</summary>
         public const string ErrorType = "error.type";
 
@@ -177,7 +188,7 @@ public static class TelemetryNames
         /// How a stream ended, attached only to exchanges that actually streamed.
         /// </summary>
         /// <remarks>
-        /// A closed set of ten values, and absent entirely from buffered exchanges so that adding it
+        /// A closed set of eleven values, and absent entirely from buffered exchanges so that adding it
         /// costs the existing series no cardinality at all.
         /// </remarks>
         public const string StreamTermination = "agentsplice.stream.termination";
@@ -202,6 +213,7 @@ public static class TelemetryNames
         Attributes.Streaming,
         Attributes.ExchangeStatus,
         Attributes.UpstreamStatusClass,
+        Attributes.UpstreamOutcome,
         Attributes.ErrorType,
         Attributes.StreamTermination,
         Attributes.PersistenceFailureReason,

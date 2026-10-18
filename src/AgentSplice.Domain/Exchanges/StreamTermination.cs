@@ -45,4 +45,14 @@ public enum StreamTermination
     /// exists to remove.
     /// </remarks>
     LimitExceeded = 10,
+
+    /// <summary>The runtime reported an error inside the stream, in the protocol's own error shape.</summary>
+    /// <remarks>
+    /// The stream ended the way the runtime ended it, and the error event was relayed unchanged, so
+    /// AgentSplice did not fail and the exchange still completes. It outranks a tidy ending, a
+    /// terminator included, because a stream that said it failed and then closed properly is more
+    /// usefully described by the first fact (ADR 0026). Not <see cref="UpstreamCancelled"/>, which is
+    /// reserved for a runtime aborting its response.
+    /// </remarks>
+    UpstreamError = 11,
 }

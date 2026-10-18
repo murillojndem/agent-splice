@@ -8,6 +8,12 @@
 
 export type ExchangeStatus = 'accepted' | 'forwarding' | 'streaming' | 'completed' | 'cancelled' | 'failed';
 
+/**
+ * What the runtime's answer said about how it went (ADR 0026). `completed` says only that the
+ * transport cycle finished, so this, not the status, tells a runtime's failure from its success.
+ */
+export type UpstreamOutcome = 'success' | 'error_status' | 'error_reported';
+
 export type ContentRetentionState =
   | 'disabled'
   | 'metadata_only'
@@ -38,6 +44,8 @@ export interface ExchangeSummary {
   startedAt: string;
   completedAt: string | null;
   status: ExchangeStatus;
+  /** Absent when the exchange did not complete or heard no response from the runtime. */
+  upstreamOutcome?: UpstreamOutcome;
   runtimeId?: string;
   /** Absent when the request was refused before its model was readable. */
   clientModelId?: string;

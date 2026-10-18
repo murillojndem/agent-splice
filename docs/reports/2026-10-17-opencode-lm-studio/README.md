@@ -293,3 +293,8 @@ records `contentRetentionState: metadata_only`.
   `client_cancelled`, or `client_response_abandoned`. The records here are what the build this report
   ran wrote: exchange `d8f5a743` names a code its client never received and has no client-side
   boundary, which is how a record made before ADR 0025 can be told apart from a later one.
+- **2026-10-18.** Finding 1 was fixed after this report (ADR 0026). A later build still records an
+  exchange like attempt 1's first agent request as `completed`, because the gateway did not fail, and
+  records the runtime's failure beside it: termination `upstream_error`, `upstreamOutcome:
+  error_reported`, and an `upstream_error_reported` boundary. The records here keep `normal_completion`
+  and no outcome, as the build that ran wrote them.

@@ -18,11 +18,12 @@ public enum ExchangeStatus
     /// The transport cycle finished: AgentSplice forwarded a request and relayed an answer.
     /// </summary>
     /// <remarks>
-    /// Not a claim that the operation succeeded. A runtime that answers 429 or 500 is relayed
-    /// verbatim, and the exchange completes with no <see cref="FailureClass"/>, because AgentSplice
-    /// did not fail. Whether the runtime succeeded is read from
-    /// <see cref="UpstreamResponseMetadata.StatusCode"/>; success and error metrics are classified
-    /// from that, never from the absence of a failure class.
+    /// Not a claim that the operation succeeded. A runtime that answers 429 or 500, or reports an
+    /// error inside a 200, is relayed verbatim, and the exchange completes with no
+    /// <see cref="FailureClass"/>, because AgentSplice did not fail. Whether the runtime succeeded is
+    /// its <see cref="UpstreamOutcome"/>, read from its status and from whether it reported an error in
+    /// its answer; success and error are classified from that, never from the absence of a failure
+    /// class (ADR 0026).
     /// </remarks>
     Completed = 4,
 

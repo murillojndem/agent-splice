@@ -42,6 +42,7 @@ public sealed class StreamRelayBoundaryTests
     private const string ContentChunk = """{"choices":[{"index":0,"delta":{"content":"hello"}}]}""";
     private const string ToolChunk =
         """{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"f"}}]}}]}""";
+    private const string ErrorChunk = """{"error":{"message":"Error rendering prompt with jinja template"}}""";
 
     [Fact]
     public async Task The_first_upstream_byte_is_stamped_after_the_read_that_returned_it()
@@ -504,6 +505,67 @@ public sealed class StreamRelayBoundaryTests
         Assert.True(sink.Aborted);
         Assert.False(outcome.Streamed);
         Assert.Equal(StreamTermination.NotApplicable, outcome.Termination);
+    }
+
+    [Fact]
+    public async Task A_stream_that_reports_an_error_and_closes_ends_as_the_runtimes_error()
+    {
+        // The trace report's finding 1: one error event, then EOF, no [DONE]. It used to end as
+        // normal_completion, which is how a stream that worked ends (ADR 0026).
+        var clock = Clock();
+        var recorder = Recorder(clock);
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ErrorChunk), after: Stall), End()]);
+
+        var outcome = await RelayAsync(clock, recorder, body, Sink(clock));
+
+        Assert.Equal(StreamTermination.UpstreamError, outcome.Termination);
+        Assert.Null(outcome.Error);
+        Assert.False(outcome.ProtocolTerminatorObserved);
+        Assert.True(outcome.Summary?.UpstreamErrorReported);
+
+        // Dated when the event was interpreted, which is after the read that brought it.
+        var reported = At(recorder.ToRecord(), ObservationType.UpstreamErrorReported);
+
+        Assert.True(reported >= Origin + Stall);
+    }
+
+    [Fact]
+    public async Task An_error_followed_by_the_terminator_still_ends_as_the_runtimes_error()
+    {
+        // With [DONE] after the error, even the absent terminator — the one sign the record used to
+        // carry — disappeared. The terminator survives in the completion details.
+        var clock = Clock();
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ErrorChunk) + Event("[DONE]"))]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, Sink(clock));
+
+        Assert.Equal(StreamTermination.UpstreamError, outcome.Termination);
+        Assert.True(outcome.ProtocolTerminatorObserved);
+    }
+
+    [Fact]
+    public async Task A_reported_error_outranks_a_malformed_event()
+    {
+        // The runtime saying what went wrong is more useful than a payload that says only that
+        // something did.
+        var clock = Clock();
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event("{not json") + Event(ErrorChunk)), End()]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, Sink(clock));
+
+        Assert.Equal(StreamTermination.UpstreamError, outcome.Termination);
+    }
+
+    [Fact]
+    public async Task A_stream_that_reports_no_error_records_none()
+    {
+        var clock = Clock();
+        var recorder = Recorder(clock);
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ContentChunk)), End()]);
+
+        await RelayAsync(clock, recorder, body, Sink(clock));
+
+        Assert.DoesNotContain(ObservationType.UpstreamErrorReported, Types(recorder.ToRecord()));
     }
 
     private static bool IsFirstBoundary(ObservationType type) =>

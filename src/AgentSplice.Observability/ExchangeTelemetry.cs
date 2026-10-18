@@ -298,9 +298,10 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     /// Builds the dimension set for an exchange.
     /// </summary>
     /// <remarks>
-    /// Success and failure are classified from the recorded upstream status class, never from the
-    /// absence of an error type: a relayed upstream 500 is a completed transport cycle with no
-    /// AgentSplice failure, and must not be counted as a success.
+    /// The runtime's success and failure are classified from its outcome, never from the absence of
+    /// an error type: a relayed upstream 500 and an error reported inside a 200 are completed
+    /// transport cycles with no AgentSplice failure, and neither may be counted as a success
+    /// (ADR 0026).
     /// </remarks>
     private static TagList Dimensions(ExchangeTelemetrySnapshot snapshot)
     {
@@ -324,6 +325,11 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
         if (snapshot.UpstreamStatusClass is { } statusClass)
         {
             tags.Add(TelemetryNames.Attributes.UpstreamStatusClass, statusClass);
+        }
+
+        if (snapshot.UpstreamOutcome is { } outcome)
+        {
+            tags.Add(TelemetryNames.Attributes.UpstreamOutcome, outcome.ToString());
         }
 
         if (snapshot.ErrorType is { } errorType)
@@ -359,13 +365,29 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
             activity?.SetTag(TelemetryNames.Attributes.ProviderType, providerKey);
         }
 
-        public void SetOutcome(Domain.Exchanges.ExchangeStatus status, string? errorType)
+        public void SetOutcome(
+            Domain.Exchanges.ExchangeStatus status,
+            string? errorType,
+            Domain.Exchanges.UpstreamOutcome? upstreamOutcome)
         {
             activity?.SetTag(TelemetryNames.Attributes.ExchangeStatus, status.ToString());
 
+            if (upstreamOutcome is { } outcome)
+            {
+                activity?.SetTag(TelemetryNames.Attributes.UpstreamOutcome, outcome.ToString());
+            }
+
+            // An error either way: AgentSplice failed, or the runtime's answer was an error. The
+            // second used to leave the span unmarked, so a backend showed a runtime that reported its
+            // failure inside a 200 as a healthy exchange (ADR 0026). error.type stays AgentSplice's
+            // own, because the runtime's error is not one of its types.
             if (errorType is not null)
             {
                 activity?.SetTag(TelemetryNames.Attributes.ErrorType, errorType);
+                activity?.SetStatus(ActivityStatusCode.Error);
+            }
+            else if (upstreamOutcome is Domain.Exchanges.UpstreamOutcome.ErrorStatus or Domain.Exchanges.UpstreamOutcome.ErrorReported)
+            {
                 activity?.SetStatus(ActivityStatusCode.Error);
             }
         }

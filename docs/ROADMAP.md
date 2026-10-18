@@ -178,8 +178,9 @@ The rest of the list below is not done.
   committed with the first byte, and the failure is answered with the gateway's `504` or `502`);
 - record an exchange's error code only when an envelope carried it to the client (done, ADR 0025), and
   every timeout phase and upstream failure on its timeline (done, ADR 0025);
-- record a runtime error that arrives inside a `200` stream as the failure it is, not as a completion
-  (found by the first trace report);
+- record a runtime error carried inside a `200` response as the runtime's failure, distinct from a
+  success in the record, the metrics, and the dashboard, while `completed` keeps meaning that the
+  transport cycle finished (found by the first trace report; done, ADR 0026);
 - first dated trace report (done, ADR 0023);
 - documentation and demo capture.
 

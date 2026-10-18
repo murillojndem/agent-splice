@@ -288,6 +288,147 @@ public sealed class ExchangeApiTests
         Assert.Equal(JsonValueKind.Null, item.GetProperty("streaming").ValueKind);
     }
 
+    [Fact]
+    public async Task A_runtime_error_inside_a_200_stream_is_listed_as_the_runtimes_error()
+    {
+        // The list showed `completed` alone, which a relayed 500 and an error event inside a 200 both
+        // are. The runtime's own outcome is what tells them from a success (ADR 0026).
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create().Data("""{"error":{"message":"Error rendering prompt with jinja template"}}""").Build());
+
+        await SendAsync(fixture, """{"model":"qwen3.6-27b-mtp","stream":true,"messages":[{"role":"user","content":"hi"}]}""");
+
+        var item = Assert.Single((await WaitForPageAsync(fixture)).GetProperty("items").EnumerateArray());
+
+        Assert.Equal("completed", item.GetProperty("status").GetString());
+        Assert.Equal("error_reported", item.GetProperty("upstreamOutcome").GetString());
+
+        var detail = await ReadJsonAsync(fixture, "/api/v1/exchanges/" + item.GetProperty("exchangeId").GetString());
+
+        Assert.Equal("upstream_error", detail.GetProperty("streamTermination").GetString());
+        Assert.Equal("error_reported", detail.GetProperty("upstreamOutcome").GetString());
+        Assert.True(detail.GetProperty("responseSummary").GetProperty("upstreamErrorReported").GetBoolean());
+        Assert.False(detail.TryGetProperty("errorCode", out _));
+        Assert.False(detail.TryGetProperty("failureClass", out _));
+    }
+
+    [Fact]
+    public async Task A_relayed_error_status_and_a_success_are_listed_apart()
+    {
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.Json("""{"error":{"message":"overloaded"}}""", statusCode: 503));
+
+        await SendAsync(fixture, """{"model":"qwen3.6-27b-mtp","messages":[{"role":"user","content":"hi"}]}""", expectSuccess: false);
+        await ProxyAsync(fixture);
+
+        var page = await WaitForAsync(
+            fixture,
+            "/api/v1/exchanges",
+            document => document.GetProperty("items").GetArrayLength() == 2);
+
+        var outcomes = page.GetProperty("items")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("upstreamOutcome").GetString()!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["error_status", "success"], outcomes);
+    }
+
+    [Fact]
+    public async Task A_request_refused_before_its_model_was_known_has_no_runtime_outcome()
+    {
+        // The runtime was never asked, so there is nothing of its to judge.
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        await RefuseAsync(fixture);
+
+        var item = Assert.Single((await WaitForPageAsync(fixture)).GetProperty("items").EnumerateArray());
+
+        Assert.False(item.TryGetProperty("upstreamOutcome", out _));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task The_identifiers_a_response_carries_are_those_its_exchange_is_stored_under(bool streaming)
+    {
+        // The headers are how a client finds its exchange. Before this, nothing tied a header's value
+        // to the stored row: the exchange id came from the list page, and a stream's trace header was
+        // never read at all.
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            streaming
+                ? SseScript.Create().Data("""{"choices":[{"index":0,"delta":{"content":"hi"}}]}""").Done().Build()
+                : UpstreamResponseScripts.Json(Completion));
+
+        var headers = await SendAsync(
+            fixture,
+            streaming
+                ? """{"model":"qwen3.6-27b-mtp","stream":true,"messages":[{"role":"user","content":"hi"}]}"""
+                : """{"model":"qwen3.6-27b-mtp","messages":[{"role":"user","content":"hi"}]}""");
+
+        var exchangeId = headers.GetValues("x-agentsplice-exchange-id").Single();
+
+        await WaitForPageAsync(fixture);
+
+        var detail = await ReadJsonAsync(fixture, "/api/v1/exchanges/" + exchangeId);
+
+        Assert.Equal(exchangeId, detail.GetProperty("exchangeId").GetString());
+        Assert.Equal(headers.GetValues("x-agentsplice-request-id").Single(), detail.GetProperty("requestId").GetString());
+        Assert.Equal(headers.GetValues("x-agentsplice-trace-id").Single(), detail.GetProperty("traceId").GetString());
+    }
+
+    [Fact]
+    public async Task A_request_refused_before_its_model_was_known_keeps_the_trace_id_it_was_given()
+    {
+        // Given an x-agentsplice-trace-id and stored without one, because the trace id was read from an
+        // exchange such a request does not have (ADR 0025).
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        using var content = new StringContent("{ not json", Encoding.UTF8, "application/json");
+        using var response = await fixture.Client.PostAsync(new Uri("/v1/chat/completions", UriKind.Relative), content);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var item = Assert.Single((await WaitForPageAsync(fixture)).GetProperty("items").EnumerateArray());
+
+        Assert.Equal(response.Headers.GetValues("x-agentsplice-trace-id").Single(), item.GetProperty("traceId").GetString());
+    }
+
+    private static async Task<System.Net.Http.Headers.HttpResponseHeaders> SendAsync(
+        GatewayFixture fixture,
+        string body,
+        bool expectSuccess = true)
+    {
+        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        var response = await fixture.Client.PostAsync(new Uri("/v1/chat/completions", UriKind.Relative), content);
+
+        // Read to the end, so the exchange is finished before the store is asked about it.
+        await response.Content.ReadAsByteArrayAsync();
+
+        if (expectSuccess)
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        return response.Headers;
+    }
+
     private static List<string> Ids(JsonElement page) =>
         page.GetProperty("items")
             .EnumerateArray()

@@ -98,6 +98,16 @@ public sealed record CompletionExchange
     public bool IsTerminal =>
         Status is ExchangeStatus.Completed or ExchangeStatus.Cancelled or ExchangeStatus.Failed;
 
+    /// <summary>
+    /// What the runtime's answer said about how it went, or <c>null</c> when the exchange did not
+    /// complete or no response was observed (ADR 0026).
+    /// </summary>
+    public UpstreamOutcome? UpstreamOutcome =>
+        UpstreamOutcomeRules.Classify(
+            Status,
+            UpstreamResponse?.StatusCode,
+            ResponseSummary?.UpstreamErrorReported == true);
+
     /// <summary>Opens an exchange in the <see cref="ExchangeStatus.Accepted"/> state.</summary>
     /// <param name="exchangeId">Identity assigned at ingress.</param>
     /// <param name="publicRequestId">Correlation token returned to the client.</param>

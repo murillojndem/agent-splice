@@ -4,6 +4,33 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 14: a runtime's error inside a success is the runtime's failure
+
+LM Studio, unable to render a chat template, answered `200` with one event carrying an error object.
+AgentSplice relayed it unchanged and recorded it as `completed` with `normal_completion`, the metrics
+counted it as a success, and the dashboard painted it green (the first trace report's finding 1).
+ADR 0026 keeps the relay and the `completed` status, and records the runtime's failure beside them.
+
+- An event or a body whose JSON is the protocol's own error object — a top-level `error` member that is
+  an object — is recognised by its shape, never read. The response summary records
+  `upstreamErrorReported`, the timeline an `upstream_error_reported` boundary, and a stream the new
+  termination `upstream_error`, which outranks a malformed event and the terminator.
+- One rule, `UpstreamOutcomeRules`, says whether the runtime succeeded: `success`, `error_status` for a
+  4xx or 5xx, or `error_reported`. It is the new `agentsplice.upstream.outcome` metric dimension, an
+  attribute on the exchange span — whose status is now `Error` for a runtime's error too — and the new
+  `upstreamOutcome` on the exchange list and detail, classified on read so older rows answer too.
+- The dashboard's `completed` pill is neutral, an outcome pill beside it carries success or failure on
+  the list, the overview, and the exchange's page, and the exchange's page shows the response summary.
+- The roadmap's line is reworded, `docs/API.md`, `docs/CLIENTS.md`, `docs/OBSERVABILITY.md`, the README,
+  and ADRs 0008 and 0009 say so, and the trace report has a dated note.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: the error shape not
+recognised in a stream or in a body, recognised from a string or a null, the termination left to
+`normal_completion` or outranked by a malformed event or the terminator, the boundary not stamped, a
+status not outranking the body, an outcome for an exchange that did not complete, the outcome missing
+from the metrics, the span, the list, or the schema, the span left unmarked, and the `completed` pill or
+the response summary as they were.
+
 ### Stage 1D, part 13: a stream's status is committed with its first byte
 
 A stream's status was committed when the runtime's headers arrived, and Kestrel sends a started

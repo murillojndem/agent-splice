@@ -583,6 +583,28 @@ The rest runs in process:
 Each fails against its reintroduced defect, listed in the changelog, except where two guards cover one
 case; the changelog says which, and that the test fails with both removed.
 
+## Delivered by Stage 1D, part 14: a runtime's error inside a success
+
+The fixture is the trace report's finding 1, as LM Studio sent it: a `200` stream carrying one event
+whose JSON is `{"error":{...}}`, closed without `[DONE]`, and the same object as a buffered body.
+
+- `OpenAiStreamEventInterpreterTests` and `ChatCompletionResponseCodecTests` hold the shape: a top-level
+  error object counts; a null `error`, a string, an error nested under `choices`, and model output that
+  spells one do not.
+- `StreamRelayBoundaryTests` holds the termination's precedence over a malformed event and over the
+  terminator, and when the boundary is stamped.
+- `UpstreamOutcomeRulesTests` holds the one classification the exchange, the metrics, and the store use.
+- `RuntimeReportedErrorTests` runs it end to end, and searches the record and every log, at `Trace`, for a
+  sentinel planted in the error's message.
+- `ExchangeApiTests` reads the outcome back through the list and the detail, and ties each correlation
+  header a response carried — buffered and streamed — to the row it was stored under.
+- `TelemetryExportTests` finds the dimension in the exported metrics, and reads the exchange span's status
+  through an `ActivityListener` in the test process, matched to the response by its trace id.
+- The dashboard's `outcome.test.tsx` renders the Exchanges list and an exchange's page through the real
+  root with `fetch` stubbed, and reads the outcome pill and the response summary.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

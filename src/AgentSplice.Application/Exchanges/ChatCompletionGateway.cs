@@ -363,6 +363,14 @@ public sealed class ChatCompletionGateway
         if (relayed.Summary is { } summary)
         {
             recorder.Update(exchange => exchange.WithResponseSummary(summary).WithUsage(relayed.Usage));
+
+            // A stream's error event was dated when it was interpreted. An ordinary body sent in
+            // answer to a streaming request is read only once it has all arrived, so its error is
+            // dated now, as the buffered path dates one.
+            if (summary.UpstreamErrorReported && !recorder.HasObserved(ObservationType.UpstreamErrorReported))
+            {
+                recorder.Observe(ObservationType.UpstreamErrorReported);
+            }
         }
 
         if (relayed.ResponseStarted)
@@ -508,6 +516,13 @@ public sealed class ChatCompletionGateway
             if (summary.NativeToolCallCount > 0)
             {
                 recorder.Observe(ObservationType.NativeToolCallObserved);
+            }
+
+            // The buffered form of the in-stream error: a body that is the protocol's error object.
+            // Relayed unchanged whatever its status, and recorded as the runtime's report (ADR 0026).
+            if (summary.UpstreamErrorReported)
+            {
+                recorder.Observe(ObservationType.UpstreamErrorReported);
             }
         }
 
@@ -678,12 +693,13 @@ public sealed class ChatCompletionGateway
                 // client that left before its model was known cancelled, and did not fail.
                 recorder.Trace?.SetOutcome(
                     recorder.HasObserved(ObservationType.ClientCancelled) ? ExchangeStatus.Cancelled : ExchangeStatus.Failed,
-                    errorType);
+                    errorType,
+                    upstreamOutcome: null);
 
                 return;
             }
 
-            recorder.Trace?.SetOutcome(exchange.Status, errorType);
+            recorder.Trace?.SetOutcome(exchange.Status, errorType, exchange.UpstreamOutcome);
 
             var completedAt = exchange.CompletedAt ?? recorder.Now;
 
@@ -721,6 +737,7 @@ public sealed class ChatCompletionGateway
                 // Present only for an exchange that actually streamed, which is also what tells the
                 // metric layer to attach the termination dimension at all.
                 StreamTermination = exchange.StreamedResponse ? exchange.StreamTermination : null,
+                UpstreamOutcome = exchange.UpstreamOutcome,
                 StreamEvents = relayedBytes is null ? null : exchange.ResponseSummary?.StreamEventCount,
                 StreamBytes = relayedBytes,
                 TimeToFirstSemanticEvent = NonNegative(recorder.DurationBetween(

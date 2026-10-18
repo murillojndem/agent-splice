@@ -79,8 +79,14 @@ public interface IExchangeTrace : IDisposable
     /// <summary>Records the runtime once routing has chosen one.</summary>
     void SetRuntime(RuntimeEndpointId runtime, string providerKey);
 
-    /// <summary>Records how the exchange ended.</summary>
-    void SetOutcome(ExchangeStatus status, string? errorType);
+    /// <summary>Records how the exchange ended, and what the runtime's answer said about how it went.</summary>
+    /// <param name="status">The exchange's terminal state.</param>
+    /// <param name="errorType">The stable type of AgentSplice's own failure, when it failed.</param>
+    /// <param name="upstreamOutcome">
+    /// The runtime's outcome, or <c>null</c> when the exchange did not complete or heard no response
+    /// (ADR 0026).
+    /// </param>
+    void SetOutcome(ExchangeStatus status, string? errorType, UpstreamOutcome? upstreamOutcome);
 }
 
 /// <summary>
@@ -111,6 +117,16 @@ public sealed record ExchangeTelemetrySnapshot(
 {
     /// <summary>How the stream ended, or <c>null</c> when the exchange never streamed.</summary>
     public StreamTermination? StreamTermination { get; init; }
+
+    /// <summary>
+    /// What the runtime's answer said about how it went, or <c>null</c> when the exchange did not
+    /// complete or heard no response.
+    /// </summary>
+    /// <remarks>
+    /// The dimension success and failure of the runtime are classified from, on every exchange series.
+    /// The status class alone counted an error inside a <c>200</c> as a success (ADR 0026).
+    /// </remarks>
+    public UpstreamOutcome? UpstreamOutcome { get; init; }
 
     /// <summary>Time from opening the upstream request to its first body byte.</summary>
     public TimeSpan? TimeToFirstByte { get; init; }

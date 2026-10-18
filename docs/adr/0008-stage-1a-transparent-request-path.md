@@ -1,6 +1,6 @@
 # ADR 0008 — Stage 1A transparent request path
 
-- Status: Accepted
+- Status: Accepted, decision 12's classification of success refined by [ADR 0026](0026-stage-1d-a-runtime-error-inside-a-success-is-the-runtimes-failure.md)
 - Date: 2026-07-29
 - Related: ADR 0002 (System.Text.Json), ADR 0004 (content storage opt-in), ADR 0006 (durable core), ADR 0007 (Stage 0 toolchain)
 
@@ -155,6 +155,11 @@ runtime's status semantics, and the always-present `x-agentsplice-*` headers plu
 upstream status already distinguish the two sides. Also rejected: adding a `FailureClass.UpstreamStatus`
 member, which would force a twelfth `ErrorCodes` entry for a condition that is not an AgentSplice
 failure.
+
+> **Refined by ADR 0026.** The status class alone counted a runtime that reported its error inside a
+> `200` as a success. Success and error are classified from the runtime's `UpstreamOutcome` —
+> `success`, `error_status`, or `error_reported` — which reads the status and whether the answer
+> carried the protocol's error object. `Completed` keeps the meaning given here.
 
 ### 13. HTTP status is transport metadata, not body structure
 

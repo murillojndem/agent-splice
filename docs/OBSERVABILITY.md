@@ -78,6 +78,7 @@ A completion timeline may contain:
 - adapter applied/rejected/skipped;
 - upstream completed;
 - upstream failed, with its classification and bounded detail;
+- upstream error reported: the runtime's answer carried the protocol's own error object;
 - client completed, with whether the client received the relayed answer or the gateway's error envelope;
 - client cancelled;
 - client response abandoned;
@@ -229,15 +230,18 @@ The window closes at the protocol terminator, not at transport end, so a runtime
 - `agentsplice.streaming`
 - `agentsplice.exchange.status`
 - `agentsplice.upstream.status_class`
+- `agentsplice.upstream.outcome`
 - `error.type`
 - `agentsplice.stream.termination`
 - `agentsplice.persistence.failure_reason`
 
 `agentsplice.persistence.failure_reason` is attached only to `agentsplice.persistence.failures` and has two values. `QueueSaturated` means the gateway produced evidence faster than the store accepted it and the fix is capacity; `WriteFailed` means the store rejected what it was given and the fix is the store. A single undifferentiated failure count would send an operator adding queue capacity to a database that is refusing every write.
 
-`agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx` — and is what success and failure are classified from. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
+`agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx`. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
 
-`agentsplice.stream.termination` is attached only to exchanges that actually streamed, so adding it costs the existing series no cardinality at all. Its value set is closed: the ten members of `StreamTermination`.
+`agentsplice.upstream.outcome` is what the runtime's success and failure are classified from (ADR 0026). It is attached to a completed exchange that heard a response, and has three values: `Success`, `ErrorStatus` for a 4xx or 5xx, and `ErrorReported` for a success status whose answer carried the protocol's own error object — LM Studio reports a chat template it cannot render that way, inside a `200` stream. The status class alone counted that as a success. A failed or cancelled exchange carries no outcome: its `error.type` or its status already says how it ended, and the runtime's answer never completed to be judged. The exchange span carries the same attribute, and its status is `Error` when the outcome is an error as well as when AgentSplice failed; `error.type` stays AgentSplice's own.
+
+`agentsplice.stream.termination` is attached only to exchanges that actually streamed, so adding it costs the existing series no cardinality at all. Its value set is closed: the eleven members of `StreamTermination`, among them `UpstreamError`, a stream in which the runtime reported an error and which then ended by itself.
 
 There is deliberately no model dimension. A model identifier is client-supplied and unbounded, so using it as a label would let one caller multiply the cardinality of every series without limit.
 

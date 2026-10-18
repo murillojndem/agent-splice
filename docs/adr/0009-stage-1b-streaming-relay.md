@@ -275,6 +275,11 @@ response is a TCP reset, byte-identical to a connection lost for any other reaso
 distinction would be worse than admitting it; the member documents a distinction an HTTP/2 provider
 could reach.
 
+> **Extended by ADRs 0025 and 0026.** `UpstreamError`, added by ADR 0026, is a stream in which the
+> runtime reported an error in the protocol's own shape and that then ended by itself; it outranks
+> `MalformedEvent` and the terminator. `Unknown` is now produced, and asserted, for a fault inside the
+> gateway after a stream's response started, which ADR 0025 abandons.
+
 ## Malicious-stream mitigations
 
 `docs/THREAT_MODEL.md` names six behaviours under "malicious upstream stream". Each has a mitigation

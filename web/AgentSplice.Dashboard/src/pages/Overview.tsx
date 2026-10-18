@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { UNKNOWN, timestamp } from '../format/evidence';
 import { Loading, Problem } from '../components/Status';
+import { Outcome } from '../components/Outcome';
 
 /**
  * What this deployment is, and whether it is keeping anything.
@@ -92,6 +93,7 @@ export function Overview() {
                   <code>{exchange.clientModelId ?? UNKNOWN}</code>
                 </Link>
                 <span className={`pill pill-${exchange.status}`}>{exchange.status}</span>
+                {exchange.upstreamOutcome !== undefined && <Outcome outcome={exchange.upstreamOutcome} />}
                 <span className="muted">{timestamp(exchange.startedAt)}</span>
               </li>
             ))}

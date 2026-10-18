@@ -173,7 +173,10 @@ Every build, package, and image runs on .NET 10 LTS, supported until November 20
 A stream's status is committed with the runtime's first byte, so a runtime that fails before it is
 answered with the gateway's `504` or `502` and every correlation header rather than a bare reset, and
 an exchange records an error code only when an envelope carrying it reached the client
-([ADR 0025](docs/adr/0025-stage-1d-a-stream-commits-with-its-first-byte.md)).
+([ADR 0025](docs/adr/0025-stage-1d-a-stream-commits-with-its-first-byte.md)). A runtime that reports
+an error inside a `200` — LM Studio does, for a chat template it cannot render — is relayed unchanged
+and recorded, counted, and shown as the runtime's failure rather than as a success
+([ADR 0026](docs/adr/0026-stage-1d-a-runtime-error-inside-a-success-is-the-runtimes-failure.md)).
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 

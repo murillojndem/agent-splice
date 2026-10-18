@@ -84,4 +84,14 @@ public readonly record struct StreamEventFacts
 
     /// <summary>Structured tool calls this event started.</summary>
     public int NativeToolCallsStarted { get; init; }
+
+    /// <summary>
+    /// True when this event is the runtime reporting an error in the protocol's own shape.
+    /// </summary>
+    /// <remarks>
+    /// Evidence, like everything here: the event was already relayed unchanged, and the client's own
+    /// parser decides what it means to the client. Recognised by structure only, never by reading
+    /// the error, whose message can echo the prompt (ADR 0026).
+    /// </remarks>
+    public bool IsUpstreamError { get; init; }
 }
