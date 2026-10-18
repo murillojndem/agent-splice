@@ -140,7 +140,10 @@ public sealed record ExchangeTelemetrySnapshot(
     /// <summary>Events delivered to the client, or <c>null</c> when the exchange never streamed.</summary>
     public int? StreamEvents { get; init; }
 
-    /// <summary>Bytes forwarded to the client, or <c>null</c> when the exchange never streamed.</summary>
+    /// <summary>
+    /// Bytes of the stream written to the client, an upper bound when the response was abandoned or
+    /// the client left, or <c>null</c> when no stream reached the client.
+    /// </summary>
     public long? StreamBytes { get; init; }
 
     /// <summary>

@@ -106,6 +106,52 @@ public sealed class RuntimeReportedErrorTests
         Assert.Single(record.Observations, o => o.Type == ObservationType.UpstreamErrorReported);
     }
 
+    [Fact]
+    public async Task A_streaming_request_answered_with_an_ordinary_error_body_is_the_runtimes_error()
+    {
+        // A runtime may answer a stream request with a plain JSON body — an error, or a build that
+        // ignores the flag. The answer is relayed as it came, not as a stream, and an error in it is
+        // recorded once the body was read, after the upstream completed.
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(sink);
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(ErrorObject));
+
+        using var response = await SendAsync(fixture, streaming: true);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(ErrorObject, await response.Content.ReadAsStringAsync());
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+        var types = record.Observations.Select(o => o.Type).ToList();
+
+        Assert.Equal(StreamTermination.NotApplicable, record.Exchange!.StreamTermination);
+        Assert.Equal(UpstreamOutcome.ErrorReported, record.Exchange.UpstreamOutcome);
+        Assert.Single(types, type => type == ObservationType.UpstreamErrorReported);
+        Assert.True(types.IndexOf(ObservationType.UpstreamCompleted) < types.IndexOf(ObservationType.UpstreamErrorReported));
+    }
+
+    [Fact]
+    public async Task A_malformed_event_an_error_outranked_is_still_on_the_record()
+    {
+        // The termination holds one value, and a reported error takes it. That the stream also carried
+        // a payload nobody could read is kept beside it, as whether a terminator came is.
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(sink);
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", SseScript.Create().Data("{not json").Data(ErrorObject).Done().Build());
+
+        using var response = await SendAsync(fixture, streaming: true);
+        await response.Content.ReadAsByteArrayAsync();
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+        var completed = record.Observations.Single(o => o.Type == ObservationType.ClientCompleted);
+
+        Assert.Equal(StreamTermination.UpstreamError, record.Exchange!.StreamTermination);
+        Assert.Equal("observed", completed.Details.Values["stream.malformed_event"]);
+        Assert.Equal("observed", completed.Details.Values["stream.terminator"]);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -296,15 +296,30 @@ public sealed class OpenAiStreamEventInterpreterTests
     }
 
     [Theory]
+    [InlineData("""{"error":"Model not loaded"}""")]
+    [InlineData("""{"error":["x"]}""")]
+    [InlineData("""{"error":true}""")]
+    public void A_top_level_error_of_any_other_value_is_a_report_too(string data)
+    {
+        // The SDKs raise on any truthy error, a string included, so a runtime that sends one has failed
+        // as far as its client is concerned. Only an object would have relied on LM Studio sending one,
+        // and nothing captured shows which it sends.
+        var state = New();
+
+        Assert.True(Read(state, data).IsUpstreamError);
+        Assert.True(state.Summarise(responseBodyBytes: 30, streamEventCount: 1).UpstreamErrorReported);
+    }
+
+    [Theory]
     [InlineData("""{"error":null,"choices":[{"delta":{"content":"hi"}}]}""")]
-    [InlineData("""{"error":"a string is not the protocol's shape"}""")]
+    [InlineData("""{"error":false,"choices":[{"delta":{"content":"hi"}}]}""")]
     [InlineData("""{"choices":[{"delta":{"content":"{\"error\":{\"message\":\"x\"}}"}}]}""")]
     [InlineData("""{"choices":[{"delta":{"error":{"message":"nested, not top-level"}}}]}""")]
-    public void Nothing_but_a_top_level_error_object_counts(string data)
+    public void Nothing_but_a_top_level_error_counts(string data)
     {
-        // Structure only. Model output that happens to spell an error object, a null member, and an
-        // error nested anywhere but the top are not the runtime reporting one, and reading text to
-        // decide otherwise would be reinterpreting content (FR-CHAT-014).
+        // Structure only. Model output that happens to spell an error object, a null or false member,
+        // and an error nested anywhere but the top are not the runtime reporting one, and reading text
+        // to decide otherwise would be reinterpreting content (FR-CHAT-014).
         var state = New();
 
         Assert.False(Read(state, data).IsUpstreamError);

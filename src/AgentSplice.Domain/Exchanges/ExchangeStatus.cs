@@ -11,7 +11,10 @@ public enum ExchangeStatus
     /// <summary>The model and runtime are resolved and the upstream request is in flight.</summary>
     Forwarding = 2,
 
-    /// <summary>Bytes are being forwarded to the client.</summary>
+    /// <summary>
+    /// The runtime answered with an event stream, which is being relayed — or, when it fails before its
+    /// first byte, answered with the gateway's envelope instead (ADR 0025).
+    /// </summary>
     Streaming = 3,
 
     /// <summary>

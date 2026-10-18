@@ -66,7 +66,10 @@ internal sealed class ExchangeRow
     /// </summary>
     public bool? Streaming { get; set; }
 
-    /// <summary>True once AgentSplice committed a streamed response to the client.</summary>
+    /// <summary>
+    /// True when the runtime answered with an event stream, whether or not its bytes reached the client
+    /// (ADR 0025).
+    /// </summary>
     public bool StreamedResponse { get; set; }
 
     /// <summary>Terminal lifecycle state.</summary>

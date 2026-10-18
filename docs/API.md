@@ -81,7 +81,7 @@ Verbatim within limits, and the limits refuse rather than repair. A content type
 
 The gateway commits the client's status with the runtime's first body byte — or at the end of a response that had none — and not when the runtime's headers arrive. Until that byte nothing has been sent, so a runtime that times out or drops the connection after its headers and before its first byte is answered with the gateway's own error envelope and every correlation header, as it would be before its headers (ADR 0025). From the first byte a failure is expressed by abandoning the response rather than by an error envelope, because a stream that stops early but closes cleanly is indistinguishable from a complete one; the same holds for an ordinary body sent in answer to a streaming request. The exchange then records why it failed and no error code, because no envelope carried one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
 
-A runtime that reports an error inside a success — an event, or a `200` body, that is the protocol's own `{"error": {...}}` object — is relayed unchanged too. The exchange completes, because AgentSplice did not fail, and records the runtime's failure beside that: `responseSummary.upstreamErrorReported`, an `upstream_error_reported` timeline event, for a stream the termination `upstream_error`, and `upstreamOutcome: error_reported` on the exchange. The error object is recognised by its shape alone; nothing inside it is read or recorded, because its message can echo the prompt (ADR 0026).
+A runtime that reports an error inside a success — an event, or a `200` body, whose top-level `error` is neither null nor false, as in `{"error": {...}}` — is relayed unchanged too. The exchange completes, because AgentSplice did not fail, and records the runtime's failure beside that: `responseSummary.upstreamErrorReported`, an `upstream_error_reported` timeline event, for a stream the termination `upstream_error`, and `upstreamOutcome: error_reported` on the exchange. The error is recognised by its place alone; nothing in it is read or recorded, because its message can echo the prompt (ADR 0026). The flag and the timeline event are set for such a body whatever the status, so a relayed `500` whose envelope is an error carries them too; its outcome is `error_status`, because the status outranks the body.
 
 ## Gateway headers
 
@@ -351,18 +351,20 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 | A stream's connection to the runtime lost after its first body byte, or an ordinary body sent in answer to a streaming request cut off after its first byte | *(none reaches the client; the exchange records failure class `invalid_upstream_response`)* | *(the connection is abandoned, as for a timeout)* | `upstream_protocol_error` |
 | Upstream event stream exceeded a configured bound | *(none reaches the client; the exchange records failure class `invalid_upstream_stream`)* | *(the connection is abandoned; the offending bytes were already relayed, so the status was committed)* | `upstream_protocol_error` |
 | Gateway already serving `limits:maxConcurrentCompletions` completions | `agentsplice_gateway_overloaded` | 429 with `Retry-After` | `rate_limit_error` |
-| Client disconnected | `agentsplice_request_cancelled` | *(nothing written)* | `cancellation_error` |
+| Client disconnected | *(none is written; the exchange records failure class `request_cancelled`, whose code is `agentsplice_request_cancelled`)* | *(nothing written)* | `cancellation_error` |
 | Unhandled gateway fault, before the response started | `agentsplice_internal_error` | 500 | `internal_error` |
 | Unhandled gateway fault, after the response started | *(none reaches the client; the exchange records failure class `internal_error`)* | *(the connection is abandoned)* | `internal_error` |
 | **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
 
 Two refusals come before any of these, and neither is an exchange. A request addressed to a host name other than `localhost`, `127.0.0.1`, `[::1]`, or one `AllowedHosts` names is answered `400` with no body by ASP.NET Core's host filter, before AgentSplice sees it, as an unsupported route is answered `404` (ADR 0027). The `413` and `415` above are answered before the body is read, and neither is recorded.
 
+A row whose code reached no client still has a type: it is the `error.type` the exchange span and the metrics carry for that failure.
+
 There is no AgentSplice error type for a relayed upstream status: the runtime's own envelope is what the client receives, so the gateway writes nothing for a type to describe.
 
 An upstream `401` or `403` is never echoed to the client. The credential is the gateway's, not the client's, so returning `401` would tell a client to fix a key it does not own, and the upstream body is discarded because it can hint at the key's shape.
 
-Every other non-2xx is relayed unchanged, whether or not its body is JSON. Parsing gathers evidence and never gates forwarding: a runtime answering `429 text/plain` is still answering, and substituting a gateway error would discard the most actionable diagnostic a user has. The exchange completes with no failure class in that case — the transport cycle finished and AgentSplice did not fail — and the runtime's status is recorded separately, which is what success and error are classified from.
+Every other non-2xx is relayed unchanged, whether or not its body is JSON. Parsing gathers evidence and never gates forwarding: a runtime answering `429 text/plain` is still answering, and substituting a gateway error would discard the most actionable diagnostic a user has. The exchange completes with no failure class in that case — the transport cycle finished and AgentSplice did not fail — and the runtime's status is recorded separately: the exchange's `upstreamOutcome` is classified from it and from whether the answer reported an error (ADR 0026).
 
 Error messages are compile-time constants. None is derived from an upstream message, a response body, an exception, or a URL, so no error can disclose a credential, an internal hostname, or model output.
 

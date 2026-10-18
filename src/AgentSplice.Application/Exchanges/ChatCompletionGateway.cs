@@ -86,7 +86,7 @@ public sealed class ChatCompletionGateway
     /// <param name="client">
     /// The client half of the response. Everything the client receives is written through this — a
     /// relayed answer as it arrives, or the gateway's own error envelope — so when this returns the
-    /// response is complete on the wire and the transport adds nothing.
+    /// whole response has been handed to the client's connection and the transport adds nothing.
     /// </param>
     /// <param name="cancellationToken">The client's token.</param>
     public async Task CompleteAsync(
@@ -140,7 +140,15 @@ public sealed class ChatCompletionGateway
                 return;
             }
 
-            await FailAsync(recorder, client, internalError, runtime: null, termination: null, cancellationToken)
+            // The runtime, when routing had got that far, so the envelope names it as every other one
+            // from a resolved exchange does.
+            await FailAsync(
+                    recorder,
+                    client,
+                    internalError,
+                    runtime: recorder.Exchange?.RuntimeEndpointId,
+                    termination: null,
+                    cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -492,8 +500,9 @@ public sealed class ChatCompletionGateway
     /// gateway error would discard the most actionable diagnostic a user has.
     ///
     /// The exchange therefore completes with no failure class even for a relayed 500: the transport
-    /// cycle finished and AgentSplice did not fail. Success is classified from the recorded upstream
-    /// status, never from the absence of a failure.
+    /// cycle finished and AgentSplice did not fail. Whether the runtime succeeded is its outcome,
+    /// classified from its status and from whether its answer reported an error, never from the absence
+    /// of a failure (ADR 0026).
     ///
     /// It completes only once the write has returned. A client that leaves during it was given part
     /// of an answer at most, so the exchange is the cancellation it was, and records no byte count,
@@ -828,9 +837,10 @@ public sealed class ChatCompletionGateway
     /// Records the facts about a stream's ending that its termination value cannot hold.
     /// </summary>
     /// <remarks>
-    /// A stream can carry a malformed event and still end with the protocol's terminator. The
-    /// termination enum names the anomaly, because that is the more useful of the two; these details
-    /// keep the rest rather than discarding it.
+    /// A stream can carry a malformed event and still end with the protocol's terminator, and can carry
+    /// a reported error as well. The termination names the anomaly that ranks first; these details keep
+    /// the rest — whether a terminator was observed, and a malformed event a reported error outranked —
+    /// rather than discarding it.
     /// </remarks>
     private static SafeDetails DescribeStream(StreamRelayOutcome relayed)
     {
@@ -844,6 +854,11 @@ public sealed class ChatCompletionGateway
             new("stream.terminator", relayed.ProtocolTerminatorObserved ? "observed" : "absent"),
             new("stream.events", relayed.ClientEvents.ToString(System.Globalization.CultureInfo.InvariantCulture)),
         };
+
+        if (relayed.MalformedEventObserved && relayed.Termination != StreamTermination.MalformedEvent)
+        {
+            entries.Add(new KeyValuePair<string, string?>("stream.malformed_event", "observed"));
+        }
 
         if (relayed.IncompleteEventBytes > 0)
         {

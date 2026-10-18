@@ -35,7 +35,15 @@ public sealed record StructuralResponseSummary
     /// <summary>Number of native structured tool calls observed as protocol data.</summary>
     public int NativeToolCallCount { get; private init; }
 
-    /// <summary>Bytes forwarded to the client.</summary>
+    /// <summary>
+    /// Bytes of the runtime's answer: for a stream, those relayed to the client; for a buffered answer,
+    /// its whole body as the runtime sent it, read before any of it was forwarded.
+    /// </summary>
+    /// <remarks>
+    /// Not a claim about delivery. A client that left during a buffered answer's write is recorded as
+    /// cancelled, with this still the body's length; what reached a client is <c>stream.client.bytes</c>,
+    /// recorded only when it is known.
+    /// </remarks>
     public long ResponseBodyBytes { get; private init; }
 
     /// <summary>Complete SSE events forwarded to the client. Zero for a non-streamed exchange.</summary>

@@ -81,7 +81,7 @@ public sealed record ExchangeDetailView
     /// <summary>Why the exchange failed, or <c>null</c> when it did not.</summary>
     public FailureClass? FailureClass { get; init; }
 
-    /// <summary>The stable error code the client received, when one was sent.</summary>
+    /// <summary>The stable error code of the envelope written to the client, when one was.</summary>
     public string? ErrorCode { get; init; }
 
     /// <summary>The status the runtime returned, when a response was observed.</summary>

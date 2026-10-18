@@ -15,8 +15,11 @@ public sealed class UpstreamOutcomeRulesTests
 {
     [Theory]
     [InlineData(200, false, UpstreamOutcome.Success)]
-    [InlineData(204, false, UpstreamOutcome.Success)]
+    [InlineData(201, false, UpstreamOutcome.Success)]
     [InlineData(200, true, UpstreamOutcome.ErrorReported)]
+    [InlineData(301, false, UpstreamOutcome.ErrorStatus)]
+    [InlineData(304, false, UpstreamOutcome.ErrorStatus)]
+    [InlineData(308, false, UpstreamOutcome.ErrorStatus)]
     [InlineData(400, false, UpstreamOutcome.ErrorStatus)]
     [InlineData(429, false, UpstreamOutcome.ErrorStatus)]
     [InlineData(500, false, UpstreamOutcome.ErrorStatus)]
@@ -27,7 +30,25 @@ public sealed class UpstreamOutcomeRulesTests
         UpstreamOutcome expected)
     {
         // A status outranks the body: a 500 whose envelope is an error object already said it failed.
+        // A redirect is relayed rather than followed, so the client was answered with it, not with a
+        // completion: only a 2xx is a success.
         Assert.Equal(expected, UpstreamOutcomeRules.Classify(ExchangeStatus.Completed, status, reportedError));
+    }
+
+    [Theory]
+    [InlineData(200)]
+    [InlineData(204)]
+    public void A_success_status_whose_answer_was_never_read_has_no_outcome(int status)
+    {
+        // A body that could not be interpreted, an empty one, or a row stored before the fact was
+        // recorded. A success is a claim about the answer, and nothing of it was read.
+        Assert.Null(UpstreamOutcomeRules.Classify(ExchangeStatus.Completed, status, upstreamErrorReported: null));
+    }
+
+    [Fact]
+    public void A_status_outside_2xx_needs_nothing_of_the_answer()
+    {
+        Assert.Equal(UpstreamOutcome.ErrorStatus, UpstreamOutcomeRules.Classify(ExchangeStatus.Completed, 502, upstreamErrorReported: null));
     }
 
     [Theory]

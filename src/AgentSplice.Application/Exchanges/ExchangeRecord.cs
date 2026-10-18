@@ -55,7 +55,7 @@ public sealed record ExchangeRecord
     /// </remarks>
     public IReadOnlyList<Measurement> Measurements { get; private init; } = [];
 
-    /// <summary>The error envelope the client received, or <c>null</c> when none reached it.</summary>
+    /// <summary>The error envelope written to the client's connection, or <c>null</c> when none was.</summary>
     /// <remarks>
     /// Only an envelope that was written. A response abandoned after it started, and a client that
     /// left, carry none: the exchange's failure class says why it failed, and no code is recorded that

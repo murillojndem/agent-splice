@@ -43,7 +43,7 @@ internal sealed class GatewayExceptionHandler : IExceptionHandler
 
         if (httpContext.Response.HasStarted)
         {
-            // The status and headers are already on the wire. Attempting to replace them would
+            // The status and headers are already committed. Attempting to replace them would
             // throw and would hide the original fault.
             return false;
         }

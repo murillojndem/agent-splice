@@ -14,10 +14,9 @@ public enum ClientWriteResult
 
 /// <summary>Everything committed at the moment a response starts.</summary>
 /// <remarks>
-/// A streamed response commits its status and headers before the exchange has an outcome, so the
-/// correlation headers can no longer be applied afterwards the way the buffered path applies them.
-/// The values travel here; the header names stay in the transport adapter, which is the same split
-/// the buffered path already uses.
+/// A completion's status and headers are committed before its exchange has an outcome — with the
+/// runtime's first byte, or with the gateway's envelope — so the correlation headers cannot be applied
+/// afterwards. The values travel here; the header names stay in the transport adapter (ADR 0025).
 /// </remarks>
 public sealed record ClientResponseStart(
     int StatusCode,

@@ -5,7 +5,8 @@ using Microsoft.AspNetCore.Http.Features;
 namespace AgentSplice.Api.Endpoints;
 
 /// <summary>
-/// Writes a streamed response to one HTTP response, flushing every write.
+/// Writes a completion's response — relayed, streamed, or the gateway's own envelope — to one HTTP
+/// response, flushing every write.
 /// </summary>
 /// <remarks>
 /// <c>DisableBuffering</c> is what stops the server coalescing small writes. Without it every claim

@@ -55,6 +55,13 @@ public sealed record StreamRelayOutcome
     /// </remarks>
     public bool ProtocolTerminatorObserved { get; init; }
 
+    /// <summary>True when at least one relayed event's payload could not be interpreted.</summary>
+    /// <remarks>
+    /// Kept for the same reason: a reported error outranks a malformed event in
+    /// <see cref="Termination"/>, and a stream can carry both.
+    /// </remarks>
+    public bool MalformedEventObserved { get; init; }
+
     /// <summary>The structural summary the observed events support, or <c>null</c> when none do.</summary>
     public StructuralResponseSummary? Summary { get; init; }
 
@@ -67,6 +74,9 @@ public sealed record StreamRelayOutcome
     /// <summary>True when a started response was abandoned rather than closed cleanly.</summary>
     public bool Aborted { get; init; }
 
-    /// <summary>True when the response reached the client as an event stream.</summary>
+    /// <summary>
+    /// True when the runtime answered with an event stream, whether the client then received it or the
+    /// gateway's error envelope.
+    /// </summary>
     public bool Streamed { get; init; }
 }

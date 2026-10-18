@@ -98,9 +98,10 @@ public sealed record UpstreamResponseMetadata
     /// The coarse status class, as a bounded token suitable for a metric dimension (FR-OBS-006).
     /// </summary>
     /// <remarks>
-    /// Success and failure are classified from this rather than from the absence of a failure class,
-    /// because a relayed upstream 500 is a completed transport cycle with no AgentSplice failure and
-    /// must still never be counted as a success.
+    /// It tells a relayed upstream 500 — a completed transport cycle with no AgentSplice failure — from
+    /// a success, which the absence of a failure class cannot. It is not the whole answer: a 2xx can
+    /// carry an error the runtime reported, which is why the runtime's success is classified as its
+    /// <see cref="UpstreamOutcome"/> instead (ADR 0026).
     /// </remarks>
     public string StatusClass => StatusCode switch
     {

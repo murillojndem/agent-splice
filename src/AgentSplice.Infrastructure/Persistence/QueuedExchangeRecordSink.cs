@@ -16,9 +16,9 @@ namespace AgentSplice.Infrastructure.Persistence;
 /// <remarks>
 /// <see cref="RecordAsync"/> completes synchronously. It writes to a bounded channel with
 /// <see cref="ChannelWriter{T}.TryWrite"/> and returns; it never awaits, never blocks, and never
-/// throws. The gateway calls this from <c>FinishAsync</c>, which for a streamed exchange runs after
-/// the client response is already complete — but for a buffered one runs before the body is written,
-/// so any delay here would become client-visible latency for a request that had already succeeded.
+/// throws. The gateway calls this from <c>FinishAsync</c>, after the client's response was written but
+/// before the request ends (ADR 0025), so any delay here would hold the connection, and a concurrency
+/// slot, for a request that had already been answered.
 ///
 /// The queue is bounded and full means drop. The alternatives are worse in the way that matters:
 /// waiting converts a slow store into gateway latency and, eventually, into a stalled stream, while

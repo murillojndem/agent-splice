@@ -757,7 +757,7 @@ components:
                 $ref: '#/components/schemas/Measurement'
             errorCode:
               type: [string, 'null']
-              description: The stable code the client received, when an error envelope was sent.
+              description: The stable code of the error envelope written to the client, when one was written.
             structuralSummary:
               type: object
               additionalProperties: true

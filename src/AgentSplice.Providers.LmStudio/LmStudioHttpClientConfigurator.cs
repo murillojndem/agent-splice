@@ -102,6 +102,11 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
                 // A local runtime has no business being reached through a system proxy.
                 UseProxy = false,
 
+                // An answer abandoned part-way — its client gone, a bound crossed — closes its
+                // connection. The default reads up to 1 MiB of the rest for up to two seconds to pool
+                // it, and all that time the runtime keeps generating for nobody.
+                MaxResponseDrainSize = 0,
+
                 // The gateway's traceparent only. The default also sends the client's tracestate and
                 // baggage, which are text the client chose (ADR 0027).
                 ActivityHeadersPropagator = new TraceParentOnlyPropagator(),

@@ -145,6 +145,9 @@ public sealed class LogRedactionTests : IDisposable
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
 
+        // Routing had resolved the runtime before the fault, so the envelope names it like any other.
+        Assert.Equal(GatewayFixture.RuntimeId, response.Headers.GetValues("x-agentsplice-runtime").Single());
+
         AssertLoggedByExchangeId(logs, GatewayEventIds.ExchangeFaulted, response);
     }
 

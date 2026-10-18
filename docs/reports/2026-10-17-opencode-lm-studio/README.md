@@ -287,14 +287,20 @@ records `contentRetentionState: metadata_only`.
 
 ## Notes
 
-- **2026-10-18.** Findings 2 and 3 were fixed after this report (ADR 0025). A later build answers a
-  stream that fails before its first byte with a `504` or `502` and every correlation header, records an
-  error code only for an envelope it wrote, and ends every timeline with `client_completed`,
+- **2026-10-18.** Findings 2 and 3 were fixed after this report (ADR 0025). The cut in finding 2
+  still happens — a stream that sends nothing for `idleStream` is still ended — but a later build
+  answers a stream that fails before its first byte with a `504` or `502` and every correlation header
+  rather than a reset, records an error code only for an envelope it wrote, and gives every exchange one
+  client-side boundary: `client_completed`, whose `client.response` detail says what was written,
   `client_cancelled`, or `client_response_abandoned`. The records here are what the build this report
-  ran wrote: exchange `d8f5a743` names a code its client never received and has no client-side
-  boundary, which is how a record made before ADR 0025 can be told apart from a later one.
+  ran wrote: exchange `d8f5a743` names a code its client never received, and no record here has a
+  `client_response_started` boundary or a `client.response` detail, which is how a record made before
+  ADR 0025 can be told apart from a later one.
 - **2026-10-18.** Finding 1 was fixed after this report (ADR 0026). A later build still records an
   exchange like attempt 1's first agent request as `completed`, because the gateway did not fail, and
   records the runtime's failure beside it: termination `upstream_error`, `upstreamOutcome:
-  error_reported`, and an `upstream_error_reported` boundary. The records here keep `normal_completion`
-  and no outcome, as the build that ran wrote them.
+  error_reported`, and an `upstream_error_reported` boundary. It recognises a top-level `error` of any
+  value but null or false; content capture was off, so which value LM Studio sent is not in this report.
+  The records here keep `normal_completion` and no outcome, as the build that ran wrote them, and a
+  later build listing such a row from its store gives it no outcome either: the row predates the fact,
+  and a success would be a claim it cannot support.

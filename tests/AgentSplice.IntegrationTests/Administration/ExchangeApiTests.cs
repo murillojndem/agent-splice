@@ -344,6 +344,61 @@ public sealed class ExchangeApiTests
     }
 
     [Fact]
+    public async Task A_row_stored_before_the_outcome_existed_claims_no_success_it_cannot_support()
+    {
+        // Rows written before ADR 0026 hold no answer to "did the runtime report an error": those builds
+        // never looked. Read as "none was", the first trace report's template failure — still retained
+        // after an upgrade — was listed as a success. A status outside 2xx still says enough on its own.
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.Json("""{"error":{"message":"overloaded"}}""", statusCode: 503));
+
+        await SendAsync(fixture, """{"model":"qwen3.6-27b-mtp","messages":[{"role":"user","content":"hi"}]}""", expectSuccess: false);
+        await ProxyAsync(fixture);
+        await WaitForAsync(fixture, "/api/v1/exchanges", document => document.GetProperty("items").GetArrayLength() == 2);
+
+        await using (var context = store.OpenContext())
+        {
+            foreach (var row in context.Exchanges)
+            {
+                var summary = System.Text.Json.Nodes.JsonNode.Parse(row.ResponseSummaryJson!)!.AsObject();
+
+                Assert.True(summary.Remove("upstreamErrorReported"));
+                row.ResponseSummaryJson = summary.ToJsonString();
+            }
+
+            await context.SaveChangesAsync();
+        }
+
+        var items = (await ReadJsonAsync(fixture, "/api/v1/exchanges")).GetProperty("items").EnumerateArray().ToArray();
+
+        Assert.Equal(2, items.Length);
+        Assert.Single(items, item => item.TryGetProperty("upstreamOutcome", out var outcome) && outcome.GetString() == "error_status");
+        Assert.Single(items, item => !item.TryGetProperty("upstreamOutcome", out _));
+    }
+
+    [Fact]
+    public async Task A_success_status_whose_answer_could_not_be_read_has_no_outcome()
+    {
+        // Nothing of an HTML page is a completion, and no summary is built from it. "Success" would be
+        // a claim about an answer nobody read.
+        using var store = new TemporaryMetadataStore();
+        await using var fixture = await StartAsync(store);
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Text("<html>a proxy's page</html>", "text/html"));
+
+        await SendAsync(fixture, """{"model":"qwen3.6-27b-mtp","messages":[{"role":"user","content":"hi"}]}""");
+
+        var item = Assert.Single((await WaitForPageAsync(fixture)).GetProperty("items").EnumerateArray());
+
+        Assert.Equal("completed", item.GetProperty("status").GetString());
+        Assert.False(item.TryGetProperty("upstreamOutcome", out _));
+    }
+
+    [Fact]
     public async Task A_request_refused_before_its_model_was_known_has_no_runtime_outcome()
     {
         // The runtime was never asked, so there is nothing of its to judge.

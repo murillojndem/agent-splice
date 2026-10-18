@@ -106,7 +106,7 @@ public sealed record CompletionExchange
         UpstreamOutcomeRules.Classify(
             Status,
             UpstreamResponse?.StatusCode,
-            ResponseSummary?.UpstreamErrorReported == true);
+            ResponseSummary?.UpstreamErrorReported);
 
     /// <summary>Opens an exchange in the <see cref="ExchangeStatus.Accepted"/> state.</summary>
     /// <param name="exchangeId">Identity assigned at ingress.</param>

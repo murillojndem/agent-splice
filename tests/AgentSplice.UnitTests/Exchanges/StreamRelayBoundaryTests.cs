@@ -554,6 +554,9 @@ public sealed class StreamRelayBoundaryTests
         var outcome = await RelayOutcomeAsync(clock, body, Sink(clock));
 
         Assert.Equal(StreamTermination.UpstreamError, outcome.Termination);
+
+        // Outranked, not forgotten.
+        Assert.True(outcome.MalformedEventObserved);
     }
 
     [Fact]

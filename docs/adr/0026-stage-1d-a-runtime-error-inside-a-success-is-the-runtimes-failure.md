@@ -32,12 +32,17 @@ every failure class forces a published error code that no envelope would carry h
 
 ### 1. The protocol's own error shape is recognised, never read
 
-An event, or a body, whose JSON is an object with a top-level `error` member that is itself an object
-is the runtime reporting an error — the shape the OpenAI SDKs and the AI SDK's OpenAI-compatible
-provider read as one. It is recognised by structure, the way `[DONE]` and `usage` are. Nothing inside
-the object is read: its message can echo the prompt or a template, and recording it would put content
-in the evidence. A null `error`, a string, an error nested under `choices`, and model output that
-happens to spell one are not this shape.
+An event, or a body, whose JSON is an object with a top-level `error` member that is neither null nor
+false is the runtime reporting an error. That is what clients act on: the OpenAI SDKs raise on a chunk
+whose `error` is present and truthy, a string included, and the AI SDK's OpenAI-compatible provider
+rejects one. It is recognised by structure, the way `[DONE]` and `usage` are. Nothing in the member is
+read: its message can echo the prompt or a template, and recording it would put content in the
+evidence. A null or false `error`, an error nested under `choices`, and model output that happens to
+spell one are not this shape.
+
+Review found that the first version counted only an object. That relied on LM Studio sending one, and
+no capture of its bytes exists to say which it sends: content capture was off for the trace report, and
+the fixtures here are written to the shape, not copied from LM Studio.
 
 The bytes are relayed unchanged, before anything looks at them, as every event is. The client's own
 parser stays the authority on what the error means to the client.
@@ -55,15 +60,22 @@ and no envelope carried a code. What the record gains:
 
 ### 3. One rule says whether the runtime succeeded
 
-`UpstreamOutcome` is `success`, `error_status` for a 4xx or 5xx, or `error_reported` for a success
-status whose answer carried the error shape. A status outranks the body, because a 4xx or 5xx already
-says the runtime failed. It is defined only for a completed exchange that heard a response: one that
-failed or was cancelled already says why, and the runtime's answer never completed to be judged.
+`UpstreamOutcome` is `success` for a 2xx whose answer was read and carried no error, `error_status`
+for any status outside 2xx, or `error_reported` for a 2xx whose answer carried the error shape. A
+status outranks the body, because a status outside 2xx already says the runtime did not answer the
+request; a redirect is relayed rather than followed, so it is what the client received. It is defined
+only for a completed exchange that heard a response: one that failed or was cancelled already says
+why, and the runtime's answer never completed to be judged. A 2xx whose answer was never read — no
+summary could be built, as for an HTML page or an empty body — has no outcome: a success is a claim
+about the answer, and unknown stays unknown.
 
 `UpstreamOutcomeRules.Classify` is the one implementation, used by the exchange, by the metrics, and by
 the store when it lists rows, so a runtime's failure cannot be counted one way and listed another. The
-store classifies on read from what a row already holds, so rows written before this decision are
-classified the same way.
+store classifies on read from what a row already holds. A row written before this decision holds no
+answer to whether the runtime reported an error, because those builds never looked, so a 2xx among
+them has no outcome rather than a success; a status outside 2xx still says enough on its own. Review
+found the first version reading the missing fact as "no error", which listed the trace report's own
+template failure as a success after an upgrade.
 
 ### 4. The outcome is a metric dimension, a span attribute, and a list field
 
@@ -88,7 +100,8 @@ reported error — which was in the API and nowhere on screen.
   `upstream_error_reported`, the response summary gains `upstreamErrorReported`, the metrics gain one
   dimension, and the list gains one field. No error code, error type, failure class, or configuration
   key changes.
-- A relayed 4xx or 5xx is now `error_status` on every surface; before, only its status class said so.
+- A relayed status outside 2xx is now `error_status` on every surface; before, only its status class
+  said so.
 - The roadmap's line is reworded: "as the runtime's failure, distinct from a success in the record, the
   metrics, and the dashboard", rather than "not as a completion", which contradicted what `completed`
   means.
@@ -97,23 +110,28 @@ reported error — which was in the API and nowhere on screen.
 
 Each was run against its reintroduced defect and failed; the changelog lists them.
 
-- `OpenAiStreamEventInterpreterTests` and `ChatCompletionResponseCodecTests`: a top-level error object is
-  recognised in an event and in a body; a null `error`, a string, a nested error, and model output that
-  spells one are not; a chunk with output and an error reports both.
+- `OpenAiStreamEventInterpreterTests` and `ChatCompletionResponseCodecTests`: a top-level `error` is
+  recognised in an event and in a body, an object, a string, an array, or `true`; a null or false
+  `error`, a nested error, and model output that spells one are not; a chunk with output and an error
+  reports both.
 - `StreamRelayBoundaryTests`: an error then end of stream ends as `upstream_error` with the terminator
   absent; an error then `[DONE]` still does, with the terminator observed; an error outranks a malformed
   event; the boundary is stamped after the read that brought it.
-- `UpstreamOutcomeRulesTests`: the classification for each status and report, and none for an exchange
-  that did not complete or heard no response.
-- `RuntimeReportedErrorTests`: LM Studio's shape relayed byte for byte and recorded as the runtime's
-  error, in a stream and in a buffered body, and the error's message in neither the record nor any log.
+- `UpstreamOutcomeRulesTests`: the classification for each status and report — a redirect among the
+  errors — and none for an exchange that did not complete, heard no response, or had its answer never
+  read.
+- `RuntimeReportedErrorTests`: the error shape relayed byte for byte and recorded as the runtime's
+  error, in a stream, in a buffered body, and in an ordinary body sent in answer to a streaming request,
+  and the error's message in neither the record's observations and summary nor any log.
 - `ExchangeApiTests`: the list and the detail carry the outcome, a relayed error status and a success are
-  listed apart, and a request refused before its model was known has none.
+  listed apart, and a request refused before its model was known, a 2xx nobody could read, and a 2xx row
+  stored before the fact existed have none.
 - `TelemetryExportTests`: the exported metrics carry the dimension and the span is marked `Error`, with
   no `error.type`.
 - `OpenApiContractTests`: the outcome's schema enum is the domain's.
-- The dashboard's `outcome.test.tsx`: the list shows each outcome, and none for an exchange that did not
-  complete; the exchange page shows the response summary that says the runtime reported an error.
+- The dashboard's `outcome.test.tsx`: the list shows a success, an error status, and a reported error
+  apart, and no outcome for an exchange that did not complete; the exchange page shows the response
+  summary that says the runtime reported an error.
 
 ## Alternatives considered
 

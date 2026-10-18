@@ -278,7 +278,10 @@ could reach.
 > **Extended by ADRs 0025 and 0026.** `UpstreamError`, added by ADR 0026, is a stream in which the
 > runtime reported an error in the protocol's own shape and that then ended by itself; it outranks
 > `MalformedEvent` and the terminator. `Unknown` is now produced, and asserted, for a fault inside the
-> gateway after a stream's response started, which ADR 0025 abandons.
+> gateway after a stream's response started, which ADR 0025 abandons. `Timeout` and `ConnectionLost`
+> are recorded for a stream that ends so before its first byte too, which ADR 0025 answers with a `504`
+> or `502` rather than abandoning, and ADR 0025 removed the `ChatCompletionOutcome` this document's
+> list of public changes names: the gateway writes every completion response through the sink.
 
 ## Malicious-stream mitigations
 

@@ -6,7 +6,9 @@ using AgentSplice.Domain.Identifiers;
 namespace AgentSplice.Api.Endpoints;
 
 /// <summary>
-/// Writes an application-decided response to the wire, for every surface except completions.
+/// Writes an application-decided response: every surface but a completion the gateway accepted — the
+/// administrative API, the model list, the probes — and a completion refused before its body was read,
+/// as a 413 or a 415.
 /// </summary>
 /// <remarks>
 /// Correlation headers are set before the body and on every status, including errors. An error

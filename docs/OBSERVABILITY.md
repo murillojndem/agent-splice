@@ -78,8 +78,8 @@ A completion timeline may contain:
 - adapter applied/rejected/skipped;
 - upstream completed;
 - upstream failed, with its classification and bounded detail;
-- upstream error reported: the runtime's answer carried the protocol's own error object;
-- client completed, with whether the client received the relayed answer or the gateway's error envelope;
+- upstream error reported: the runtime's answer carried the protocol's own error, a top-level `error`;
+- client completed, with whether the gateway wrote the relayed answer or the gateway's error envelope;
 - client cancelled;
 - client response abandoned;
 - timeout fired with phase;
@@ -97,7 +97,7 @@ the gateway decided on it (ADR 0025):
 | --- | --- |
 | `client_completed` | the last write of the response returned. Its `client.response` detail is `relayed` for the runtime's answer and `gateway_error` for the gateway's own error envelope. |
 | `client_cancelled` | the client went away, including in the middle of a buffered answer's write. |
-| `client_response_abandoned` | AgentSplice abandoned a response it had started, because the runtime's answer could not be completed. No error envelope reached the client, so the exchange records its failure class and no error code. |
+| `client_response_abandoned` | AgentSplice abandoned a response it had started: the runtime's answer timed out or was cut off, it crossed a bound the gateway enforces, or the gateway itself faulted. No error envelope reached the client, so the exchange records its failure class and no error code. |
 
 The exchange's completion time is that boundary's, and `exchange.total.duration` runs from acceptance
 to it, so a failed or cancelled exchange has a total too and it agrees with
@@ -106,13 +106,13 @@ writes, stamped when the status and headers had been flushed: for a relayed resp
 runtime's first body byte, not with the runtime's headers, so a runtime that fails before that byte is
 still answered with an error envelope.
 
-Every upstream failure is on the timeline. A timeout is `timeout_fired` with its `timeout.phase` —
+Every failure of the request the gateway sent to the runtime is on the timeline. A timeout is `timeout_fired` with its `timeout.phase` —
 `Connect`, `ResponseHeaders`, `IdleStream`, or `Total` — wherever it elapsed. Any other failure is
 `upstream_failed`, whose `upstream.failure` is the classification (`Unreachable`,
 `AuthenticationRejected`, `InvalidResponse`, or `ResponseTooLarge`) and whose other details are the
 provider's own bounded tokens, such as `upstream.stream: connection.lost`,
 `upstream.completion: body.truncated`, or `upstream.socket_error: ConnectionRefused`. A client that
-left records neither: `client_cancelled` says so.
+left records neither: `client_cancelled` says so. Discovery is not that request: a runtime whose model list could not be read while a completion was being routed is recorded by the exchange's failure class, `runtime_unavailable`, with no `upstream_failed` boundary, and `/api/v1/health/runtimes` says how its last consultation went.
 
 ### Where each streaming boundary is stamped
 
@@ -188,7 +188,7 @@ agentsplice.conformance.cases
 agentsplice.evaluation.runs
 ```
 
-Dimensions must be bounded to normalized runtime ID, provider type, protocol, adapter ID, streaming boolean, status class, error class, suite ID, and scenario ID. Raw request IDs and arbitrary model identifiers must not become metric labels.
+Dimensions must be bounded to normalized runtime ID, provider type, protocol, adapter ID, streaming boolean, status class, runtime outcome, error class, suite ID, and scenario ID. Raw request IDs and arbitrary model identifiers must not become metric labels.
 
 ### Live instruments
 
@@ -222,7 +222,7 @@ Reasoning counts as output. A runtime that streams reasoning in its own delta fi
 
 The window closes at the protocol terminator, not at transport end, so a runtime that stops generating and keeps its connection open cannot deflate this figure with idle time (ADR 0010).
 
-`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client, counted when each write returned — that is, when the server accepted them. An abandoned response ends in a reset, which can discard the last of them before they arrive, so for an abandoned response the count is an upper bound. A stream the runtime failed before its first byte was answered with an error envelope instead, and contributes no data point to either. The record's `stream.client.bytes` measurement follows the same rule, on the buffered path too: it is absent for an answer the client left in the middle of, because how much of it arrived is not known. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished. The same holds for bytes behind a per-event bound violation in that read: the terminator that preceded it still ends the exchange normally (ADR 0011).
+`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client, counted when each write returned — that is, when the server accepted them. An abandoned response ends in a reset, and a client that left mid-stream took the last of them with it, so for an abandoned or cancelled stream the count is an upper bound. A stream the runtime failed before its first byte was answered with an error envelope instead, and contributes no data point to either. The record's `stream.client.bytes` measurement follows the same rule, on the buffered path too: it is absent for an answer the client left in the middle of, because how much of it arrived is not known. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished. The same holds for bytes behind a per-event bound violation in that read: the terminator that preceded it still ends the exchange normally (ADR 0011).
 
 `agentsplice.prompt.tokens_per_second` is **absent by design, not deferred**. Nothing AgentSplice can observe marks the end of prompt processing, so the only interval available is time to first token — which measures the prompt, the queue, and the network together. Publishing that under a prompt-throughput name is exactly the conflation this document forbids. It becomes derivable only with runtime-log evidence (Stage 2E).
 
@@ -241,9 +241,9 @@ The window closes at the protocol terminator, not at transport end, so a runtime
 
 `agentsplice.persistence.failure_reason` is attached only to `agentsplice.persistence.failures` and has two values. `QueueSaturated` means the gateway produced evidence faster than the store accepted it and the fix is capacity; `WriteFailed` means the store rejected what it was given and the fix is the store. A single undifferentiated failure count would send an operator adding queue capacity to a database that is refusing every write.
 
-`agentsplice.upstream.status_class` carries the coarse class — `2xx`, `4xx`, `5xx`. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success.
+`agentsplice.upstream.status_class` carries the coarse class of the runtime's status — `2xx`, `3xx`, `4xx`, `5xx`, or `other` — not the client's: a stream the runtime answered `200` and then failed before its first byte is `2xx` there, and `Failed` with the gateway's `504` everywhere else. A relayed upstream 500 is a completed transport cycle with no AgentSplice failure, so classifying on the absence of an error would count it as a success; the outcome below is what success is classified from.
 
-`agentsplice.upstream.outcome` is what the runtime's success and failure are classified from (ADR 0026). It is attached to a completed exchange that heard a response, and has three values: `Success`, `ErrorStatus` for a 4xx or 5xx, and `ErrorReported` for a success status whose answer carried the protocol's own error object — LM Studio reports a chat template it cannot render that way, inside a `200` stream. The status class alone counted that as a success. A failed or cancelled exchange carries no outcome: its `error.type` or its status already says how it ended, and the runtime's answer never completed to be judged. The exchange span carries the same attribute, and its status is `Error` when the outcome is an error as well as when AgentSplice failed; `error.type` stays AgentSplice's own.
+`agentsplice.upstream.outcome` is what the runtime's success and failure are classified from (ADR 0026). It is attached to a completed exchange that heard a response, and has three values: `Success` for a 2xx whose answer was read and carried no error, `ErrorStatus` for any status outside 2xx, redirects included, and `ErrorReported` for a 2xx whose answer carried the protocol's own error — LM Studio reported a chat template it could not render inside a `200` stream, which the status class alone counted as a success. A 2xx whose answer could not be read carries none: a success is a claim about the answer. A failed or cancelled exchange carries no outcome: its `error.type` or its status already says how it ended, and the runtime's answer never completed to be judged. The exchange span carries the same attribute, and its status is `Error` when the outcome is an error as well as when AgentSplice failed; `error.type` stays AgentSplice's own. That departs from OpenTelemetry's HTTP convention, which leaves a server span unset for a 4xx and expects `error.type` beside `Error`: the exchange span describes the exchange, not the HTTP request, and a runtime's failure is the failure an operator searching for one needs, while `error.type` is kept for AgentSplice's own so the two stay apart.
 
 `agentsplice.stream.termination` is attached only to exchanges that actually streamed, so adding it costs the existing series no cardinality at all. Its value set is closed: the eleven members of `StreamTermination`, among them `UpstreamError`, a stream in which the runtime reported an error and which then ended by itself.
 

@@ -1,6 +1,8 @@
 using System.Text;
 using AgentSplice.Application.Exchanges;
+using AgentSplice.Application.Runtimes;
 using AgentSplice.Domain.Exchanges;
+using AgentSplice.Domain.Identifiers;
 using AgentSplice.Domain.Observations;
 using AgentSplice.IntegrationTests.Hosting;
 using AgentSplice.TestSupport.FakeUpstream;
@@ -43,6 +45,49 @@ public sealed class ChatCompletionCancellationTests
         await recorded.WaitForAbortAsync(WaitBudget);
 
         Assert.True(recorded.WasAborted);
+    }
+
+    [Fact]
+    public async Task A_stream_abandoned_between_reads_closes_the_runtimes_connection_at_once()
+    {
+        // A read in flight is cancelled at once. The case that waited was an answer given up between
+        // reads — a client gone on a write, a bound crossed — whose body is disposed with nothing pending:
+        // the handler read up to 1 MiB more for two seconds to keep the connection, while the runtime
+        // generated for nobody. Exercised at the provider, where it happens, because the in-process host
+        // always has a read pending when its client leaves.
+        await using var fixture = await StartAsync();
+
+        var script = SseScript.Create();
+
+        for (var index = 0; index < 400; index++)
+        {
+            script.Data("""{"choices":[{"index":0,"delta":{"content":"token "}}]}""", TimeSpan.FromMilliseconds(10));
+        }
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", script.Done().Build());
+
+        var target = fixture.Services.GetRequiredService<RuntimeRegistry>().Find(RuntimeEndpointId.Create(GatewayFixture.RuntimeId))!;
+        var provider = fixture.Services.GetServices<IModelRuntimeProvider>().Single(candidate => candidate.ProviderKey == "lmstudio");
+
+        var result = await provider.StreamAsync(
+            ProviderCompletionRequest.Create(
+                target,
+                Encoding.UTF8.GetBytes("""{"model":"m","stream":true,"messages":[{"role":"user","content":"hi"}]}"""),
+                "application/json",
+                "text/event-stream",
+                PublicRequestId.New()),
+            CancellationToken.None);
+
+        Assert.True(result.Opened);
+
+        await result.Body!.ReadAsync(new byte[4096], CancellationToken.None);
+
+        var recorded = Assert.Single(fixture.Upstream.ReceivedRequests);
+
+        await result.Body.DisposeAsync();
+
+        // Half the drain the handler used to spend.
+        await recorded.WaitForAbortAsync(TimeSpan.FromSeconds(1));
     }
 
     [Fact]

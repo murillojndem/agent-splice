@@ -346,7 +346,7 @@ Each fails against its reintroduced defect. What only real clients can show — 
 as written in each shell, and that OpenCode reaches a model through the sample — was checked by hand on
 a workstation against LM Studio, which makes no compatibility claim. So was a gap the in-process host
 cannot show, because it sends headers as soon as they are committed: under Kestrel, a stream that times
-out after the runtime's headers but before its first byte ends with no response at all (ADR 0019).
+out after the runtime's headers but before its first byte ended with no response at all (ADR 0019).
 ADR 0025 closed it, and `KestrelWireTests` now shows it on a real listener (part 13).
 
 ## Delivered by Stage 1D, part 7: the license and the reporting channel
@@ -578,26 +578,35 @@ The rest runs in process:
 - `FailureEvidenceTests`: the buffered path's phases, failures, and their details, the trace id of a
   request refused before its model was known, and a client that leaves during model discovery.
 - `StreamRelayBoundaryTests` and `ExchangeRecorderTests`: when the response starts and the boundary that
-  says so, what is left unstarted, and how each ending is recorded.
+  says so, what is left unstarted, and how each ending is recorded, and that a failure must
+  name its class.
+- `ChatCompletionCancellationTests` opens a stream through the LM Studio provider itself, reads once,
+  and disposes the body with nothing pending, then requires the runtime to see its connection close
+  within a second: the handler used to drain the answer for two. The in-process host always has a read
+  pending when its client leaves, so that path cannot show it.
 
 Each fails against its reintroduced defect, listed in the changelog, except where two guards cover one
 case; the changelog says which, and that the test fails with both removed.
 
 ## Delivered by Stage 1D, part 14: a runtime's error inside a success
 
-The fixture is the trace report's finding 1, as LM Studio sent it: a `200` stream carrying one event
-whose JSON is `{"error":{...}}`, closed without `[DONE]`, and the same object as a buffered body.
+The fixture has the shape of the trace report's finding 1: a `200` stream carrying one event whose JSON
+is `{"error":{...}}`, closed without `[DONE]`, and the same object as a buffered body. It is written to
+that shape, not copied from LM Studio: content capture was off for the report, so no capture of its
+bytes exists.
 
 - `OpenAiStreamEventInterpreterTests` and `ChatCompletionResponseCodecTests` hold the shape: a top-level
-  error object counts; a null `error`, a string, an error nested under `choices`, and model output that
-  spells one do not.
+  `error` of any value but null or false counts, a string included; a null or false `error`, an error
+  nested under `choices`, and model output that spells one do not.
 - `StreamRelayBoundaryTests` holds the termination's precedence over a malformed event and over the
   terminator, and when the boundary is stamped.
 - `UpstreamOutcomeRulesTests` holds the one classification the exchange, the metrics, and the store use.
-- `RuntimeReportedErrorTests` runs it end to end, and searches the record and every log, at `Trace`, for a
-  sentinel planted in the error's message.
-- `ExchangeApiTests` reads the outcome back through the list and the detail, and ties each correlation
-  header a response carried — buffered and streamed — to the row it was stored under.
+- `RuntimeReportedErrorTests` runs it end to end — in a stream, a buffered body, and an ordinary body sent
+  in answer to a streaming request — and searches the record's observation details and response summary,
+  and every log at `Trace`, for a sentinel planted in the error's message.
+- `ExchangeApiTests` reads the outcome back through the list and the detail, gives none to a 2xx nobody
+  could read or to a 2xx row whose summary predates the fact, and ties each correlation header a
+  response carried — buffered and streamed — to the row it was stored under.
 - `TelemetryExportTests` finds the dimension in the exported metrics, and reads the exchange span's status
   through an `ActivityListener` in the test process, matched to the response by its trace id.
 - The dashboard's `outcome.test.tsx` renders the Exchanges list and an exchange's page through the real

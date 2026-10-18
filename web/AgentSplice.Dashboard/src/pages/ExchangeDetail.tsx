@@ -8,6 +8,23 @@ import { Outcome } from '../components/Outcome';
 import { RetentionNotice } from '../components/RetentionNotice';
 import { Timeline } from '../components/Timeline';
 import { Waterfall } from '../components/Waterfall';
+import type { ExchangeDetail as ExchangeDetailView } from '../api/types';
+
+/**
+ * Why an exchange has no runtime outcome, said rather than left as a dash (ADR 0026).
+ *
+ * An outcome is judged only for an exchange that completed and heard the runtime. One that failed or was
+ * cancelled says how it ended elsewhere on the page, and its response summary may still say the runtime
+ * reported an error before the exchange failed; a dash beside that read as a contradiction.
+ */
+function whyNoOutcome(exchange: ExchangeDetailView): string {
+  if (exchange.status === 'failed') return 'not judged: the exchange failed';
+  if (exchange.status === 'cancelled') return 'not judged: the exchange was cancelled';
+  if (exchange.status !== 'completed') return UNKNOWN;
+  if (exchange.upstreamStatusCode === undefined) return 'no answer was heard';
+
+  return 'unknown: nothing of the answer was read';
+}
 
 /**
  * One exchange in full: what was sent structurally, where the time went, and how it ended
@@ -76,12 +93,31 @@ export function ExchangeDetail() {
           </div>
           <div>
             <dt>Runtime said</dt>
-            <dd data-testid="runtime-outcome"><Outcome outcome={exchange.upstreamOutcome} /></dd>
+            <dd data-testid="runtime-outcome">
+              {exchange.upstreamOutcome !== undefined ? (
+                <Outcome outcome={exchange.upstreamOutcome} />
+              ) : (
+                <span className="muted">{whyNoOutcome(exchange)}</span>
+              )}
+            </dd>
           </div>
           <div>
             <dt>Failure</dt>
             <dd data-testid="failure">
-              {exchange.errorCode ?? exchange.failureClass ?? 'none'}
+              {/* A code is recorded only for an envelope the gateway wrote; a failure class alone means
+                  the response was abandoned or never started, and the client got no envelope. */}
+              {exchange.errorCode !== undefined ? (
+                <>
+                  <code>{exchange.errorCode}</code> <span className="muted">sent to the client</span>
+                </>
+              ) : exchange.failureClass !== undefined ? (
+                <>
+                  {exchange.failureClass.replace(/_/g, ' ')}{' '}
+                  <span className="muted">— no error envelope reached the client</span>
+                </>
+              ) : (
+                'none'
+              )}
             </dd>
           </div>
         </dl>
@@ -134,7 +170,11 @@ export function ExchangeDetail() {
       <section className="panel">
         <h2>What came back</h2>
         {exchange.responseSummary === undefined ? (
-          <p className="empty">No response summary was built: nothing of the runtime's answer could be interpreted.</p>
+          <p className="empty">
+            {exchange.upstreamStatusCode === undefined
+              ? "No answer was heard from the runtime, so there is no response summary."
+              : "No response summary was built from the runtime's answer."}
+          </p>
         ) : (
           <StructuralSummary summary={exchange.responseSummary} testId="response-summary" />
         )}

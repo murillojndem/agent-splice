@@ -377,8 +377,8 @@ internal sealed class StreamRelayPump
     /// </summary>
     /// <remarks>
     /// A reported error outranks a malformed event: it is the runtime saying what went wrong, while a
-    /// payload that could not be read says only that something did. Neither replaces the facts the
-    /// completion details keep, such as whether a terminator was observed.
+    /// payload that could not be read says only that something did. The one outranked is kept in the
+    /// completion details, as whether a terminator was observed is.
     /// </remarks>
     private StreamTermination? Anomaly() =>
         sawUpstreamError ? StreamTermination.UpstreamError
@@ -506,6 +506,7 @@ internal sealed class StreamRelayPump
             ClientEvents = clientEvents,
             IncompleteEventBytes = incompleteEventBytes,
             ProtocolTerminatorObserved = sawTerminator,
+            MalformedEventObserved = sawMalformedEvent,
             Summary = summary,
             Usage = interpreter?.Usage ?? evidence?.Usage ?? UsageObservation.Unknown,
             ClientGone = clientGone,

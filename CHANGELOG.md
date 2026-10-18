@@ -83,16 +83,21 @@ AgentSplice relayed it unchanged and recorded it as `completed` with `normal_com
 counted it as a success, and the dashboard painted it green (the first trace report's finding 1).
 ADR 0026 keeps the relay and the `completed` status, and records the runtime's failure beside them.
 
-- An event or a body whose JSON is the protocol's own error object — a top-level `error` member that is
-  an object — is recognised by its shape, never read. The response summary records
+- An event or a body whose JSON carries the protocol's own error — a top-level `error` member that is
+  neither null nor false — is recognised by its shape, never read. The response summary records
   `upstreamErrorReported`, the timeline an `upstream_error_reported` boundary, and a stream the new
-  termination `upstream_error`, which outranks a malformed event and the terminator.
-- One rule, `UpstreamOutcomeRules`, says whether the runtime succeeded: `success`, `error_status` for a
-  4xx or 5xx, or `error_reported`. It is the new `agentsplice.upstream.outcome` metric dimension, an
-  attribute on the exchange span — whose status is now `Error` for a runtime's error too — and the new
-  `upstreamOutcome` on the exchange list and detail, classified on read so older rows answer too.
+  termination `upstream_error`, which outranks a malformed event and the terminator; an outranked
+  malformed event is kept as the completion's `stream.malformed_event` detail, as the terminator is.
+- One rule, `UpstreamOutcomeRules`, says whether the runtime succeeded: `success` for a 2xx whose answer
+  was read, `error_status` for any other status, or `error_reported`; a 2xx whose answer nobody could
+  read has none. It is the new `agentsplice.upstream.outcome` metric dimension, an attribute on the
+  exchange span — whose status is now `Error` for a runtime's error too — and the new
+  `upstreamOutcome` on the exchange list and detail, classified on read; a 2xx row stored before the fact
+  existed has no outcome rather than a success.
 - The dashboard's `completed` pill is neutral, an outcome pill beside it carries success or failure on
   the list, the overview, and the exchange's page, and the exchange's page shows the response summary.
+  It says why an exchange has no outcome — failed, cancelled, never answered, never read — and whether
+  a failure's code was sent to the client or no envelope reached it.
 - The roadmap's line is reworded, `docs/API.md`, `docs/CLIENTS.md`, `docs/OBSERVABILITY.md`, the README,
   and ADRs 0008 and 0009 say so, and the trace report has a dated note.
 
@@ -101,7 +106,10 @@ recognised in a stream or in a body, recognised from a string or a null, the ter
 `normal_completion` or outranked by a malformed event or the terminator, the boundary not stamped, a
 status not outranking the body, an outcome for an exchange that did not complete, the outcome missing
 from the metrics, the span, the list, or the schema, the span left unmarked, and the `completed` pill or
-the response summary as they were.
+the response summary as they were. Review then found that a row stored before the fact was read as
+reporting no error, and so listed the trace report's own failure as a success; that a redirect was a
+success; that only an object was recognised, though the SDKs act on any truthy `error`; and that an
+outranked malformed event left no trace. Each fix has a test that fails without it.
 
 ### Stage 1D, part 13: a stream's status is committed with its first byte
 
@@ -114,7 +122,8 @@ written.
 
 - A stream that fails before the runtime's first byte is answered with `504`
   `agentsplice_upstream_timeout` or `502` `agentsplice_invalid_upstream_response` and every correlation
-  header, and the runtime's request is aborted. The exchange still records how the runtime's stream
+  header, and the runtime's request is aborted. An answer abandoned between reads closes its connection
+  at once, rather than being drained for up to two seconds while the runtime generates for nobody. The exchange still records how the runtime's stream
   ended, `timeout` or `connection_lost`. A successful stream is unchanged byte for byte; in the
   in-process test host its headers now arrive with its first byte, as they always did on Kestrel.
 - The gateway writes every completion response itself and records the exchange after the write. Each
@@ -126,19 +135,21 @@ written.
   records its failure class and termination and no code; the span and the metrics keep the error type.
 - A streaming request answered with an ordinary body that fails mid-body is abandoned rather than ended
   cleanly. A fault after a response started is abandoned and recorded as `internal_error` with no code,
-  rather than writing a 500 over it and throwing.
+  rather than writing a 500 over it and throwing; before it started, the 500 names the runtime when
+  routing had resolved one.
 - A client that leaves during a buffered answer's write is recorded as cancelled, not completed, and no
   bytes are claimed delivered. `stream.client.bytes` is recorded by whatever wrote the bytes, and is
   absent when the client received an error envelope instead of the runtime's answer.
-- Every upstream failure reaches the timeline: `timeout_fired` with its `timeout.phase` wherever the
-  timeout elapsed, now on the buffered path and before a stream's headers too, and the new
+- Every failure of the request to the runtime reaches the timeline: `timeout_fired` with its
+  `timeout.phase` wherever the timeout elapsed, now on the buffered path and before a stream's headers too, and the new
   `upstream_failed` with the failure's classification and the provider's bounded detail, such as
   `upstream.stream: connection.lost` or `upstream.socket_error: ConnectionRefused`.
 - A client that leaves while its model is discovered is recorded as cancelled, not as
   `agentsplice_runtime_unavailable`. A request refused before its model was known keeps the trace id it
   was given.
 - The recorder computes a transition before it marks the exchange terminal, so a transition the domain
-  refuses no longer leaves a non-terminal row with an undelivered error.
+  refuses no longer leaves a non-terminal row with an undelivered error, and it refuses a failure that
+  gives no failure class.
 - `docs/API.md`'s error table, `docs/CLIENTS.md`'s troubleshooting rows, `docs/OBSERVABILITY.md`, the
   roadmap, the README, `docs/TESTING.md`, and ADRs 0009 and 0019 say so. The trace report keeps
   describing the build it ran, with a dated note.

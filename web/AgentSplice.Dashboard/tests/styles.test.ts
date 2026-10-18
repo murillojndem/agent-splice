@@ -1,25 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import styles from '../src/styles.css?raw';
 
-// The one place colour carries meaning is the pills, and jsdom computes no colours, so the rule is read
-// from the stylesheet itself (ADR 0026).
+// Colour carries meaning on the pills, and jsdom computes no colours, so the rule is read from the
+// stylesheet itself (ADR 0026).
 
-/** The declarations of every rule whose selector list names the class. */
+/** The declarations of every rule whose selector list mentions the class, combined selectors included. */
 function rulesFor(className: string): string[] {
-  const rules = [...styles.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+  const mention = new RegExp(`\\.${className}(?![\\w-])`);
 
-  return rules
-    .filter(([, selectors]) => (selectors ?? '').split(',').some((selector: string) => selector.trim() === `.${className}`))
+  return [...styles.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter(([, selectors]) => mention.test(selectors ?? ''))
     .map(([, , declarations]) => declarations ?? '');
+}
+
+/** The literal a custom property is defined as, so a rule that spells the colour out is caught too. */
+function valueOf(property: string): string {
+  const defined = new RegExp(`${property}:\\s*([^;]+);`).exec(styles);
+
+  expect(defined).not.toBeNull();
+
+  return (defined?.[1] ?? '').trim().toLowerCase();
 }
 
 describe('the colour of an outcome', () => {
   it('does not paint a completed exchange as a success', () => {
     // A runtime that answered 500, or reported an error inside a 200, completed too.
-    const completed = rulesFor('pill-completed');
+    const completed = rulesFor('pill-completed').join('').toLowerCase();
 
     expect(completed.length).toBeGreaterThan(0);
-    expect(completed.join('')).not.toContain('var(--good)');
+    expect(completed).not.toContain('var(--good)');
+    expect(completed).not.toContain(valueOf('--good'));
   });
 
   it('paints a runtime success good and a runtime error bad', () => {

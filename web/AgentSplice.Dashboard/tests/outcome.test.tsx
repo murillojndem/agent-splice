@@ -29,7 +29,7 @@ describe('what the runtime said', () => {
       );
     });
 
-  const summary = (id: string, status: 'completed' | 'failed', outcome?: 'success' | 'error_reported') => ({
+  const summary = (id: string, status: 'completed' | 'failed', outcome?: 'success' | 'error_status' | 'error_reported') => ({
     exchangeId: id,
     requestId: id,
     startedAt: '2026-10-17T01:22:19Z',
@@ -48,6 +48,7 @@ describe('what the runtime said', () => {
         summary('11111111-1111-1111-1111-111111111111', 'completed', 'success'),
         summary('22222222-2222-2222-2222-222222222222', 'completed', 'error_reported'),
         summary('33333333-3333-3333-3333-333333333333', 'failed'),
+        summary('55555555-5555-5555-5555-555555555555', 'completed', 'error_status'),
       ],
       nextCursor: null,
     };
@@ -64,6 +65,55 @@ describe('what the runtime said', () => {
     expect(within(succeeded).getByText('success')).toHaveClass('pill-success');
     expect(within(reported).getByText('error reported')).toHaveClass('pill-error_reported');
     expect(within(failed).queryByTestId('outcome')).toBeNull();
+    expect(
+      within(screen.getByTestId('outcome-55555555-5555-5555-5555-555555555555')).getByText('error status'),
+    ).toHaveClass('pill-error_status');
+  });
+
+  it('says why a failed exchange has no outcome, and whether its failure reached the client', async () => {
+    // The response summary can say the runtime reported an error while the exchange then failed, on
+    // its idle budget say; a bare dash under "Runtime said" read as a contradiction of it.
+    const id = '66666666-6666-6666-6666-666666666666';
+    const detail: ExchangeDetail = {
+      ...summary(id, 'failed'),
+      ingressProtocol: 'open_ai_chat_completions',
+      streamTermination: 'timeout',
+      upstreamStatusCode: 200,
+      failureClass: 'upstream_timeout',
+      measurements: [],
+      responseSummary: { choiceCount: 0, finishReasons: [], upstreamErrorReported: true },
+    };
+
+    answering({ [`/api/v1/exchanges/${id}/timeline`]: [], [`/api/v1/exchanges/${id}`]: detail });
+    window.history.replaceState(null, '', `/dashboard/exchanges/${id}`);
+
+    render(<Root client={client()} />);
+
+    expect(await screen.findByTestId('runtime-outcome')).toHaveTextContent('not judged: the exchange failed');
+
+    // A failure class with no code is a response abandoned or never started: no envelope reached the
+    // client, and showing the class where a code goes made the two look alike.
+    expect(screen.getByTestId('failure')).toHaveTextContent('upstream timeout — no error envelope reached the client');
+  });
+
+  it('says an error code was sent when one was, and that no answer was heard when none was', async () => {
+    const id = '77777777-7777-7777-7777-777777777777';
+    const detail: ExchangeDetail = {
+      ...summary(id, 'failed'),
+      ingressProtocol: 'open_ai_chat_completions',
+      streamTermination: 'not_applicable',
+      failureClass: 'runtime_unavailable',
+      errorCode: 'agentsplice_runtime_unavailable',
+      measurements: [],
+    };
+
+    answering({ [`/api/v1/exchanges/${id}/timeline`]: [], [`/api/v1/exchanges/${id}`]: detail });
+    window.history.replaceState(null, '', `/dashboard/exchanges/${id}`);
+
+    render(<Root client={client()} />);
+
+    expect(await screen.findByTestId('failure')).toHaveTextContent('agentsplice_runtime_unavailable sent to the client');
+    expect(screen.getByText('No answer was heard from the runtime, so there is no response summary.')).toBeInTheDocument();
   });
 
   it('shows the response summary that says the runtime reported an error', async () => {

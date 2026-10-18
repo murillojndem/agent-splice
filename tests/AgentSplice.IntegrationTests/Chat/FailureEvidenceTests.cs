@@ -16,8 +16,8 @@ namespace AgentSplice.IntegrationTests.Chat;
 /// </summary>
 /// <remarks>
 /// The provider attributes every timeout to a phase and every other failure to a reason, and until
-/// ADR 0025 only a mid-stream timeout ever reached the timeline. A non-streamed request — the path
-/// most LM Studio requests take, because LM Studio sends their headers with the finished answer —
+/// ADR 0025 only a mid-stream timeout ever reached the timeline. A non-streamed request — where
+/// LM Studio sends its headers only with the finished answer, so every budget is spent before them —
 /// recorded a 504 and threw the phase away, and a refused connection or a truncated body recorded
 /// nothing at all.
 /// </remarks>

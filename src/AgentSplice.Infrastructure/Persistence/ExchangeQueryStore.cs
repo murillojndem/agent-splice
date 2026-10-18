@@ -167,8 +167,9 @@ internal sealed class ExchangeQueryStore : IExchangeQueryStore
         CompletedAt = row.CompletedAtTicks is { } ticks ? new DateTimeOffset(ticks, TimeSpan.Zero) : null,
         Status = (ExchangeStatus)row.Status,
 
-        // Classified on read by the rule the exchange itself uses, from what the row already holds,
-        // so a row written before the field existed is classified the same way as a new one.
+        // Classified on read by the rule the exchange itself uses, from what the row already holds.
+        // A row written before the fact was recorded holds no answer to "did the runtime report an
+        // error", so a success status on it has no outcome rather than a success it cannot support.
         UpstreamOutcome = UpstreamOutcomeRules.Classify(
             (ExchangeStatus)row.Status,
             row.UpstreamStatusCode,
@@ -180,30 +181,44 @@ internal sealed class ExchangeQueryStore : IExchangeQueryStore
         ContentRetentionState = (ContentRetentionState)row.ContentRetentionState,
     };
 
-    /// <summary>Whether a stored response summary says the runtime reported an error.</summary>
+    /// <summary>
+    /// Whether a stored response summary says the runtime reported an error, or <c>null</c> when it
+    /// cannot say.
+    /// </summary>
     /// <remarks>
     /// One member of a document this store wrote, read without turning the document back into a
-    /// domain summary. A row from before the member existed has none, which is the answer that store
-    /// held: no error was recognised. A document that is not JSON at all says nothing either way.
+    /// domain summary. The member is written whenever a summary is, true or false, so its absence
+    /// means the row predates it: those builds never looked, and "no error was recognised" would be a
+    /// claim they never made — the first trace report's template failure would read as a success. No
+    /// summary, and a document that is not JSON, say nothing either way.
     /// </remarks>
-    private static bool ReportsUpstreamError(string? responseSummaryJson)
+    private static bool? ReportsUpstreamError(string? responseSummaryJson)
     {
         if (responseSummaryJson is null)
         {
-            return false;
+            return null;
         }
 
         try
         {
             using var document = JsonDocument.Parse(responseSummaryJson);
 
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("upstreamErrorReported", out var reported)
-                && reported.ValueKind == JsonValueKind.True;
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("upstreamErrorReported", out var reported))
+            {
+                return null;
+            }
+
+            return reported.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => null,
+            };
         }
         catch (JsonException)
         {
-            return false;
+            return null;
         }
     }
 

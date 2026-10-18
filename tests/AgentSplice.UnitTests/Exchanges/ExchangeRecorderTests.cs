@@ -118,6 +118,20 @@ public sealed class ExchangeRecorderTests
     }
 
     [Fact]
+    public void A_failure_must_say_why_whether_its_envelope_was_written_or_not()
+    {
+        // An administrative error has no failure class, and recorded against an exchange it would leave
+        // the exchange open beside an envelope that said it had failed.
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
+
+        Assert.Throws<ArgumentException>(() => recorder.Fail(GatewayErrorCatalogue.AdministrationUnauthorized));
+        Assert.Throws<ArgumentException>(() => recorder.Abandon(GatewayErrorCatalogue.AdministrationUnauthorized, StreamTermination.Unknown));
+        Assert.False(recorder.IsTerminated);
+    }
+
+    [Fact]
     public void A_transition_the_domain_refuses_leaves_the_exchange_open_to_end_properly()
     {
         // A streamed exchange must say how its stream ended, so completing it without a termination

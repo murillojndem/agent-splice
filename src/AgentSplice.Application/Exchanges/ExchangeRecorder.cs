@@ -255,13 +255,20 @@ public sealed class ExchangeRecorder
 
     /// <summary>Records a failure whose error envelope was written to the client.</summary>
     /// <remarks>
-    /// Called after the write, never before it: <see cref="ExchangeRecord.Error"/> is the code the
-    /// client received, and only a written envelope makes that true. A failure whose response had
-    /// already started is <see cref="Abandon"/> instead (ADR 0025).
+    /// Called after the write, never before it: <see cref="ExchangeRecord.Error"/> is the code written
+    /// to the client's connection, and only a written envelope makes that true. A failure whose
+    /// response had already started is <see cref="Abandon"/> instead (ADR 0025).
     /// </remarks>
     public void Fail(GatewayError gatewayError, StreamTermination? termination = null)
     {
         ArgumentNullException.ThrowIfNull(gatewayError);
+
+        // A completion error without a class would leave the exchange open beside a delivered
+        // envelope: the domain has no failed state without one.
+        if (gatewayError.FailureClass is not { } failureClass)
+        {
+            throw new ArgumentException("A failed exchange must record why it failed.", nameof(gatewayError));
+        }
 
         if (IsTerminated)
         {
@@ -269,9 +276,7 @@ public sealed class ExchangeRecorder
         }
 
         var at = Now;
-        var next = gatewayError.FailureClass is { } failureClass
-            ? Exchange?.Fail(failureClass, at, termination)
-            : null;
+        var next = Exchange?.Fail(failureClass, at, termination);
 
         if (!TryTerminate())
         {

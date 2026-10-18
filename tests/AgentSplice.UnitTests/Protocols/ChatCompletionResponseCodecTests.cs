@@ -183,11 +183,19 @@ public sealed class ChatCompletionResponseCodecTests
         Assert.Equal(0, facts.Summary?.ChoiceCount);
     }
 
+    [Fact]
+    public void A_body_whose_error_is_a_string_reports_an_error_too()
+    {
+        // As an SDK reads it: {"error":"Model not loaded"} is a failure whatever its value's type.
+        Assert.True(Read("""{"error":"Model not loaded"}""").Summary?.UpstreamErrorReported);
+    }
+
     [Theory]
     [InlineData(Simple)]
     [InlineData("""{"choices":[],"error":null}""")]
+    [InlineData("""{"choices":[],"error":false}""")]
     [InlineData("""{"choices":[{"message":{"role":"assistant","content":"{\"error\":{}}"}}]}""")]
-    public void A_body_without_a_top_level_error_object_reports_none(string body)
+    public void A_body_without_a_top_level_error_reports_none(string body)
     {
         Assert.False(Read(body).Summary?.UpstreamErrorReported);
     }

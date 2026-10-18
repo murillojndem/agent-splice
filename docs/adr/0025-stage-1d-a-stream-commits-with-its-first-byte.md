@@ -31,8 +31,8 @@ fault after a response started, which also tried to write a 500 over a started r
 with a clean chunked close, handing the client truncated JSON that looked whole. The buffered path
 recorded the client's completion, and handed the record to the store, before writing a byte, so a
 client that left during the write was recorded as completed with every byte "forwarded". And only a
-mid-stream timeout ever reached the timeline: a 504 on the buffered path, the path most LM Studio
-requests take, threw its phase away, and a refused connection or a truncated body recorded nothing.
+mid-stream timeout ever reached the timeline: a 504 on the buffered path, where LM Studio sends its
+headers only with the finished answer, threw its phase away, and a refused connection or a truncated body recorded nothing.
 
 The readiness review held before the alpha reproduced each of these on real Kestrel and asked for one
 slice to close them, with a test on the server the gateway ships on.
