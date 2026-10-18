@@ -235,6 +235,49 @@ public sealed class ListModelsEndpointTests
         Assert.Equal(["usable-model"], Ids(document));
     }
 
+    [Theory]
+    [InlineData("""{ "id": "\ud800", "object": "model" }""")]
+    [InlineData("""{ "id": "broken-owner", "object": "model", "owned_by": "\udc00" }""")]
+    public async Task A_model_entry_whose_strings_cannot_be_decoded_costs_that_model_alone(string entry)
+    {
+        // An escaped lone surrogate parses as JSON and cannot be decoded as text. It escaped the
+        // reader as an unclassified 500 on every call — on /v1/models and on every completion — and
+        // nothing was cached, so each request asked the runtime again.
+        await using var fixture = await GatewayFixture.StartAsync();
+        fixture.Upstream.EnqueueFor(
+            "/v1/models",
+            UpstreamResponseScripts.Json(
+                """{ "object": "list", "data": [ ENTRY, { "id": "usable-model", "object": "model" } ] }"""
+                    .Replace("ENTRY", entry, StringComparison.Ordinal)));
+
+        using var first = await fixture.Client.GetAsync(new Uri("/v1/models", UriKind.Relative));
+        using var second = await fixture.Client.GetAsync(new Uri("/v1/models", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+        Assert.Equal(["usable-model"], Ids(await ReadJsonAsync(first)));
+
+        // Cached like any successful discovery: the runtime was asked once.
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        Assert.Single(fixture.Upstream.ReceivedRequests);
+    }
+
+    [Fact]
+    public async Task A_name_that_cannot_be_decoded_outside_any_model_is_ignored_like_an_unknown_field()
+    {
+        // The lone surrogate is in a property name beside `data`, which the reader passes over while
+        // looking for it without decoding it. Only a model's own strings are ever decoded, and those
+        // cost that model alone (above), so nothing about the list as a whole can fault this way.
+        await using var fixture = await GatewayFixture.StartAsync();
+        fixture.Upstream.EnqueueFor(
+            "/v1/models",
+            UpstreamResponseScripts.Json("""{ "\ud800": 1, "object": "list", "data": [ { "id": "usable-model", "object": "model" } ] }"""));
+
+        using var response = await fixture.Client.GetAsync(new Uri("/v1/models", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(["usable-model"], Ids(await ReadJsonAsync(response)));
+    }
+
     [Fact]
     public async Task Unknown_fields_on_an_upstream_model_do_not_break_discovery()
     {

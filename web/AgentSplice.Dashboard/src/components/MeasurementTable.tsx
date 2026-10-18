@@ -1,5 +1,5 @@
 import type { Measurement } from '../api/types';
-import { measurementValue, provenanceLabel, requiresLabel } from '../format/evidence';
+import { measurementProvenanceLabel, measurementValue, requiresLabel } from '../format/evidence';
 
 /**
  * Every measurement with the provenance it arrived with (FR-DASH-004, FR-OBS-010).
@@ -31,7 +31,7 @@ export function MeasurementTable({ measurements }: { measurements: Measurement[]
             <td>{measurementValue(entry)}</td>
             <td>
               <span className={requiresLabel(entry.provenance) ? 'provenance provenance-weak' : 'provenance'}>
-                {provenanceLabel(entry.provenance)}
+                {measurementProvenanceLabel(entry)}
               </span>
               {entry.confidence !== undefined && (
                 <span className="confidence"> confidence {entry.confidence.toFixed(2)}</span>

@@ -27,4 +27,8 @@ public static class OpenAiMediaTypes
     /// </remarks>
     public static bool IsEventStream(string? contentType) =>
         string.Equals(MediaTypeGrammar.Parse(contentType), EventStream, StringComparison.Ordinal);
+
+    /// <summary>True when a <c>Content-Type</c> value names JSON, parameters such as a charset included.</summary>
+    public static bool IsJson(string? contentType) =>
+        string.Equals(MediaTypeGrammar.Parse(contentType), Json, StringComparison.Ordinal);
 }

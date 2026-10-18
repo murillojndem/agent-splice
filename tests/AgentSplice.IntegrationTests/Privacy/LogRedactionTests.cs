@@ -1,9 +1,13 @@
 using System.Net;
 using System.Text;
+using AgentSplice.Application.Diagnostics;
+using AgentSplice.Application.Exchanges;
+using AgentSplice.Application.Runtimes;
 using AgentSplice.IntegrationTests.Hosting;
 using AgentSplice.TestSupport.FakeUpstream;
 using AgentSplice.TestSupport.Logging;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -83,10 +87,166 @@ public sealed class LogRedactionTests : IDisposable
                 """{"error":{"message":"LEAK"}}""".Replace("LEAK", CompletionSentinel, StringComparison.Ordinal),
                 500));
 
+        // The runtime's error body carries the completion sentinel, so the body is checked too: it
+        // was planted and never asserted, and a regression that logged a relayed error body passed.
         Assert.DoesNotContain(
             logs.AllText,
             text => text.Contains(PromptSentinel, StringComparison.Ordinal)
+                || text.Contains(CompletionSentinel, StringComparison.Ordinal)
                 || text.Contains(ApiKeySentinel, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_model_list_fault_never_logs_the_clients_correlation_token()
+    {
+        // The August sweep took the client's x-request-id out of four log sites and missed this one,
+        // on GET /v1/models, which the completion-only test above cannot reach.
+        const string Sentinel = "SENTINEL-REQUESTID-model-list";
+
+        var logs = new CapturingLoggerProvider();
+
+        await using var fixture = await GatewayFixture.StartAsync(
+            settings => settings["Logging:LogLevel:Default"] = "Trace",
+            services =>
+            {
+                services.AddSingleton<ILoggerProvider>(logs);
+
+                // A provider whose discovery throws: the one path into the model list's fault log
+                // once the catalogue reader classifies every malformed answer itself.
+                services.RemoveAll<IModelRuntimeProvider>();
+                services.AddSingleton<IModelRuntimeProvider, FaultingProvider>();
+            });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri("/v1/models", UriKind.Relative));
+        request.Headers.TryAddWithoutValidation("x-request-id", Sentinel);
+
+        using var response = await fixture.Client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains(logs.Records, record => record.EventId.Id == GatewayEventIds.ModelListFailed.Id);
+        Assert.DoesNotContain(logs.AllText, text => text.Contains(Sentinel, StringComparison.Ordinal));
+
+        // The client still has it, on the response it was sent.
+        Assert.Equal(Sentinel, response.Headers.GetValues("x-agentsplice-request-id").Single());
+    }
+
+    [Fact]
+    public async Task A_faulted_exchange_is_logged_by_its_exchange_id_and_nothing_it_carried()
+    {
+        // The path that logs an exception: a provider that throws mid-request, as a defect would. The
+        // log is how an operator finds the exchange, so it must name the identifier the client was
+        // given, and an exception's text is where content most often escapes, so every sentinel is
+        // searched for in it too.
+        var (logs, response) = await FaultAsync(services =>
+        {
+            services.RemoveAll<IModelRuntimeProvider>();
+            services.AddSingleton<IModelRuntimeProvider, ThrowingCompletionProvider>();
+        });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        AssertLoggedByExchangeId(logs, GatewayEventIds.ExchangeFaulted, response);
+    }
+
+    [Fact]
+    public async Task Evidence_that_could_not_be_recorded_is_logged_by_its_exchange_id_and_nothing_it_carried()
+    {
+        var (logs, response) = await FaultAsync(services =>
+            services.AddSingleton<IExchangeRecordSink, ThrowingRecordSink>());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        AssertLoggedByExchangeId(logs, GatewayEventIds.EvidenceRecordingFailed, response);
+    }
+
+    private static void AssertLoggedByExchangeId(CapturingLoggerProvider logs, EventId eventId, HttpResponseMessage response)
+    {
+        var exchangeId = response.Headers.GetValues("x-agentsplice-exchange-id").Single();
+        var record = Assert.Single(logs.Records, candidate => candidate.EventId.Id == eventId.Id);
+
+        Assert.NotNull(record.Exception);
+        Assert.Contains("ExchangeId=" + exchangeId, record.StateValues);
+
+        foreach (var sentinel in new[] { PromptSentinel, CompletionSentinel, ToolArgumentSentinel, ApiKeySentinel })
+        {
+            Assert.DoesNotContain(logs.AllText, text => text.Contains(sentinel, StringComparison.Ordinal));
+        }
+    }
+
+    private static async Task<(CapturingLoggerProvider Logs, HttpResponseMessage Response)> FaultAsync(
+        Action<IServiceCollection> fault)
+    {
+        var logs = new CapturingLoggerProvider();
+
+        await using var fixture = await GatewayFixture.StartAsync(
+            settings =>
+            {
+                settings["agentsplice:defaultRuntimeId"] = GatewayFixture.RuntimeId;
+                settings[GatewayFixture.RuntimeKey(0, "discovery:enabled")] = "false";
+                settings[GatewayFixture.RuntimeKey(0, "apiKeyEnvironmentVariable")] = ApiKeyVariable;
+                settings["Logging:LogLevel:Default"] = "Trace";
+            },
+            services =>
+            {
+                services.AddSingleton<ILoggerProvider>(logs);
+                fault(services);
+            });
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+
+        using var content = new StringContent(
+            """{"model":"m","messages":[{"role":"user","content":"PROMPT"}]}""".Replace("PROMPT", PromptSentinel, StringComparison.Ordinal),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = await fixture.Client.PostAsync(new Uri("/v1/chat/completions", UriKind.Relative), content);
+
+        // The evidence is handed over after the response; the log line that says it failed follows.
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!logs.Records.Any(record => record.EventId.Id is 1001 or 1002) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20));
+        }
+
+        return (logs, response);
+    }
+
+    /// <summary>A provider whose completion throws, as a defect inside it would.</summary>
+    private sealed class ThrowingCompletionProvider : IModelRuntimeProvider
+    {
+        public string ProviderKey => "lmstudio";
+
+        public Task<RuntimeModelListResult> ListModelsAsync(RuntimeTarget target, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderCompletionResult> CompleteAsync(ProviderCompletionRequest request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("A fault inside the provider, raised for the test.");
+
+        public Task<ProviderStreamResult> StreamAsync(ProviderCompletionRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>A sink that refuses every record, as a broken store behind it would.</summary>
+    private sealed class ThrowingRecordSink : IExchangeRecordSink
+    {
+        public ValueTask RecordAsync(ExchangeRecord record, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("A fault inside the sink, raised for the test.");
+    }
+
+    /// <summary>A runtime provider whose model discovery throws, as a defect would.</summary>
+    private sealed class FaultingProvider : IModelRuntimeProvider
+    {
+        public string ProviderKey => "lmstudio";
+
+        public Task<RuntimeModelListResult> ListModelsAsync(RuntimeTarget target, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("A fault inside discovery, raised for the test.");
+
+        public Task<ProviderCompletionResult> CompleteAsync(ProviderCompletionRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<ProviderStreamResult> StreamAsync(ProviderCompletionRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     [Fact]

@@ -154,7 +154,19 @@ Status: in progress. Done so far:
   format (ADR 0023);
 - .NET 10 LTS for every build, package, and image, before .NET 8's support ends on November 10, 2026,
   with one contract test holding the SDK, the target, the image's base, and every SDK a workflow
-  installs to one version (ADR 0024).
+  installs to one version (ADR 0024);
+- a stream's status committed with the runtime's first byte, so a runtime that fails before it is
+  answered with the gateway's `504` or `502` and every correlation header, and an error code recorded
+  only when an envelope carried it (ADR 0025);
+- a runtime error carried inside a `200` recorded as the runtime's failure — on the record, the metrics,
+  the span, and the dashboard — while `completed` keeps meaning that the transport cycle finished
+  (ADR 0026);
+- what a local gateway exposes, closed or said before it is public: only the loopback host names are
+  served, a completion must be declared as JSON, a binding beyond loopback is announced, nothing a client
+  chose leaves through trace context, lost evidence is counted, and the documents and settings claim
+  only what the build does (ADR 0027);
+- dashboard screenshots taken from the real gateway against a synthetic runtime, and the script that
+  takes them (`docs/images/`).
 
 The rest of the list below is not done.
 
@@ -182,7 +194,9 @@ The rest of the list below is not done.
   success in the record, the metrics, and the dashboard, while `completed` keeps meaning that the
   transport cycle finished (found by the first trace report; done, ADR 0026);
 - first dated trace report (done, ADR 0023);
-- documentation and demo capture.
+- the pre-public batch the alpha-readiness audit of 2026-10-17 asked for (done, ADR 0027);
+- documentation and demo capture (done: `docs/images/`, from synthetic data; a recorded session with a
+  real client is the trace report's job).
 
 Exit criteria:
 

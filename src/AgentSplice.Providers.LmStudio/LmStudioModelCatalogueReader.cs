@@ -69,16 +69,27 @@ internal static class LmStudioModelCatalogueReader
     {
         model = null!;
 
-        if (element.ValueKind != JsonValueKind.Object
-            || !element.TryGetProperty("id", out var id)
-            || id.ValueKind != JsonValueKind.String
-            || !UpstreamModelId.TryCreate(id.GetString(), out var modelId))
+        try
         {
+            if (element.ValueKind != JsonValueKind.Object
+                || !element.TryGetProperty("id", out var id)
+                || id.ValueKind != JsonValueKind.String
+                || !UpstreamModelId.TryCreate(id.GetString(), out var modelId))
+            {
+                return false;
+            }
+
+            model = DiscoveredModel.Create(modelId, ReadCreated(element), ReadOwnedBy(element));
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // A string the parser accepted and could not decode — an escaped lone surrogate, or bytes
+            // that are not UTF-8 — in the id or owned_by. The entry is unusable and costs one model,
+            // like any other malformed entry; it used to fail the whole list as an unclassified 500,
+            // fetched again on every request because nothing was cached.
             return false;
         }
-
-        model = DiscoveredModel.Create(modelId, ReadCreated(element), ReadOwnedBy(element));
-        return true;
     }
 
     /// <summary>

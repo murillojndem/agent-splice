@@ -262,6 +262,17 @@ public sealed class ChatCompletionRequestCodecTests
         Assert.Equal(0, envelope.Summary.ToolDeclarationCount);
     }
 
+    [Theory]
+    [InlineData("""{"model":"\ud800","messages":[{"role":"user"}]}""")]
+    [InlineData("""{"model":"m","messages":[{"role":"\udc00"}]}""")]
+    [InlineData("""{"\ud800":1,"model":"m","messages":[{"role":"user"}]}""")]
+    public void A_string_that_cannot_be_decoded_is_the_clients_invalid_request(string body)
+    {
+        // An escaped lone surrogate parses as JSON and cannot be read as text. It escaped the reader as
+        // an exception, which the gateway answered as its own 500 rather than the client's 400.
+        AssertRejected(body, expectedParam: null);
+    }
+
     private ChatCompletionEnvelope Read(string body)
     {
         var result = codec.Read(Encoding.UTF8.GetBytes(body));

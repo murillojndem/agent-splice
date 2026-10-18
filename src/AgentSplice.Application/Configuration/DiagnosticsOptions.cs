@@ -3,29 +3,21 @@ namespace AgentSplice.Application.Configuration;
 /// <summary>
 /// Diagnostic detail settings (docs/SPECIFICATION.md section 12, docs/SECURITY.md).
 /// </summary>
+/// <remarks>
+/// Both are refused unless off (ADR 0027). No code in this build stores a body or retains a header,
+/// so accepting either would tell an operator that something is kept which nothing keeps — the reason
+/// <see cref="CaptureOptions.ContentEnabled"/> is refused. Each becomes a real setting in the slice
+/// that implements what it names.
+/// </remarks>
 public sealed class DiagnosticsOptions
 {
     /// <summary>
-    /// Whether request and response bodies may be attached to diagnostics. Off by default; content
-    /// capture is governed by <see cref="CaptureOptions.ContentEnabled"/> as well, and both must be
-    /// on for content to be stored.
+    /// Whether request and response bodies are stored with diagnostics. Must be false in this build.
     /// </summary>
     public bool StoreBodies { get; set; }
 
-    /// <summary>How much header detail is retained.</summary>
-    public HeaderCaptureMode StoreHeaders { get; set; } = HeaderCaptureMode.Allowlist;
-
     /// <summary>
-    /// Headers retained when <see cref="StoreHeaders"/> is
-    /// <see cref="HeaderCaptureMode.Allowlist"/>. The defaults are protocol and correlation headers
-    /// only; nothing here can carry a credential.
+    /// How much header detail is retained. Must be <see cref="HeaderCaptureMode.None"/> in this build.
     /// </summary>
-    public IList<string> HeaderAllowlist { get; set; } = new List<string>
-    {
-        "content-type",
-        "content-length",
-        "accept",
-        "user-agent",
-        "x-request-id",
-    };
+    public HeaderCaptureMode StoreHeaders { get; set; } = HeaderCaptureMode.None;
 }

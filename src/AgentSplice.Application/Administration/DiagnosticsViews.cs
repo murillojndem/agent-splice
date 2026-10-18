@@ -35,6 +35,23 @@ public sealed record SystemInfoView
     /// retention flags, because exported telemetry is a third copy of what each exchange looked like.
     /// </remarks>
     public required bool TelemetryExportEnabled { get; init; }
+
+    /// <summary>Exchanges whose evidence never reached the store since the gateway started, by reason.</summary>
+    /// <remarks>
+    /// Zero is a count here, not an absence: nothing was lost. Reported whether or not metadata is
+    /// retained, so a deployment that retains nothing reads zero rather than nothing (ADR 0027).
+    /// </remarks>
+    public required PersistenceFailureCountsView PersistenceFailures { get; init; }
+}
+
+/// <summary>The two reasons evidence is lost (openapi <c>PersistenceFailures</c>).</summary>
+public sealed record PersistenceFailureCountsView
+{
+    /// <summary>Exchanges dropped because the metadata queue was full: the fix is capacity.</summary>
+    public required long QueueSaturated { get; init; }
+
+    /// <summary>Exchanges lost because the store rejected their batch: the fix is the store.</summary>
+    public required long WriteFailed { get; init; }
 }
 
 /// <summary>One configured runtime with its connection detail redacted (openapi <c>RuntimeSummary</c>).</summary>

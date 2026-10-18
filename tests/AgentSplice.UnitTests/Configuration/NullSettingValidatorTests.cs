@@ -46,7 +46,6 @@ public sealed class NullSettingValidatorTests
               "publicBaseUrl":null,
               "persistence":{"connectionString":null},
               "dashboard":null,
-              "diagnostics":{"headerAllowlist":null},
               "aliases":null
             }}
             """);
@@ -59,7 +58,7 @@ public sealed class NullSettingValidatorTests
     {
         // .NET 10 reads an empty object as null and an empty array as an empty string; neither is a
         // value the binder writes into a property.
-        var result = Validate("""{"agentsplice":{"dashboard":{},"diagnostics":{"headerAllowlist":[]},"runtimes":[]}}""");
+        var result = Validate("""{"agentsplice":{"dashboard":{},"aliases":[],"runtimes":[]}}""");
 
         Assert.True(result.Succeeded, string.Join(" ", result.Failures ?? []));
     }

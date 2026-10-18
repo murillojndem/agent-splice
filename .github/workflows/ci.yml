@@ -38,7 +38,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Linux is pinned, as every Linux job here is: ubuntu-latest moves to Ubuntu 26.04 from
+        # 2026-10-19, and a new build image is a change to review rather than one to meet in a
+        # release run (ADR 0027).
+        os: [ubuntu-24.04, windows-latest]
 
     steps:
       - name: Checkout
@@ -63,11 +66,13 @@ jobs:
         run: dotnet build --configuration Release --no-restore -warnaserror
 
       - name: Test
+        # A prefix, not a file name: with LogFileName every test project wrote the same file, so the
+        # artifact held only whichever project finished last.
         run: >-
           dotnet test
           --configuration Release
           --no-build
-          --logger "trx;LogFileName=test-results.trx"
+          --logger "trx;LogFilePrefix=test-results"
           --results-directory artifacts/test-results
 
       - name: Upload test results
@@ -84,7 +89,7 @@ jobs:
     # assets, and nothing about that is platform-dependent — unlike the gateway, where Windows is a
     # first-class deployment path and therefore gates.
     name: dashboard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: web/AgentSplice.Dashboard
@@ -456,7 +461,7 @@ jobs:
     # smoke-tested on Linux, where the archive can record the executable's permission bits and ss can see
     # the listener. The artifact it uploads is what a tagged release publishes, through release-assets.
     name: package (linux-x64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: pwsh
@@ -514,7 +519,7 @@ jobs:
     name: release assets
     # The image archive only once image-archive has loaded and run it the way the guide does.
     needs: [package-windows, package-linux, image, image-archive]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
 

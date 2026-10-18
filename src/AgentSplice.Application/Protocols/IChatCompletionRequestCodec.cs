@@ -13,6 +13,14 @@ namespace AgentSplice.Application.Protocols;
 /// </remarks>
 public interface IChatCompletionRequestCodec
 {
+    /// <summary>True when a request declared a media type this protocol's body is sent as.</summary>
+    /// <remarks>
+    /// Asked before the body is read. A request with no <c>Content-Type</c>, or with one a browser can
+    /// send from any web page without asking — a form, or plain text — is refused, which is what stops
+    /// another site's page from running inference through a loopback gateway unseen (ADR 0027).
+    /// </remarks>
+    bool AcceptsMediaType(string? contentType);
+
     /// <summary>Parses and validates a request body without reading its content.</summary>
     ChatCompletionReadResult Read(ReadOnlySpan<byte> body);
 

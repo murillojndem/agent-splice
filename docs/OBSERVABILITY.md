@@ -124,7 +124,7 @@ These boundaries describe the first moments of a streamed response, and each is 
 | client response started | the client's status and headers, committed with that first byte, had been flushed. |
 | first client event flushed | the write carrying the bytes that completed the first event a client **dispatches** finished flushing. |
 | first SSE event decoded | the frame reader handed out its first complete frame. A comment or keepalive counts. |
-| first semantic output event | the protocol interpreter classified a frame as carrying model output. |
+| first semantic output event | the protocol interpreter classified a frame as carrying model output: content, reasoning in `reasoning_content` or `reasoning`, or a tool call. A role announcement is not output. |
 
 A frame a conforming client dispatches no event for — a comment, a bare `id`, a `retry` directive, an `event` name with no payload — may set the decoded boundary and must never set the client-event boundary, because dating first delivery from one would report a response as having reached the client before it carried anything. A `data` field with an empty value does dispatch and does count: its buffer holds a line feed rather than nothing.
 
@@ -212,9 +212,13 @@ These are emitted today. The rest of the list above is declared but not yet emit
 
 The streaming instruments record only what a streamed exchange observed. A buffered exchange contributes no data point rather than a zero: in a series where the value means something, a zero reads as "this happened, and it was none".
 
-Token instruments record only what a runtime actually reported. Absent usage produces no data point rather than a zero.
+Token instruments record only what a runtime actually reported. Absent usage produces no data point rather than a zero. They carry no provenance attribute because in this stage every count is the runtime's own; a stage that adds an estimated count adds the attribute with it.
 
-`agentsplice.generation.tokens_per_second` is measured over the **observed decode window** — from the first event carrying model output to upstream completion — and therefore excludes the first token's own decode latency while still counting that token. The bias is negligible over a long generation and material over a very short one. It is stated here rather than corrected, because dividing by one fewer token would invent a number the runtime never reported.
+`agentsplice.generation.tokens_per_second` is **derived**, not reported: the completion tokens the runtime reported, divided by the **observed decode window** AgentSplice measured — from the first event carrying model output, reasoning included, to upstream completion. It therefore excludes the first token's own decode latency while still counting that token. The bias is negligible over a long generation and material over a very short one. It is stated here rather than corrected, because dividing by one fewer token would invent a number the runtime never reported. It is not the runtime's own tokens per second, which counts its own window.
+
+A derived value carries the provenance of its weakest input, so this one is `upstream_reported` — the rule that keeps an estimate from passing as a measurement (ADR 0009 decision 7). That makes the provenance a trust rank here rather than a statement that the runtime reported the number, and the dashboard says "derived" beside it (ADR 0027).
+
+Reasoning counts as output. A runtime that streams reasoning in its own delta field, and counts it in `completion_tokens`, would otherwise have its window start at the first answer token, inflating the figure by however much of the generation was reasoning.
 
 The window closes at the protocol terminator, not at transport end, so a runtime that stops generating and keeps its connection open cannot deflate this figure with idle time (ADR 0010).
 
@@ -255,20 +259,38 @@ The SDK subscribes to a source only once something writes to it, because a sourc
 
 ## Structured logs
 
-Use stable event IDs and templates. Examples:
+Every event the gateway logs on purpose has a stable identifier, which an alert rule or a log query can
+match while the message is reworded (`GatewayEventIds`). The thousands say which part of the system
+spoke: 1000 the request path, 1100 routing and discovery, 1200 hosting, 1300 persistence and retention.
 
-- exchange accepted;
-- model resolved;
-- upstream request started;
-- upstream response headers received;
-- stream terminated;
-- observation recorded;
-- adapter applied;
-- adapter rejected;
-- replay started/completed;
-- conformance case failed;
-- persistence failed;
-- runtime discovery failed.
+| Event | Level | Logged when |
+|---|---|---|
+| `1001 ExchangeFaulted` | Error | A completion request faulted in a way the gateway did not anticipate. |
+| `1002 EvidenceRecordingFailed` | Error | Recording an exchange's evidence failed; the client response is unaffected. |
+| `1003 InstrumentationFailed` | Error | Emitting spans or metrics failed; the client response is unaffected. |
+| `1101 RuntimeDiscoveryFailed` | Warning | A runtime's model catalogue could not be refreshed. |
+| `1102 ModelListFailed` | Error | Building the model list `/v1/models` serves failed. |
+| `1103 RuntimeCredentialMissing` | Warning | A runtime names an API key variable that is unset or blank. |
+| `1201 UnhandledPipelineFault` | Error | A fault escaped the request pipeline entirely. |
+| `1202 TelemetryExportEnabled` | Information | Export is on; the message names the transport and the destination. |
+| `1203 DashboardServed` | Information | A dashboard build is served; the message names the directory. |
+| `1204 DashboardBuildMissing` | Warning | The dashboard is enabled and no build was found where the message says. |
+| `1205 InferenceReachableBeyondLoopback` | Warning | Once at startup, when the gateway listens beyond loopback or trusts forwarded headers: `/v1` authenticates no one, and the token protects `/api/v1` only (ADR 0027). |
+| `1301 MetadataQueueSaturated` | Warning | The metadata queue was full, so an exchange's evidence was dropped. |
+| `1302 MetadataPersistenceFailed` | Error | The store rejected a batch, and the exchanges in it were lost. |
+| `1303 RetentionSweepCompleted` | Information | A retention sweep finished; the message says what it removed. |
+| `1304 RetentionSweepFailed` | Error | A retention sweep could not complete. |
+| `1305 MetadataStoreOpened` | Information | The store is open and current; the message names its file. |
+
+`1301` and `1302` are counted too, since the gateway started, in `persistenceFailures` on
+`GET /api/v1/system`, and the dashboard's overview says when either is above zero: with export off, the
+`agentsplice.persistence.failures` metric reaches no backend, and a store refusing every write would
+otherwise look like a quiet afternoon (ADR 0027).
+
+Other components log under their own categories without these identifiers. The one an operator is
+likely to need is ASP.NET Core's host filter, whose `NoAllowedHostMatched` line names a host the gateway
+refused; the shipped `appsettings.json` raises `Microsoft.AspNetCore.HostFiltering` to Information so
+it is visible (`docs/INSTALLATION.md`, "Host names").
 
 Default logs include structural metadata only. Body logging is not a supported shortcut for trace capture.
 

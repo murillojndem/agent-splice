@@ -102,6 +102,10 @@ internal sealed class LmStudioHttpClientConfigurator : IConfigureNamedOptions<Ht
                 // A local runtime has no business being reached through a system proxy.
                 UseProxy = false,
 
+                // The gateway's traceparent only. The default also sends the client's tracestate and
+                // baggage, which are text the client chose (ADR 0027).
+                ActivityHeadersPropagator = new TraceParentOnlyPropagator(),
+
                 // Taken over solely to time connection establishment, which is otherwise invisible
                 // to the request path. The handler still applies ConnectTimeout to this callback, so
                 // phase attribution is unaffected.

@@ -137,9 +137,19 @@ public sealed class ExchangeTelemetry : IExchangeTelemetry, IDisposable
     {
         activeExchanges.Add(1);
 
-        return new ExchangeTrace(
-            exchangeSource.StartActivity(TelemetryNames.ActivitySources.Exchange, ActivityKind.Server),
-            activeExchanges);
+        var activity = exchangeSource.StartActivity(TelemetryNames.ActivitySources.Exchange, ActivityKind.Server);
+
+        if (activity is not null)
+        {
+            // The client's tracestate is text it chose, and an activity with none of its own reads its
+            // parent's: ASP.NET Core's request activity, which took the client's header. Exported, it
+            // put a client's value into every span of the exchange; an empty one of its own stops the
+            // walk here, for the exchange and every span beneath it (ADR 0027). The trace id and the
+            // parent are kept, which is what correlation needs.
+            activity.TraceStateString = string.Empty;
+        }
+
+        return new ExchangeTrace(activity, activeExchanges);
     }
 
     /// <inheritdoc />

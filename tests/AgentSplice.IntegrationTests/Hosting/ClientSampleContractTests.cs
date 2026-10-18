@@ -109,7 +109,9 @@ public sealed partial class ClientSampleContractTests
                 text.Contains(hostName, StringComparison.OrdinalIgnoreCase),
                 FormattableString.Invariant($"{name} points a client at {hostName}."));
             Assert.False(
-                text.Contains("[::1]", StringComparison.Ordinal),
+                // As a URL: the guides name [::1] among the host names the gateway answers, which
+                // points no client anywhere.
+                text.Contains("://[::1]", StringComparison.Ordinal),
                 FormattableString.Invariant($"{name} points a client at the IPv6 loopback."));
         }
     }

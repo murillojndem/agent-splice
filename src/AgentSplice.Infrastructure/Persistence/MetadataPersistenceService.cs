@@ -1,3 +1,4 @@
+using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Observability;
@@ -45,6 +46,7 @@ public sealed class MetadataPersistenceService : BackgroundService
     private readonly QueuedExchangeRecordSink sink;
     private readonly IDbContextFactory<AgentSpliceDbContext> contextFactory;
     private readonly IExchangeTelemetry telemetry;
+    private readonly PersistenceFailureCounts failures;
     private readonly TimeProvider timeProvider;
     private readonly IOptions<AgentSpliceOptions> options;
     private readonly ILogger<MetadataPersistenceService> logger;
@@ -57,6 +59,7 @@ public sealed class MetadataPersistenceService : BackgroundService
         QueuedExchangeRecordSink sink,
         IDbContextFactory<AgentSpliceDbContext> contextFactory,
         IExchangeTelemetry telemetry,
+        PersistenceFailureCounts failures,
         TimeProvider timeProvider,
         IOptions<AgentSpliceOptions> options,
         ILogger<MetadataPersistenceService> logger)
@@ -64,6 +67,7 @@ public sealed class MetadataPersistenceService : BackgroundService
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(contextFactory);
         ArgumentNullException.ThrowIfNull(telemetry);
+        ArgumentNullException.ThrowIfNull(failures);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
@@ -71,6 +75,7 @@ public sealed class MetadataPersistenceService : BackgroundService
         this.sink = sink;
         this.contextFactory = contextFactory;
         this.telemetry = telemetry;
+        this.failures = failures;
         this.timeProvider = timeProvider;
         this.options = options;
         this.logger = logger;
@@ -213,6 +218,7 @@ public sealed class MetadataPersistenceService : BackgroundService
         catch (Exception exception)
         {
             telemetry.RecordPersistenceFailure(PersistenceFailureReason.WriteFailed, batch.Count);
+            failures.Record(PersistenceFailureReason.WriteFailed, batch.Count);
 
             logger.LogError(
                 GatewayEventIds.MetadataPersistenceFailed,

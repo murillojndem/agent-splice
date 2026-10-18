@@ -115,6 +115,26 @@ internal sealed class OpenApiDocument
             .ToArray();
     }
 
+    /// <summary>An operation's responses, keyed by status.</summary>
+    internal static IReadOnlyDictionary<string, YamlMappingNode> Responses(YamlMappingNode operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return Mapping(operation, "responses").Children.ToDictionary(
+            entry => ((YamlScalarNode)entry.Key).Value!,
+            entry => (YamlMappingNode)entry.Value,
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>Whether an operation is marked as planned, which this build does not serve.</summary>
+    internal static bool IsPlanned(YamlMappingNode operation)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return operation.Children.TryGetValue(new YamlScalarNode("x-agentsplice-planned"), out var planned)
+            && ((YamlScalarNode)planned).Value == "true";
+    }
+
     /// <summary>The security scheme names an operation requires, or an empty list when it requires none.</summary>
     internal static IReadOnlyList<string> SecuritySchemes(YamlMappingNode operation)
     {

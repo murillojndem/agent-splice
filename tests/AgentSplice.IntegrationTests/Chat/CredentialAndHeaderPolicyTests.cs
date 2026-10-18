@@ -116,6 +116,59 @@ public sealed class CredentialAndHeaderPolicyTests : IDisposable
     }
 
     [Fact]
+    public async Task The_runtime_receives_exactly_the_headers_the_policy_names()
+    {
+        // The whole set, pinned, because the gaps were in what nobody listed: .NET's HttpClient
+        // added the client's tracestate and baggage beside the gateway's traceparent, outside the
+        // allowlist docs/API.md publishes (ADR 0027).
+        await using var fixture = await StartAsync(withKey: true);
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+
+        using var request = Post();
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "client-token-should-not-travel");
+        request.Headers.TryAddWithoutValidation("traceparent", ClientTraceParent);
+        request.Headers.TryAddWithoutValidation("tracestate", "vendor=SENTINEL-TRACESTATE");
+        request.Headers.TryAddWithoutValidation("baggage", "tenant=SENTINEL-BAGGAGE");
+        request.Headers.TryAddWithoutValidation("x-request-id", "client-chosen-42");
+        request.Headers.Add("x-client-invented", "should-not-travel");
+
+        await fixture.Client.SendAsync(request);
+
+        var recorded = Assert.Single(fixture.Upstream.ReceivedRequests);
+
+        Assert.Equal(
+            ["accept", "authorization", "content-length", "content-type", "host", "traceparent", "x-request-id"],
+            recorded.Headers.Keys.Select(name => name.ToLowerInvariant()).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task The_runtime_is_sent_the_gateways_trace_context_and_nothing_the_client_chose()
+    {
+        await using var fixture = await StartAsync(withKey: false);
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+
+        using var request = Post();
+        request.Headers.TryAddWithoutValidation("traceparent", ClientTraceParent);
+        request.Headers.TryAddWithoutValidation("tracestate", "vendor=SENTINEL-TRACESTATE");
+        request.Headers.TryAddWithoutValidation("baggage", "tenant=SENTINEL-BAGGAGE");
+
+        using var response = await fixture.Client.SendAsync(request);
+
+        var recorded = Assert.Single(fixture.Upstream.ReceivedRequests);
+        var traceParent = Assert.Single(recorded.Headers["traceparent"]);
+
+        Assert.False(recorded.Headers.ContainsKey("tracestate"));
+        Assert.False(recorded.Headers.ContainsKey("baggage"));
+
+        // The same trace the client began, under the gateway's own span: correlation survives, and
+        // the client's span is not passed off as the gateway's.
+        Assert.Equal(response.Headers.GetValues("x-agentsplice-trace-id").Single(), traceParent.Split('-')[1]);
+        Assert.NotEqual(ClientTraceParent, traceParent);
+    }
+
+    private const string ClientTraceParent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
+
+    [Fact]
     public async Task An_arbitrary_upstream_header_is_not_relayed_to_the_client()
     {
         await using var fixture = await StartAsync(withKey: false);

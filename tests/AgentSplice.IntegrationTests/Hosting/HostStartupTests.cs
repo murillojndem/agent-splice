@@ -1,3 +1,4 @@
+using AgentSplice.Api.Hosting;
 using AgentSplice.Application.Configuration;
 using AgentSplice.IntegrationTests.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,11 +88,14 @@ public sealed class HostStartupTests
     }
 
     [Fact]
-    public void The_shipped_configuration_binds_loopback_only_defaults()
+    public void The_shipped_public_base_url_names_the_address_the_loopback_default_binds()
     {
+        // Named for what it asserts. The binding itself is decided by LoopbackBindingDefault and held
+        // by LoopbackBindingDefaultTests; nothing binds publicBaseUrl, so a name claiming the binding
+        // promised what this cannot show.
         using var factory = new AgentSpliceApplicationFactory();
 
-        Assert.Equal("http://127.0.0.1:5280", Resolve(factory).PublicBaseUrl);
+        Assert.Equal(LoopbackBindingDefault.Urls, Resolve(factory).PublicBaseUrl);
     }
 
     [Fact]

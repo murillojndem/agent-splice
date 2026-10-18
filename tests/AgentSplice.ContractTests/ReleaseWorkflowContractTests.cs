@@ -269,15 +269,71 @@ public sealed partial class ReleaseWorkflowContractTests
     {
         // The tag is checked against the gateway's version; the dashboard ships in the same package
         // and must not claim another.
+        using var package = JsonDocument.Parse(RepositoryPaths.ReadText("web", "AgentSplice.Dashboard", "package.json"));
+
+        Assert.Equal(GatewayVersion(), package.RootElement.GetProperty("version").GetString());
+    }
+
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("release.yml")]
+    [InlineData("publish-image.yml")]
+    public void No_linux_job_runs_on_a_label_github_moves(string fileName)
+    {
+        // ubuntu-latest moves to Ubuntu 26.04 from 2026-10-19. A new build image is a change to
+        // review, not one to discover in a release run (ADR 0027).
+        foreach (var (name, job) in Jobs(Workflow(fileName)))
+        {
+            var runsOn = Scalar(job, "runs-on");
+
+            var labels = runsOn == "${{ matrix.os }}"
+                ? Assert.IsType<YamlSequenceNode>(Mapping(Mapping(job, "strategy"), "matrix").Children[new YamlScalarNode("os")])
+                    .Children.OfType<YamlScalarNode>().Select(label => label.Value!)
+                : [runsOn ?? string.Empty];
+
+            Assert.All(labels, label => Assert.False(
+                label.Equals("ubuntu-latest", StringComparison.Ordinal),
+                FormattableString.Invariant($"{fileName}: job '{name}' runs on ubuntu-latest.")));
+        }
+    }
+
+    [Fact]
+    public void The_draft_notes_list_known_limitations_and_when_the_runtime_stops_being_patched()
+    {
+        // A pre-release is read by people deciding whether to run it; what it cannot do and how long
+        // its runtime is patched are what they need first. The date is the one the guide gives.
+        var publish = Jobs(Release()).Single(job => job.Name == "publish").Job;
+        var notes = string.Join('\n', Steps(publish).Select(Run));
+
+        Assert.Contains("**Known limitations.**", notes, StringComparison.Ordinal);
+        Assert.Contains("November 14, 2028", notes, StringComparison.Ordinal);
+        Assert.Contains("November 14, 2028", RepositoryPaths.ReadText("docs", "INSTALLATION.md"), StringComparison.Ordinal);
+        Assert.Contains("November 14, 2028", RepositoryPaths.ReadText(".github", "scripts", "package.ps1"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_installation_guide_names_the_version_the_build_carries()
+    {
+        // Each command names a package file or an image tag. A version bump the guide missed would hand
+        // out commands that download nothing, and nothing else would notice.
+        var named = GuideVersion()
+            .Matches(RepositoryPaths.ReadText("docs", "INSTALLATION.md"))
+            .Select(match => match.Groups["version"].Value)
+            .ToArray();
+
+        Assert.NotEmpty(named);
+        Assert.All(named, version => Assert.Equal(GatewayVersion(), version));
+    }
+
+    private static string GatewayVersion()
+    {
         var props = RepositoryPaths.ReadText("Directory.Build.props");
         var prefix = VersionPrefix().Match(props).Groups["value"].Value;
         var suffix = VersionSuffix().Match(props).Groups["value"].Value;
-        var gateway = suffix.Length == 0 ? prefix : prefix + "-" + suffix;
-
-        using var package = JsonDocument.Parse(RepositoryPaths.ReadText("web", "AgentSplice.Dashboard", "package.json"));
 
         Assert.False(string.IsNullOrEmpty(prefix));
-        Assert.Equal(gateway, package.RootElement.GetProperty("version").GetString());
+
+        return suffix.Length == 0 ? prefix : prefix + "-" + suffix;
     }
 
     private static YamlMappingNode Release() => Workflow("release.yml");
@@ -331,4 +387,8 @@ public sealed partial class ReleaseWorkflowContractTests
 
     [GeneratedRegex(@"<VersionSuffix>(?<value>[^<]*)</VersionSuffix>")]
     private static partial Regex VersionSuffix();
+
+    // A package file name, agentsplice-<version>-<platform>-x64, or an image tag, agent-splice:<version>.
+    [GeneratedRegex(@"(?:agentsplice-|agent-splice:)(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=-(?:win|linux)-x64|[\s`'""]|$)", RegexOptions.Multiline)]
+    private static partial Regex GuideVersion();
 }

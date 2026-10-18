@@ -24,6 +24,13 @@ public sealed class OpenAiChatCompletionRequestCodec : IChatCompletionRequestCod
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// JSON, as the OpenAI API defines the body, with any parameters — a client's
+    /// <c>charset=utf-8</c> included. Every OpenAI SDK and every client in docs/CLIENTS.md sends it.
+    /// </remarks>
+    public bool AcceptsMediaType(string? contentType) => OpenAiMediaTypes.IsJson(contentType);
+
+    /// <inheritdoc />
     public ChatCompletionReadResult Read(ReadOnlySpan<byte> body)
     {
         var scan = ChatCompletionRequestScanner.Scan(body);

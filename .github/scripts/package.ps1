@@ -193,7 +193,8 @@ AgentSplice $version for $platform
 An experimental alpha. AgentSplice is a local trace proxy for OpenAI-compatible model
 runtimes such as LM Studio: it forwards requests unchanged and records where the time went.
 It needs no .NET installation: it carries .NET runtime $runtime, which $patching
-not patch -- upgrade AgentSplice to receive .NET security fixes.$requirement
+not patch -- upgrade AgentSplice to receive .NET security fixes. Microsoft supports .NET 10
+until November 14, 2028; after that date this package receives no runtime fixes.$requirement
 
 Start it from this folder:
 

@@ -25,10 +25,24 @@ export function Overview() {
   if (system.error) return <Problem error={system.error} />;
 
   const info = system.data;
+  const lost = info.persistenceFailures;
 
   return (
     <>
       <h1>Overview</h1>
+
+      {/* A store that refuses every write looked, here, exactly like a quiet afternoon: the metric that
+          counts the loss reaches no backend with export off. Said only when something was lost. */}
+      {lost !== undefined && lost.queueSaturated + lost.writeFailed > 0 && (
+        <div className="notice notice-error" data-testid="persistence-failures">
+          <strong>Some evidence was not retained.</strong>
+          <p>
+            Since this gateway started, {lost.writeFailed} exchange(s) were lost because the store rejected
+            them, and {lost.queueSaturated} because the metadata queue was full. Client responses were not
+            affected. The gateway logs each loss as event 1302 or 1301.
+          </p>
+        </div>
+      )}
 
       <section className="panel">
         <dl className="facts">

@@ -43,6 +43,10 @@ public static class PersistenceRegistration
         services.AddSingleton<ExchangeQueryService>();
         services.AddSingleton<DiagnosticsService>();
 
+        // Counted in process, beside the metric, so the system endpoint can say what export being off
+        // would otherwise keep from everyone (ADR 0027).
+        services.AddSingleton<PersistenceFailureCounts>();
+
         services.AddSingleton<QueuedExchangeRecordSink>();
 
         services.AddSingleton<IExchangeRecordSink>(provider =>

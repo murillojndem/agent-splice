@@ -42,12 +42,12 @@ internal static class AdministrationBindingGuard
             return;
         }
 
-        // Names the setting and the variable, never a value. An operator needs to know which knob to
-        // turn; nothing here needs to say what is currently in it.
+        // Names the setting, never what is in it. An operator needs to know which knob to turn, and the
+        // setting is where a token gets pasted by mistake: a hex token can be a valid variable name,
+        // and repeating the setting's value would print the secret in the startup error.
         throw new InvalidOperationException(
             string.IsNullOrWhiteSpace(variable)
-                ? "This host is configured to listen beyond loopback, and the administrative API has no credential. Set agentsplice:administration:apiKeyEnvironmentVariable to the name of an environment variable holding a bearer token, or bind to loopback only."
-                : FormattableString.Invariant(
-                    $"This host is configured to listen beyond loopback, and the environment variable '{variable}' named by agentsplice:administration:apiKeyEnvironmentVariable is unset or empty."));
+                ? "This host is configured to listen beyond loopback, or to trust forwarded headers, and the administrative API has no credential. Set agentsplice:administration:apiKeyEnvironmentVariable to the name of an environment variable holding a bearer token, or bind to loopback only."
+                : "This host is configured to listen beyond loopback, or to trust forwarded headers, and the environment variable named by agentsplice:administration:apiKeyEnvironmentVariable is unset or empty. The setting holds a variable's name, never the token itself.");
     }
 }

@@ -93,6 +93,47 @@ public sealed class AgentSpliceOptionsValidatorTests
     }
 
     [Fact]
+    public void A_key_pasted_in_place_of_its_variables_name_is_refused_without_being_repeated()
+    {
+        // The failure quoted the setting, so the one startup error an operator was sure to read
+        // printed the key they had pasted by mistake.
+        const string Key = "sk-lm-SENTINEL-KEY-0123456789";
+
+        var options = Valid();
+        options.Runtimes[0].ApiKeyEnvironmentVariable = Key;
+
+        var failures = Validate(options).Failures ?? [];
+
+        Assert.NotEmpty(failures);
+        Assert.DoesNotContain(failures, failure => failure.Contains(Key, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_administrative_tokens_variable_is_held_to_the_same_rule()
+    {
+        // It was not validated at all, so a token pasted there went unnoticed until a network binding
+        // refused to start, and that refusal quoted it.
+        const string Token = "a3f9-SENTINEL-ADMIN-TOKEN";
+
+        var options = Valid();
+        options.Administration.ApiKeyEnvironmentVariable = Token;
+
+        var failures = Validate(options).Failures ?? [];
+
+        Assert.Contains(failures, failure => failure.Contains("agentsplice:administration:apiKeyEnvironmentVariable", StringComparison.Ordinal));
+        Assert.DoesNotContain(failures, failure => failure.Contains(Token, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_valid_administrative_variable_name_is_accepted()
+    {
+        var options = Valid();
+        options.Administration.ApiKeyEnvironmentVariable = "AGENTSPLICE_ADMIN_API_KEY";
+
+        Assert.True(Validate(options).Succeeded);
+    }
+
+    [Fact]
     public void A_valid_environment_variable_name_is_accepted()
     {
         var options = Valid();
@@ -373,22 +414,32 @@ public sealed class AgentSpliceOptionsValidatorTests
     }
 
     [Fact]
-    public void A_blank_allowlisted_header_fails()
+    public void Storing_bodies_is_refused_because_nothing_in_this_build_stores_one()
     {
         var options = Valid();
-        options.Diagnostics.HeaderAllowlist.Add("   ");
+        options.Diagnostics.StoreBodies = true;
 
-        AssertFailure(options, "must not be blank");
+        AssertFailure(options, "agentsplice:diagnostics:storeBodies must be false");
+    }
+
+    [Theory]
+    [InlineData(HeaderCaptureMode.Allowlist)]
+    [InlineData(HeaderCaptureMode.All)]
+    public void Retaining_headers_is_refused_because_nothing_in_this_build_retains_one(HeaderCaptureMode mode)
+    {
+        var options = Valid();
+        options.Diagnostics.StoreHeaders = mode;
+
+        AssertFailure(options, "agentsplice:diagnostics:storeHeaders must be None");
     }
 
     [Fact]
-    public void The_header_allowlist_is_not_checked_when_headers_are_not_stored_by_allowlist()
+    public void An_unrecognised_header_capture_mode_fails()
     {
         var options = Valid();
-        options.Diagnostics.StoreHeaders = HeaderCaptureMode.None;
-        options.Diagnostics.HeaderAllowlist.Add("   ");
+        options.Diagnostics.StoreHeaders = (HeaderCaptureMode)99;
 
-        Assert.True(Validate(options).Succeeded);
+        AssertFailure(options, "not a recognised header capture mode");
     }
 
     [Fact]

@@ -343,6 +343,51 @@ public sealed class MetadataStoreTests
             "A deployment configured with persistence:mode None created a database file.");
     }
 
+    [Fact]
+    public async Task An_exchange_the_store_rejected_is_counted_where_the_system_endpoint_reports_it()
+    {
+        // The metric counting the same loss reaches no backend with export off, so a store refusing
+        // every write looked, on the API and the dashboard, exactly like a quiet afternoon (ADR 0027).
+        using var store = new TemporaryMetadataStore();
+
+        await using var fixture = await StartAsync(store);
+
+        Assert.Equal(0, await WriteFailuresAsync(fixture));
+
+        // The host migrated the store before it started; without this table every batch fails.
+        await using (var context = store.OpenContext())
+        {
+            await context.Database.ExecuteSqlRawAsync("DROP TABLE exchange_observations");
+        }
+
+        // Succeeds: what happened to the evidence never reaches the client (FR-DATA-009).
+        await ProxyOnceAsync(fixture, Body(), Completion);
+
+        var deadline = DateTime.UtcNow + WriteTimeout;
+        long lost;
+
+        while ((lost = await WriteFailuresAsync(fixture)) == 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+        }
+
+        Assert.Equal(1, lost);
+    }
+
+    private static async Task<long> WriteFailuresAsync(GatewayFixture fixture)
+    {
+        using var response = await fixture.Client.GetAsync(new Uri("/api/v1/system", UriKind.Relative));
+
+        response.EnsureSuccessStatusCode();
+
+        using var system = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var failures = system.RootElement.GetProperty("persistenceFailures");
+
+        Assert.Equal(0, failures.GetProperty("queueSaturated").GetInt64());
+
+        return failures.GetProperty("writeFailed").GetInt64();
+    }
+
     /// <summary>Sends a request the gateway refuses, and returns the row it left behind.</summary>
     private static async Task<Infrastructure.Persistence.Rows.ExchangeRow> RefusedAsync(
         TemporaryMetadataStore store,

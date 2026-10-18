@@ -137,7 +137,12 @@ curl -sN http://127.0.0.1:5280/v1/chat/completions \
   --data-binary '{"model":"your-model-id","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"Say hello."}]}'
 ```
 
-Add `-i` to see the response headers, among them `x-agentsplice-exchange-id`.
+Add `-i` to see the response headers, among them `x-agentsplice-exchange-id`. Keep the `Content-Type`
+header: without it `curl` sends a form, which the gateway refuses with `415` (ADR 0027).
+
+A request that is not streamed has 30 seconds for the runtime's response headers, and LM Studio 0.4.20
+sends them only with the finished answer, so a generation longer than that is a `504`. Stream it, or
+raise `timeouts:responseHeaders` as [Troubleshooting](#troubleshooting) shows.
 
 In PowerShell, call `curl.exe` by that name — in Windows PowerShell 5.1, `curl` is an alias for
 `Invoke-WebRequest` — and send the body from a file, which avoids quoting JSON for a native command:
@@ -187,23 +192,25 @@ python app.py
 ## Finding an exchange
 
 A completion response carries `x-agentsplice-exchange-id` whether it succeeded, failed, or was
-streamed. The exceptions are a request refused for its size (`413`) or for load (`429`), which is
-turned away before an exchange begins. Open the exchange in the dashboard at
+streamed. The exceptions are a request refused for its size (`413`), for its content type (`415`), or
+for load (`429`), which is turned away before an exchange begins. Open the exchange in the dashboard at
 `http://127.0.0.1:5280/dashboard/exchanges/<exchange-id>`, or find it in the Exchanges list at
 `http://127.0.0.1:5280/dashboard/exchanges`. Run from source, the gateway serves the dashboard only
 once it is built and `--agentsplice:dashboard:rootPath` points at the build (`docs/DEVELOPMENT.md`,
 "The dashboard"). The same evidence is served by the administrative API. When a token is configured,
-as it always is under Docker, every call needs it; put it in the shell first. Under Docker it is the
-value in `.env`:
+as it always is under Docker, every call needs it in the shell. The shell that started the gateway as
+the installation guide does already holds it. Under Compose, a later shell reads it from `.env`, taking
+the last assignment as Compose does; after a `docker run` there is no `.env`, and the token is the value
+you exported:
 
 ```bash
-export AGENTSPLICE_ADMIN_API_KEY="$(sed -n 's/^AGENTSPLICE_ADMIN_API_KEY=//p' .env | tr -d '\r')"
+export AGENTSPLICE_ADMIN_API_KEY="$(sed -n 's/^AGENTSPLICE_ADMIN_API_KEY=//p' .env | tr -d '\r' | tail -n 1)"
 curl -s -H "Authorization: Bearer $AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5280/api/v1/exchanges/<exchange-id>
 curl -s -H "Authorization: Bearer $AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5280/api/v1/exchanges/<exchange-id>/timeline
 ```
 
 ```powershell
-$env:AGENTSPLICE_ADMIN_API_KEY = (Select-String -Path .env -Pattern '^AGENTSPLICE_ADMIN_API_KEY=(.*)$').Matches[0].Groups[1].Value
+$env:AGENTSPLICE_ADMIN_API_KEY = (Select-String -Path .env -Pattern '^AGENTSPLICE_ADMIN_API_KEY=(.*)$').Matches[-1].Groups[1].Value
 curl.exe -s -H "Authorization: Bearer $env:AGENTSPLICE_ADMIN_API_KEY" http://127.0.0.1:5280/api/v1/exchanges/<exchange-id>
 ```
 
@@ -238,6 +245,8 @@ whether it did.
 | A stream stops without finishing | Once the runtime's first byte has been relayed, the gateway has committed a `200`, so a later timeout or a dropped connection can only close the connection: the client sees a stream that stopped. Find the exchange in the dashboard's Exchanges list, where its status is `failed`, and open it. Its termination is `timeout` and its timeline has a `timeout_fired` event — `IdleStream` when the runtime sent nothing for 60 seconds, `Total` after 10 minutes — or its termination is `connection_lost` and its timeline has an `upstream_failed` event. Either way the timeline ends with `client_response_abandoned`, and the exchange records no error code, because none reached the client. |
 | The model ignores the conversation, or LM Studio reports a context error | The prompt does not fit the loaded context. For a stream, LM Studio 0.4.20 reports that inside a `200` response, as an event carrying an `error` object, and the gateway relays it unchanged. The exchange is `completed`, because the gateway did not fail, and the runtime's failure is recorded beside it: the Exchanges list shows `error reported` under "Runtime said", its termination is `upstream_error`, and its timeline has an `upstream_error_reported` event. Load the model with a larger `--context-length`, and match the client's context setting to it. |
 | `413` | The request body is over 4 MiB, the gateway's limit. |
+| `415` `agentsplice_invalid_request` | The request was not sent with `Content-Type: application/json`. Every SDK sends it; `curl -d` without `-H "Content-Type: application/json"` does not. |
+| `400` with no body, for every request | The client reached the gateway by a name other than `localhost`, `127.0.0.1`, or `[::1]` — a Compose service name, `host.docker.internal`, a LAN address. Name it in `AllowedHosts` (`docs/INSTALLATION.md`, "Host names"); the gateway's log names the refused host in a `NoAllowedHostMatched` line. |
 | `429` `agentsplice_gateway_overloaded` | 64 completions are already in flight, the gateway's limit; retry after the `Retry-After` interval. |
 
 Which budget a slow request meets depends on when the runtime sends its headers. LM Studio 0.4.20 sends

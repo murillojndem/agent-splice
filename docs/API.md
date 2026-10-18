@@ -50,10 +50,12 @@ The response is relayed unchanged: its status, its body, and the headers on the 
 
 Headers crossing the gateway are allowlisted in both directions:
 
-| Direction | Forwarded |
+| Direction | Sent |
 |---|---|
-| Client to runtime | `Content-Type`, `Accept`, `x-request-id` (the AgentSplice correlation token), and the runtime's own `Authorization` |
+| Client to runtime | `Content-Type: application/json` and `Accept` (`text/event-stream` then `application/json` for a stream, `application/json` otherwise), both set by the gateway rather than copied; `x-request-id`, the correlation token; `traceparent`, naming the gateway's own span; and the runtime's own `Authorization`. `Host` and `Content-Length` are the transport's. |
 | Runtime to client | `Content-Type`, `Retry-After`, `x-ratelimit-*` |
+
+The correlation token is the client's `x-request-id` when it is usable — up to 128 printable ASCII characters — and one AgentSplice mints otherwise. A replacement is recorded as a fact on the exchange; the rejected value is never echoed or stored (ADR 0008). `tracestate` and `baggage` are never forwarded: both are text the client chose, and the runtime receives the gateway's `traceparent` alone (ADR 0027).
 
 The client's `Authorization` header is never forwarded upstream, and no hop-by-hop header is copied in either direction. A relayed `429` keeps its `Retry-After`, without which the status conveys nothing actionable.
 
@@ -86,21 +88,24 @@ A runtime that reports an error inside a success — an event, or a `200` body, 
 Accepted request headers:
 
 ```text
-x-request-id
-x-agentsplice-diagnostics
-x-agentsplice-profile         # Later adapter stages
-x-agentsplice-capture-content # Explicitly authorized environments only
+x-request-id                  # replaced, never echoed, when it is not usable
 ```
+
+Planned, and not accepted by this build: `x-agentsplice-diagnostics`, which ADR 0008 declined because
+an unauthenticated verbosity switch is a leak vector; `x-agentsplice-profile`, for the adapter stages;
+and `x-agentsplice-capture-content`, for explicitly authorized environments once content capture
+exists. A request carrying one is served as if it did not.
 
 Response headers:
 
 ```text
 x-agentsplice-request-id
-x-agentsplice-runtime
+x-agentsplice-runtime         # when a runtime was resolved
 x-agentsplice-exchange-id
 x-agentsplice-trace-id
-x-agentsplice-adapters        # Present only when adapters ran
 ```
+
+Planned: `x-agentsplice-adapters`, present only when an adapter ran (Stage 4).
 
 Headers must not contain prompt content, tool arguments, credentials, arbitrary model output, or high-cardinality trace details.
 
@@ -334,6 +339,7 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 |---|---|---|---|
 | Body is not valid JSON, not an object, or fails validation | `agentsplice_invalid_request` | 400 | `invalid_request_error` |
 | Body exceeds the configured maximum size | `agentsplice_invalid_request` | 413 | `invalid_request_error` |
+| Body not declared as `application/json` — another media type, or none | `agentsplice_invalid_request` | 415 | `invalid_request_error` |
 | Model resolves to nothing | `agentsplice_model_not_found` | 404 | `invalid_request_error` |
 | Resolved runtime has no provider module | `agentsplice_runtime_not_found` | 503 | `configuration_error` |
 | Runtime unreachable, or no runtime could be consulted | `agentsplice_runtime_unavailable` | 502 | `upstream_unavailable_error` |
@@ -349,6 +355,8 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 | Unhandled gateway fault, before the response started | `agentsplice_internal_error` | 500 | `internal_error` |
 | Unhandled gateway fault, after the response started | *(none reaches the client; the exchange records failure class `internal_error`)* | *(the connection is abandoned)* | `internal_error` |
 | **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
+
+Two refusals come before any of these, and neither is an exchange. A request addressed to a host name other than `localhost`, `127.0.0.1`, `[::1]`, or one `AllowedHosts` names is answered `400` with no body by ASP.NET Core's host filter, before AgentSplice sees it, as an unsupported route is answered `404` (ADR 0027). The `413` and `415` above are answered before the body is read, and neither is recorded.
 
 There is no AgentSplice error type for a relayed upstream status: the runtime's own envelope is what the client receives, so the gateway writes nothing for a type to describe.
 

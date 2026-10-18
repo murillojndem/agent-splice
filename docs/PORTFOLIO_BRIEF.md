@@ -2,7 +2,7 @@
 
 ## One-sentence description
 
-AgentSplice is an open-source .NET platform that traces, replays, validates, and evaluates interactions between AI agents and local or self-hosted model runtimes.
+AgentSplice is an open-source .NET platform that traces interactions between AI agents and local or self-hosted model runtimes today, and is built to replay, validate, and evaluate them next.
 
 ## Positioning for employment
 
@@ -18,14 +18,21 @@ The project is intended to demonstrate applied-AI systems engineering rather tha
 
 ## Durable technical proof points
 
+Built and tested in Stage 1:
+
 - OpenAI-compatible streaming proxy implemented in ASP.NET Core 10.
 - Incremental SSE parsing without full-response buffering.
 - Trace timeline separating gateway overhead, upstream headers, first byte, first semantic token, stream delivery, and completion.
 - OpenTelemetry spans and metrics with explicit provenance.
+- SQLite persistence with raw content disabled by default.
+- A dated trace report of one real client and runtime, with its evidence (`docs/reports/`).
+
+Targets for later stages, not yet built:
+
 - Sanitized replay with exact versus adapted manifests.
 - Differential comparison across models, runtimes, profiles, and versions.
 - Protocol, streaming, cancellation, usage, and tool-call conformance suites.
-- SQLite/PostgreSQL persistence with raw content disabled by default.
+- PostgreSQL persistence for shared deployments.
 - Agentic coding evaluations executed in disposable environments.
 - Regression reports suitable for CI and upstream issue evidence.
 - Optional, profile-driven compatibility adapters with retirement criteria.

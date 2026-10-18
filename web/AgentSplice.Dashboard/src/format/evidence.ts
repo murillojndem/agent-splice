@@ -72,6 +72,22 @@ export function provenanceLabel(provenance: MeasurementProvenance): string {
   }
 }
 
+/**
+ * The provenance wording for one measurement, which for a derived value says how it was derived.
+ *
+ * A value AgentSplice computes carries the provenance of its weakest input, so generation throughput
+ * — runtime-reported tokens over a window AgentSplice measured — is `upstream_reported`. Shown as
+ * "reported by runtime", it read as a figure the runtime produced, to be compared with the runtime's
+ * own tokens per second; the runtime never reported it (ADR 0027).
+ */
+export function measurementProvenanceLabel(value: Measurement): string {
+  if (value.name === NAMES.generationThroughput) {
+    return `derived: tokens ${provenanceLabel(value.provenance)} over a window AgentSplice measured`;
+  }
+
+  return provenanceLabel(value.provenance);
+}
+
 /** Finds one measurement by name, or `undefined` when it was never derived. */
 export function measurement(measurements: Measurement[], name: string): Measurement | undefined {
   return measurements.find((candidate) => candidate.name === name);

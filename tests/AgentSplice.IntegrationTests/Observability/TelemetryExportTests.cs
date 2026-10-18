@@ -139,6 +139,37 @@ public sealed class TelemetryExportTests
     }
 
     [Fact]
+    public async Task A_clients_tracestate_never_reaches_the_collector()
+    {
+        // An activity with no tracestate of its own reads its parent's, and the exchange span's
+        // parent is ASP.NET Core's request activity, which took the client's header. Exported, a
+        // value the client chose rode along on every span of the exchange (ADR 0027).
+        const string Sentinel = "SENTINEL-TRACESTATE-77d1";
+
+        await using var collector = await FakeOtlpCollector.StartAsync(OtlpReceiverTransport.HttpProtobuf);
+        await using var fixture = await StartAsync(collector, "HttpProtobuf");
+
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", UpstreamResponseScripts.Json(Completion));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/v1/chat/completions", UriKind.Relative))
+        {
+            Content = new StringContent("""{"model":"m","messages":[{"role":"user","content":"hi"}]}""", Encoding.UTF8, "application/json"),
+        };
+
+        request.Headers.TryAddWithoutValidation("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01");
+        request.Headers.TryAddWithoutValidation("tracestate", "vendor=" + Sentinel);
+
+        using var response = await fixture.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var spans = await WaitForExportAsync(fixture, collector, FakeOtlpCollector.HttpTracesPath, "agentsplice.provider.request");
+
+        // The trace the client began is kept; only its state is not.
+        Assert.True(spans.Contains(Convert.FromHexString("0af7651916cd43dd8448eb211c80319c")));
+        Assert.False(spans.Contains(Sentinel), "The client's tracestate was exported.");
+    }
+
+    [Fact]
     public async Task Spans_and_metrics_reach_the_collector_over_grpc()
     {
         await using var collector = await FakeOtlpCollector.StartAsync(OtlpReceiverTransport.Grpc);

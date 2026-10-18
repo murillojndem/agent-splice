@@ -106,9 +106,11 @@ export function ExchangeDetail() {
           </div>
         </dl>
         <p className="note">
-          Generation throughput is measured over the decode window only. There is no prompt-throughput
-          figure: nothing observable marks the end of prompt processing, so any such number would be
-          time-to-first-token wearing another name.
+          Generation throughput is derived, not reported: the completion tokens the runtime reported,
+          divided by the window AgentSplice measured from the first output event, reasoning included, to
+          the end of the stream. It is not the runtime&apos;s own tokens per second, which may count
+          differently. There is no prompt-throughput figure: nothing observable marks the end of prompt
+          processing, so any such number would be time-to-first-token wearing another name.
         </p>
       </section>
 

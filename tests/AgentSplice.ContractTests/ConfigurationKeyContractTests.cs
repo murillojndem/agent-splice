@@ -171,21 +171,18 @@ public sealed partial class ConfigurationKeyContractTests
     }
 
     [Fact]
-    public void The_example_env_file_documents_the_administrative_token_without_supplying_one()
+    public void The_example_env_file_documents_the_administrative_token_without_assigning_one()
     {
+        // Every guide generates the token and appends its own assignment. An empty one shipped here
+        // came first in every .env built that way, and the client guide's extraction read it: 400 in
+        // bash, 401 in PowerShell. A shipped value would be a token everybody knows.
         var env = RepositoryPaths.ReadText(".env.example");
 
         Assert.Contains("AGENTSPLICE_ADMIN_API_KEY=", env, StringComparison.Ordinal);
 
-        foreach (var line in env.Split('\n'))
-        {
-            var trimmed = line.Trim();
-
-            if (trimmed.StartsWith("AGENTSPLICE_ADMIN_API_KEY=", StringComparison.Ordinal))
-            {
-                Assert.Equal("AGENTSPLICE_ADMIN_API_KEY=", trimmed);
-            }
-        }
+        Assert.DoesNotContain(
+            env.Split('\n').Select(line => line.Trim()),
+            line => line.StartsWith("AGENTSPLICE_ADMIN_API_KEY", StringComparison.Ordinal));
     }
 
     [Fact]

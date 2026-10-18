@@ -45,12 +45,13 @@ public sealed class EnvironmentRuntimeApiKeyResolver : IRuntimeApiKeyResolver
 
         if (!credential.HasValue && warned.TryAdd(variableName, true))
         {
-            // The variable name is configuration, not a secret. The value is never logged.
+            // Names the runtime and the setting, not the setting's value. The setting is where a key
+            // gets pasted by mistake, and a key made of letters, digits, and underscores passes as a
+            // variable's name; logging the name would then log the key.
             logger.LogWarning(
                 GatewayEventIds.RuntimeCredentialMissing,
-                "Runtime {RuntimeId} names environment variable {ApiKeyVariable} for its API key, but that variable is unset or blank. Requests will be sent without a credential.",
-                target.Id.Value,
-                variableName);
+                "Runtime {RuntimeId} names an environment variable for its API key in its apiKeyEnvironmentVariable setting, but that variable is unset or blank. Requests will be sent without a credential.",
+                target.Id.Value);
         }
 
         return credential;

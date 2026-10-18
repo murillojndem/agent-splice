@@ -177,7 +177,62 @@ public sealed class AdministrationAuthorizationTests
         var failure = Assert.Throws<InvalidOperationException>(() =>
             AdministrationBindingGuard.Verify(configuration));
 
-        Assert.Contains("AGENTSPLICE_TEST_UNSET_TOKEN", failure.Message, StringComparison.Ordinal);
+        // The setting is named, and its value is not: that value is where a token gets pasted by
+        // mistake, and the startup error is the one message an operator is sure to read.
+        Assert.Contains("agentsplice:administration:apiKeyEnvironmentVariable", failure.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("AGENTSPLICE_TEST_UNSET_TOKEN", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("http://0.0.0.0:5280", true)]
+    [InlineData("http://*:5280", true)]
+    [InlineData("http://192.168.1.10:5280", true)]
+    [InlineData("http://unix:/tmp/agentsplice.sock", true)]
+    [InlineData("http://127.0.0.1:5280", false)]
+    [InlineData("http://[::1]:5280", false)]
+    public void A_kestrel_endpoint_is_classified_like_any_other_binding(string url, bool beyondLoopback)
+    {
+        // Kestrel prefers its configured endpoints over every URL it is given, so a guard that read
+        // only `urls` and the port lists let an endpoint on every interface start with no token.
+        var configuration = Configure(new Dictionary<string, string?> { ["Kestrel:Endpoints:Http:Url"] = url });
+
+        Assert.Equal(beyondLoopback, LoopbackBindingDefault.ListensBeyondLoopback(configuration));
+        Assert.False(LoopbackBindingDefault.ShouldApply(configuration));
+    }
+
+    [Fact]
+    public void A_kestrel_endpoint_on_every_interface_with_no_token_refuses_to_start()
+    {
+        var configuration = Configure(new Dictionary<string, string?>
+        {
+            ["Kestrel:Endpoints:Http:Url"] = "http://0.0.0.0:5280",
+        });
+
+        Assert.Throws<InvalidOperationException>(() => AdministrationBindingGuard.Verify(configuration));
+    }
+
+    [Fact]
+    public void A_loopback_url_beside_a_reachable_kestrel_endpoint_is_still_reachable()
+    {
+        var configuration = Configure(new Dictionary<string, string?>
+        {
+            ["urls"] = "http://127.0.0.1:5280",
+            ["Kestrel:Endpoints:Lan:Url"] = "http://0.0.0.0:5281",
+        });
+
+        Assert.True(LoopbackBindingDefault.ListensBeyondLoopback(configuration));
+    }
+
+    [Fact]
+    public void Trusting_forwarded_headers_with_no_token_refuses_to_start()
+    {
+        // ASPNETCORE_FORWARDEDHEADERS_ENABLED makes ASP.NET Core take a caller's address from
+        // X-Forwarded-For, which any caller sends, so the loopback rule would serve whoever claims to
+        // be local. It exists for a gateway behind a proxy, which a network reaches.
+        var configuration = Configure(new Dictionary<string, string?> { ["FORWARDEDHEADERS_ENABLED"] = "true" });
+
+        Assert.True(LoopbackBindingDefault.ListensBeyondLoopback(configuration));
+        Assert.Throws<InvalidOperationException>(() => AdministrationBindingGuard.Verify(configuration));
     }
 
     [Fact]
@@ -202,29 +257,24 @@ public sealed class AdministrationAuthorizationTests
     }
 
     [Fact]
-    public void The_refusal_never_repeats_the_secret_it_is_protecting()
+    public void The_refusal_never_repeats_a_token_pasted_in_place_of_the_variables_name()
     {
-        const string Secret = "SENTINEL-ADMIN-TOKEN-VALUE";
+        // The mistake this guards against: the token itself in the setting that should name its
+        // variable. A hex token passes as a variable name, the variable it "names" is unset, and the
+        // refusal used to quote the setting. The sentinel is the setting's own value, so the test can
+        // fail; the version it replaces planted the sentinel nowhere.
+        const string Secret = "a3f9SENTINELADMINTOKEN0123456789";
 
-        Environment.SetEnvironmentVariable("AGENTSPLICE_TEST_EMPTY_TOKEN", string.Empty);
-
-        try
+        var configuration = Configure(new Dictionary<string, string?>
         {
-            var configuration = Configure(new Dictionary<string, string?>
-            {
-                ["urls"] = "http://0.0.0.0:5280",
-                ["agentsplice:administration:apiKeyEnvironmentVariable"] = "AGENTSPLICE_TEST_EMPTY_TOKEN",
-            });
+            ["urls"] = "http://0.0.0.0:5280",
+            ["agentsplice:administration:apiKeyEnvironmentVariable"] = Secret,
+        });
 
-            var failure = Assert.Throws<InvalidOperationException>(() =>
-                AdministrationBindingGuard.Verify(configuration));
+        var failure = Assert.Throws<InvalidOperationException>(() =>
+            AdministrationBindingGuard.Verify(configuration));
 
-            Assert.DoesNotContain(Secret, failure.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AGENTSPLICE_TEST_EMPTY_TOKEN", null);
-        }
+        Assert.DoesNotContain(Secret, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]

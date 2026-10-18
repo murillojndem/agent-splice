@@ -48,6 +48,10 @@ builder.Services.AddDashboard();
 // Resolved per request by the endpoint filter on the /api/v1 group.
 builder.Services.AddSingleton<AdministrationAuthorization>();
 
+// Only requests addressed to the loopback names, unless AllowedHosts names others: a page that
+// rebinds its own domain to 127.0.0.1 is otherwise same-origin with the gateway (ADR 0027).
+builder.Services.AddLoopbackHostFiltering();
+
 // Last resort only. The gateways translate their own faults into an error carrying correlation
 // identifiers; this exists so that a fault escaping the pipeline still produces the stable envelope
 // rather than a framework error page that could disclose a stack trace.
@@ -62,6 +66,12 @@ var app = builder.Build();
 // catch. app.Configuration is the finished article, and this still runs before the server accepts
 // anything (FR-HEALTH-006, NFR 14.2).
 AdministrationBindingGuard.Verify(app.Configuration);
+
+// The token the guard requires protects /api/v1 alone; what such a binding exposes is said once,
+// where an operator reads startup.
+NetworkExposureNotice.Announce(
+    app.Configuration,
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(NetworkExposureNotice)));
 
 app.UseExceptionHandler();
 app.UseRateLimiter();

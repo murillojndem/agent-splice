@@ -19,15 +19,19 @@ import { NAMES, UNKNOWN, duration, measurement, provenanceLabel, requiresLabel }
 export function Waterfall({ measurements }: { measurements: Measurement[] }) {
   const total = measurement(measurements, NAMES.total);
 
+  // Each phase is measured from its own starting boundary, and the rows do not share one: the upstream
+  // rows start when the request to the runtime was opened, the output and client rows when the request
+  // was accepted. Every bar is drawn from zero, so each row names where its zero is, or a reader takes
+  // the difference between two rows for a gap that it is not (ADR 0027).
   const phases = [
-    { name: 'Validation', measurement: measurement(measurements, NAMES.validation) },
-    { name: 'Routing', measurement: measurement(measurements, NAMES.routing) },
-    { name: 'Upstream connect', measurement: measurement(measurements, NAMES.connect) },
-    { name: 'Upstream headers', measurement: measurement(measurements, NAMES.headers) },
-    { name: 'First upstream byte', measurement: measurement(measurements, NAMES.firstByte) },
-    { name: 'First output event', measurement: measurement(measurements, NAMES.firstSemanticEvent) },
-    { name: 'First client event', measurement: measurement(measurements, NAMES.firstClientEvent) },
-    { name: 'Persisted', measurement: measurement(measurements, NAMES.persistence) },
+    { name: 'Validation', since: 'body read', measurement: measurement(measurements, NAMES.validation) },
+    { name: 'Routing', since: 'request summarised', measurement: measurement(measurements, NAMES.routing) },
+    { name: 'Upstream connect', since: 'connection began', measurement: measurement(measurements, NAMES.connect) },
+    { name: 'Upstream headers', since: 'upstream request opened', measurement: measurement(measurements, NAMES.headers) },
+    { name: 'First upstream byte', since: 'upstream request opened', measurement: measurement(measurements, NAMES.firstByte) },
+    { name: 'First output event', since: 'request accepted', measurement: measurement(measurements, NAMES.firstSemanticEvent) },
+    { name: 'First client event', since: 'request accepted', measurement: measurement(measurements, NAMES.firstClientEvent) },
+    { name: 'Persisted', since: 'record queued', measurement: measurement(measurements, NAMES.persistence) },
   ];
 
   return (
@@ -42,7 +46,7 @@ export function Waterfall({ measurements }: { measurements: Measurement[] }) {
 
       <ol className="waterfall">
         {phases.map((phase) => (
-          <PhaseRow key={phase.name} name={phase.name} phase={phase.measurement} total={total} />
+          <PhaseRow key={phase.name} name={phase.name} since={phase.since} phase={phase.measurement} total={total} />
         ))}
       </ol>
 
@@ -57,17 +61,26 @@ export function Waterfall({ measurements }: { measurements: Measurement[] }) {
 
 function PhaseRow({
   name,
+  since,
   phase,
   total,
 }: {
   name: string;
+  since: string;
   phase: Measurement | undefined;
   total: Measurement | undefined;
 }) {
+  const label = (
+    <span className="phase-name">
+      {name}
+      <span className="phase-origin" data-testid={`phase-origin-${name}`}>since {since}</span>
+    </span>
+  );
+
   if (phase === undefined) {
     return (
       <li className="phase phase-unknown" data-testid={`phase-${name}`}>
-        <span className="phase-name">{name}</span>
+        {label}
         <span className="phase-bar-track" aria-hidden="true" />
         <span className="phase-value" data-testid={`phase-value-${name}`}>
           {UNKNOWN} <span className="phase-unknown-why">not observed</span>
@@ -85,7 +98,7 @@ function PhaseRow({
 
   return (
     <li className="phase" data-testid={`phase-${name}`}>
-      <span className="phase-name">{name}</span>
+      {label}
       <span className="phase-bar-track">
         {width !== null && <span className="phase-bar" style={{ width: `${width}%` }} />}
       </span>

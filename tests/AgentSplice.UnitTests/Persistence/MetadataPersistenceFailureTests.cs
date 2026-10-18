@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Exchanges;
@@ -44,11 +45,18 @@ public sealed class MetadataPersistenceFailureTests
         Assert.NotEmpty(failures);
         Assert.All(failures, failure => Assert.Equal(PersistenceFailureReason.WriteFailed, failure.Reason));
         Assert.Equal(3, failures.Sum(failure => failure.Count));
+
+        // Counted for the system endpoint too, which is what an operator sees with export off.
+        Assert.Equal(3, harness.Failures.WriteFailed);
+        Assert.Equal(0, harness.Failures.QueueSaturated);
     }
 
     [Fact]
-    public async Task A_failed_write_is_logged_with_a_stable_event_id_and_no_request_content()
+    public async Task A_failed_write_is_logged_with_a_stable_event_id()
     {
+        // Named for what it shows. A record holds no request content to leak, so "and no request
+        // content" claimed something this test cannot see; LogRedactionTests searches the real host's
+        // logs for content instead.
         var harness = new Harness(failing: true);
 
         await harness.RunAsync(Record());
@@ -211,6 +219,7 @@ public sealed class MetadataPersistenceFailureTests
                 Options.Create(options),
                 new FakeTimeProvider(Origin),
                 Telemetry,
+                Failures,
                 NullLogger<QueuedExchangeRecordSink>.Instance);
 
             Store = new RefusingDbContextFactory(failing, answering);
@@ -219,6 +228,7 @@ public sealed class MetadataPersistenceFailureTests
                 Sink,
                 Store,
                 Telemetry,
+                Failures,
                 new FakeTimeProvider(Origin),
                 Options.Create(options),
                 new CapturingLogger<MetadataPersistenceService>(Logged));
@@ -229,6 +239,8 @@ public sealed class MetadataPersistenceFailureTests
         internal RefusingDbContextFactory Store { get; }
 
         internal RecordingExchangeTelemetry Telemetry { get; } = new();
+
+        internal PersistenceFailureCounts Failures { get; } = new();
 
         internal List<(EventId EventId, LogLevel Level)> Logged { get; } = [];
 

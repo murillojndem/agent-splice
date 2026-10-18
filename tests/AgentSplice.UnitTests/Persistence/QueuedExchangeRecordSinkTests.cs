@@ -1,3 +1,4 @@
+using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Exchanges;
 using AgentSplice.Application.Observability;
@@ -47,7 +48,7 @@ public sealed class QueuedExchangeRecordSinkTests
         // This test failed first against BoundedChannelFullMode.DropWrite, which reads like the
         // intent and is not: TryWrite returns true having discarded the record, so every drop was
         // silent and the counter never moved.
-        var sink = Sink(capacity: 2, out var telemetry, out _);
+        var sink = Sink(capacity: 2, out var telemetry, out _, out var counts);
 
         for (var index = 0; index < 5; index++)
         {
@@ -55,6 +56,7 @@ public sealed class QueuedExchangeRecordSinkTests
         }
 
         Assert.Equal(3, telemetry.PersistenceFailures.Count);
+        Assert.Equal(3, counts.QueueSaturated);
         Assert.All(
             telemetry.PersistenceFailures,
             failure => Assert.Equal(PersistenceFailureReason.QueueSaturated, failure.Reason));
@@ -106,10 +108,18 @@ public sealed class QueuedExchangeRecordSinkTests
     private static QueuedExchangeRecordSink Sink(
         int capacity,
         out RecordingExchangeTelemetry telemetry,
-        out FakeTimeProvider clock)
+        out FakeTimeProvider clock) =>
+        Sink(capacity, out telemetry, out clock, out _);
+
+    private static QueuedExchangeRecordSink Sink(
+        int capacity,
+        out RecordingExchangeTelemetry telemetry,
+        out FakeTimeProvider clock,
+        out PersistenceFailureCounts counts)
     {
         telemetry = new RecordingExchangeTelemetry();
         clock = new FakeTimeProvider(Origin);
+        counts = new PersistenceFailureCounts();
 
         var options = new AgentSpliceOptions();
         options.Persistence.MetadataQueueCapacity = capacity;
@@ -118,6 +128,7 @@ public sealed class QueuedExchangeRecordSinkTests
             Options.Create(options),
             clock,
             telemetry,
+            counts,
             NullLogger<QueuedExchangeRecordSink>.Instance);
     }
 

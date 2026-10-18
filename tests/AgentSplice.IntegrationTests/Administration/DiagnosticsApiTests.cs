@@ -208,6 +208,20 @@ public sealed class DiagnosticsApiTests
         Assert.Equal(1, readiness.GetProperty("enabledRuntimes").GetInt32());
     }
 
+    [Theory]
+    [InlineData("/api/v1/replay-artifacts")]
+    [InlineData("/api/v1/conformance/runs")]
+    public async Task An_operation_the_document_marks_planned_is_not_served(string path)
+    {
+        // The OpenAPI document marks these x-agentsplice-planned, and this is what that claims.
+        await using var fixture = await GatewayFixture.StartAsync();
+
+        using var content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        using var response = await fixture.Client.PostAsync(new Uri(path, UriKind.Relative), content);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private static async Task<JsonElement> ReadAsync(GatewayFixture fixture, string route)
     {
         using var response = await fixture.Client.GetAsync(new Uri(route, UriKind.Relative));

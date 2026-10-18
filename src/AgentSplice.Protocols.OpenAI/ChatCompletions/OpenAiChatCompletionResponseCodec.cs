@@ -42,6 +42,12 @@ public sealed class OpenAiChatCompletionResponseCodec : IChatCompletionResponseC
         {
             return ChatCompletionResponseFacts.Uninterpretable;
         }
+        catch (InvalidOperationException)
+        {
+            // A string that could not be decoded, such as an escaped lone surrogate. The body is
+            // relayed whatever this decides, so it costs the summary and nothing else.
+            return ChatCompletionResponseFacts.Uninterpretable;
+        }
     }
 
     private static ChatCompletionResponseFacts Read(JsonElement root, int bodyLength)

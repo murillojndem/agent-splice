@@ -4,6 +4,78 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 15: what a local gateway exposes is closed, or said
+
+The alpha-readiness audit of 2026-10-17 found a loopback gateway that a page on another site could use,
+a token described as protecting more than it does, text a client chose leaving through trace context,
+and documents and settings that claimed what the build does not do. ADR 0027 closes what it can and
+says the rest.
+
+- Only requests addressed to `localhost`, `127.0.0.1`, or `[::1]` are served unless ASP.NET Core's
+  `AllowedHosts` names others, so a DNS-rebinding page is refused with a `400` and no body before
+  anything answers. The refusal is logged as `NoAllowedHostMatched`, which the shipped `appsettings.json`
+  makes visible.
+- A completion body must be declared as `application/json`. Anything else — the plain text, form, or
+  multipart body a page can post cross-site without a preflight, or no type at all — is a `415`
+  `agentsplice_invalid_request`, answered before the body is read, forwarded nowhere, and recorded
+  nowhere.
+- The binding guard reads `Kestrel:Endpoints` and `FORWARDEDHEADERS_ENABLED` as well as `urls`, and a
+  gateway listening beyond loopback logs event `1205` at startup: `/v1` authenticates no one, and the
+  token protects `/api/v1` only. `docs/SECURITY.md`, `docs/SPECIFICATION.md` §14.3,
+  `docs/THREAT_MODEL.md`, and `docs/INSTALLATION.md` now say the same.
+- The exchange span no longer inherits the caller's `tracestate`, and a runtime receives the gateway's
+  `traceparent` and no `tracestate` or `baggage`. The model-list failure log no longer carries the
+  client's request id.
+- A setting that names an environment variable is never repeated in an error, the administrative
+  token's variable name is validated like a runtime's, and the runtime credential warning no longer
+  names the variable.
+- A lone surrogate escape is malformed input — a `400` request, a malformed event, an uninterpretable
+  answer, a skipped catalogue entry — rather than an exception that escaped as the gateway's fault.
+- A delta carrying `reasoning_content` or `reasoning` text is semantic output, so time to first token
+  and generation throughput include the reasoning. The dashboard labels generation throughput as
+  derived, its waterfall says where each phase is measured from, and `docs/OBSERVABILITY.md` states the
+  weakest-input rule and that exported token metrics are runtime-reported.
+- `GET /api/v1/system` reports `persistenceFailures`, the exchanges whose evidence was lost since the
+  gateway started, and the overview says so when either count is above zero. Every stable log event is
+  documented with its number and level, and a contract test holds the table to `GatewayEventIds`.
+- The OpenAPI document marks the Stage 2 operations `x-agentsplice-planned`, which this build answers
+  with `404`, and declares their `202` bodies where a reader looks; a contract test holds every path the
+  dashboard's client calls to the document. `agentsplice:diagnostics:storeBodies` and `storeHeaders` are
+  refused unless off, as `capture:contentEnabled` is, `headerAllowlist` is removed, and the section is
+  gone from `appsettings.json`. ADR 0003's "normalizes tool calls" is amended.
+- The guides put the administrative token in the shell before appending it to `.env`, `.env.example`
+  no longer assigns an empty one, and the client guide's extraction takes the last assignment, so
+  reading the token back works in bash and PowerShell. The README's first screen and diagram, and
+  `docs/PORTFOLIO_BRIEF.md`, separate what exists from what is planned. `docs/API.md` lists the headers
+  the gateway sets itself and marks the gateway headers that are planned. The threat model's security
+  test cases say which are held by a test.
+- The draft release notes list known limitations and the date Microsoft's support for .NET 10 ends, as
+  the packages' `README.txt` now does. The installation guide's version is held to the build's by a
+  contract test, and the release runbook says the stage stays in progress at the tag.
+- Every Linux CI job runs on `ubuntu-24.04` rather than `ubuntu-latest`, which moves to Ubuntu 26.04 from
+  2026-10-19, and a contract test holds that. Each test project writes its own `.trx`; before, the
+  artifact held whichever finished last. A timing test allows the 2.3 ms by which its two clocks
+  disagreed in a Linux container.
+- Dashboard screenshots, taken from the real gateway against a synthetic runtime by
+  `docs/images/capture.js`, are in `docs/images/` and on the README.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: a foreign host served,
+or refused with the framework's page; a completion of another media type, or of any declared type,
+accepted; the host refusal's log hidden; a `Kestrel:Endpoints` URL or forwarded headers not counted as
+reachable; the exposure not announced; the caller's `tracestate` inherited, or `tracestate` and
+`baggage` sent to the runtime; the model-list log carrying the request id; an undecodable string
+escaping the request scanner, the response codec, the stream interpreter, or a catalogue entry; a
+variable setting's value repeated by the validator or the guard, or the administrative name left
+unvalidated; reasoning deltas not counted; a lost exchange counted under the wrong reason or reported as
+none; a Stage 2 operation unmarked, a `202` body under a reference, a planned operation served; a path
+the dashboard calls left unpublished, or written where the contract cannot read it; the diagnostics
+flags accepted; `.env.example` assigning the token, the guide naming another version, the notes losing
+their limitations, a Linux job on `ubuntu-latest`, an event left undocumented; a fault or evidence log
+without the exchange id; and the derived label, the phase origins, and the lost-evidence notice removed
+from the dashboard. One defect was not caught — removing the catalogue reader's catch for the whole
+body — and inspection showed nothing could reach that catch once each model's strings had their own, so
+it was removed and a test now holds that an undecodable name outside any model is ignored.
+
 ### Stage 1D, part 14: a runtime's error inside a success is the runtime's failure
 
 LM Studio, unable to render a chat template, answered `200` with one event carrying an error object.

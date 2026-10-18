@@ -176,12 +176,17 @@ public static class GatewayErrorCatalogue
     /// 401 rather than 404. Hiding the surface would be security through a fiction the OpenAPI draft
     /// publishes anyway, and it would leave an operator with a wrong token unable to tell a typo from
     /// a route that does not exist. The message names no configuration and echoes nothing presented.
+    ///
+    /// One constant for both reasons a call is refused, and true of both: a gateway with a token
+    /// configured requires it from every caller, loopback included, and one without serves loopback
+    /// only. The message used to name only the second, so a caller on loopback refused for a missing
+    /// token was told the opposite of why.
     /// </remarks>
     public static GatewayError AdministrationUnauthorized { get; } = GatewayError.Create(
         ErrorCodes.AdministrationUnauthorized,
         ErrorTypes.InvalidRequest,
         401,
-        "The administrative API requires a bearer token when reached from a non-loopback address.");
+        "The administrative API requires the administrative bearer token: from every caller when the gateway has one configured, and from any non-loopback caller when it has none.");
 
     /// <summary>The deployment retains nothing, so a read of stored evidence has no answer.</summary>
     /// <remarks>
@@ -218,6 +223,19 @@ public static class GatewayErrorCatalogue
         ErrorTypes.InvalidRequest,
         413,
         "The request body exceeds the configured maximum size.",
+        failureClass: FailureClass.InvalidRequest);
+
+    /// <summary>A completion request whose body was not declared as JSON.</summary>
+    /// <remarks>
+    /// 415 with the existing validation code, so a client's handling of invalid requests covers it.
+    /// A form or plain-text body is what a web page can send to the gateway from another site without
+    /// a preflight, and refusing it is what keeps such a page from running prompts unseen (ADR 0027).
+    /// </remarks>
+    public static GatewayError UnsupportedMediaType { get; } = GatewayError.Create(
+        ErrorCodes.InvalidRequest,
+        ErrorTypes.InvalidRequest,
+        415,
+        "The request body must be sent with Content-Type: application/json.",
         failureClass: FailureClass.InvalidRequest);
 
     /// <summary>Model resolution could not be attempted because no runtime could be consulted.</summary>

@@ -473,6 +473,11 @@ public sealed class ChatCompletionStreamingTests
             SseScript.Create().Data(ContentChunk).Data(UsageChunk).Done().Build());
 
         Assert.DoesNotContain(record.Measurements, m => m.Name == MeasurementNames.PromptThroughput);
+
+        // The half of the name the test used to leave unasserted.
+        var generation = Assert.Single(record.Measurements, m => m.Name == MeasurementNames.GenerationThroughput);
+        Assert.True(generation.Value > 0);
+
         Assert.Contains(record.Measurements, m => m.Name == MeasurementNames.ClientStreamEvents);
         Assert.Contains(record.Measurements, m => m.Name == MeasurementNames.TimeToFirstClientEvent);
     }

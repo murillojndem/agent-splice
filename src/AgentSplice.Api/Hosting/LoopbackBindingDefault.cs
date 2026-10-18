@@ -25,36 +25,60 @@ internal static class LoopbackBindingDefault
     private const string UrlsKey = "urls";
     private const string HttpPortsKey = "HTTP_PORTS";
     private const string HttpsPortsKey = "HTTPS_PORTS";
+    private const string KestrelEndpointsSection = "Kestrel:Endpoints";
+
+    /// <summary>
+    /// <c>ASPNETCORE_FORWARDEDHEADERS_ENABLED</c>, as host configuration carries it.
+    /// </summary>
+    private const string ForwardedHeadersKey = "FORWARDEDHEADERS_ENABLED";
 
     /// <summary>
     /// True when no binding has been configured by any means, so the loopback default applies.
     /// </summary>
+    /// <remarks>
+    /// <c>Kestrel:Endpoints</c> counts as configuration. Kestrel prefers its endpoints over any URL it
+    /// is given, so applying the default beside them binds nothing it names and only makes Kestrel log
+    /// that it overrode it.
+    /// </remarks>
     internal static bool ShouldApply(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
         return string.IsNullOrWhiteSpace(configuration[UrlsKey])
             && string.IsNullOrWhiteSpace(configuration[HttpPortsKey])
-            && string.IsNullOrWhiteSpace(configuration[HttpsPortsKey]);
+            && string.IsNullOrWhiteSpace(configuration[HttpsPortsKey])
+            && !KestrelEndpointUrls(configuration).Any();
     }
 
     /// <summary>
-    /// True when this host will listen somewhere a machine other than this one can reach.
+    /// True when this host will listen somewhere a machine other than this one can reach, or will
+    /// believe a caller about where it is.
     /// </summary>
     /// <remarks>
-    /// Read from the same three keys the default consults, because those are the ones that actually
-    /// decide where Kestrel binds. A bare port in HTTP_PORTS means every interface, and so does a
-    /// wildcard, <c>0.0.0.0</c>, or <c>[::]</c> in a URL — a container publishing a port produces
-    /// exactly that, which is why this has to be a decision an operator makes rather than one a
-    /// deployment falls into (FR-HEALTH-006, docs/SECURITY.md).
+    /// Read from every key that decides where Kestrel binds: <c>urls</c>, the port lists, and
+    /// <c>Kestrel:Endpoints</c>, which Kestrel prefers over the rest. A bare port means every
+    /// interface, and so does a wildcard, <c>0.0.0.0</c>, or <c>[::]</c> in a URL — a container
+    /// publishing a port produces exactly that, which is why this has to be a decision an operator
+    /// makes rather than one a deployment falls into (FR-HEALTH-006, docs/SECURITY.md). Reading only the
+    /// first three let a <c>Kestrel:Endpoints</c> URL on every interface start with no token.
     ///
-    /// Errs towards "reachable" for anything it cannot classify. A wrong answer in that direction
-    /// costs a startup failure naming the setting; the other direction costs an unauthenticated
-    /// administrative API on a network.
+    /// <c>ASPNETCORE_FORWARDEDHEADERS_ENABLED</c> counts as reachable too. It makes ASP.NET Core take a
+    /// caller's address from <c>X-Forwarded-For</c>, which any caller can send, so the per-request
+    /// loopback rule would serve whoever claims to be local; it exists for a gateway behind a proxy,
+    /// which is a gateway a network reaches.
+    ///
+    /// Errs towards "reachable" for anything it cannot classify, a Unix socket or a named pipe included.
+    /// A wrong answer in that direction costs a startup failure naming the setting; the other direction
+    /// costs an unauthenticated administrative API on a network.
     /// </remarks>
     internal static bool ListensBeyondLoopback(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
+
+        if (bool.TryParse(configuration[ForwardedHeadersKey], out var forwarded) && forwarded)
+        {
+            return true;
+        }
 
         if (ShouldApply(configuration))
         {
@@ -68,7 +92,11 @@ internal static class LoopbackBindingDefault
             return true;
         }
 
-        foreach (var url in (configuration[UrlsKey] ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries))
+        var urls = (configuration[UrlsKey] ?? string.Empty)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Concat(KestrelEndpointUrls(configuration));
+
+        foreach (var url in urls)
         {
             if (!IsLoopbackUrl(url.Trim()))
             {
@@ -78,6 +106,16 @@ internal static class LoopbackBindingDefault
 
         return false;
     }
+
+    /// <summary>The URL of every endpoint configured under <c>Kestrel:Endpoints</c>.</summary>
+    /// <remarks>
+    /// An endpoint with no URL is still an endpoint Kestrel will try to bind, and one that cannot be
+    /// classified, so it is returned as an empty URL, which the classification treats as reachable.
+    /// </remarks>
+    private static IEnumerable<string> KestrelEndpointUrls(IConfiguration configuration) =>
+        configuration.GetSection(KestrelEndpointsSection)
+            .GetChildren()
+            .Select(endpoint => endpoint["Url"] ?? string.Empty);
 
     private static bool IsLoopbackUrl(string url)
     {

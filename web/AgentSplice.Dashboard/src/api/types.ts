@@ -97,6 +97,8 @@ export interface SystemInfo {
   contentRetentionEnabled: boolean;
   metadataRetentionEnabled: boolean;
   telemetryExportEnabled: boolean;
+  /** Exchanges whose evidence never reached the store since the gateway started. Zero is a count. */
+  persistenceFailures?: { queueSaturated: number; writeFailed: number };
 }
 
 export interface RuntimeSummary {

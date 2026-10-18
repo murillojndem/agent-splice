@@ -77,12 +77,13 @@ public sealed class ModelListGateway
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // The message is never surfaced; only the fact and the correlation token are.
+            // The message is never surfaced, and the correlation token is not logged: it is the
+            // client's own x-request-id when it sent one, and a client may put anything there
+            // (docs/SECURITY.md "Trace safety"). The client still receives it, on the response.
             logger.LogError(
                 GatewayEventIds.ModelListFailed,
                 exception,
-                "Building the model list failed for request {RequestId}.",
-                requestId.Value);
+                "Building the model list failed.");
             return Failure(GatewayErrorCatalogue.For(FailureClass.InternalError), requestId);
         }
     }

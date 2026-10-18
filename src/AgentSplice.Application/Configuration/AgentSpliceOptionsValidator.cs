@@ -41,6 +41,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         ValidateCompatibility(options, failures);
         ValidateTelemetry(options, failures);
         ValidateDashboard(options, failures);
+        ValidateAdministration(options, failures);
 
         var enabledRuntimeIds = ValidateRuntimes(options, failures);
         ValidateAliases(options, enabledRuntimeIds.All, failures);
@@ -103,26 +104,23 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
     {
         var diagnostics = options.Diagnostics;
 
+        // Refused, not merely constrained, for the reason contentEnabled is: no code in this build
+        // stores a body or retains a header, so accepting either would tell an operator that
+        // something is kept which nothing keeps (ADR 0027).
+        if (diagnostics.StoreBodies)
+        {
+            failures.Add(
+                "agentsplice:diagnostics:storeBodies must be false. No code in this build stores a request or response body; enabling the flag would claim bodies are kept when nothing keeps them.");
+        }
+
         if (!Enum.IsDefined(diagnostics.StoreHeaders))
         {
             failures.Add("agentsplice:diagnostics:storeHeaders is not a recognised header capture mode.");
         }
-
-        if (diagnostics.StoreHeaders != HeaderCaptureMode.Allowlist)
+        else if (diagnostics.StoreHeaders != HeaderCaptureMode.None)
         {
-            return;
-        }
-
-        for (var index = 0; index < diagnostics.HeaderAllowlist.Count; index++)
-        {
-            if (string.IsNullOrWhiteSpace(diagnostics.HeaderAllowlist[index]))
-            {
-                failures.Add(
-                    string.Format(
-                        CultureInfo.InvariantCulture,
-                        "agentsplice:diagnostics:headerAllowlist[{0}] must not be blank.",
-                        index));
-            }
+            failures.Add(
+                "agentsplice:diagnostics:storeHeaders must be None. No code in this build retains a header; the request id and media type a record keeps are named fields, not captured headers.");
         }
     }
 
@@ -435,28 +433,49 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
     private static void ValidateRuntimeApiKeyReference(
         RuntimeEndpointOptions runtime,
         string prefix,
-        List<string> failures)
+        List<string> failures) =>
+        ValidateVariableName(runtime.ApiKeyEnvironmentVariable, prefix + ":apiKeyEnvironmentVariable", failures);
+
+    /// <summary>The administrative token's variable is held to the same rule as a runtime's.</summary>
+    /// <remarks>
+    /// It was not validated at all, so a token pasted there in place of a variable's name went
+    /// unnoticed until a network binding refused to start (FR-HEALTH-006).
+    /// </remarks>
+    private static void ValidateAdministration(AgentSpliceOptions options, List<string> failures) =>
+        ValidateVariableName(
+            options.Administration.ApiKeyEnvironmentVariable,
+            "agentsplice:administration:apiKeyEnvironmentVariable",
+            failures);
+
+    /// <summary>
+    /// A setting that names an environment variable must name one, and never says what it holds.
+    /// </summary>
+    /// <remarks>
+    /// The value is not repeated in the failure. These settings are where a key gets pasted by
+    /// mistake, and an error that quoted the setting printed the secret in the startup log, in the
+    /// one message the operator was sure to read (CLAUDE.md: keep raw credentials out of errors).
+    /// </remarks>
+    private static void ValidateVariableName(string? value, string setting, List<string> failures)
     {
-        if (runtime.ApiKeyEnvironmentVariable is null)
+        if (value is null)
         {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(runtime.ApiKeyEnvironmentVariable))
+        if (string.IsNullOrWhiteSpace(value))
         {
             failures.Add(
-                FormattableString.Invariant(
-                    $"{prefix}:apiKeyEnvironmentVariable must name an environment variable or be omitted."));
+                FormattableString.Invariant($"{setting} must name an environment variable or be omitted."));
             return;
         }
 
-        foreach (var character in runtime.ApiKeyEnvironmentVariable)
+        foreach (var character in value)
         {
             if (!char.IsAsciiLetterOrDigit(character) && character != '_')
             {
                 failures.Add(
                     FormattableString.Invariant(
-                        $"{prefix}:apiKeyEnvironmentVariable '{runtime.ApiKeyEnvironmentVariable}' is not a valid environment variable name. This setting holds a variable name, never the key itself."));
+                        $"{setting} is not a valid environment variable name; its value is not repeated here. This setting holds a variable name, never the key itself."));
                 return;
             }
         }

@@ -947,9 +947,6 @@ agentsplice:
     mode: sqlite
     # A relative Data Source resolves against the content root (ADR 0017).
     connectionString: Data Source=/data/agentsplice.db
-  diagnostics:
-    storeBodies: false
-    storeHeaders: allowlist
   compatibility:
     # transparent (default) forwards fields AgentSplice does not model and records their names;
     # strict rejects them. 'adapted' is a Stage 4 capability and is not accepted here.
@@ -1180,7 +1177,8 @@ These are engineering targets, not release claims, until benchmarks exist.
 ### 14.3 Security
 
 - Loopback binding by default.
-- Authentication required by default when binding to non-loopback interfaces.
+- The administrative token required for `/api/v1` when binding beyond loopback. `/v1` takes no credential on any binding, as an OpenAI-compatible endpoint for local clients does, and a gateway that listens beyond loopback says so at startup (ADR 0027).
+- Only the loopback host names served unless `AllowedHosts` names others, and a completion body accepted only when declared as JSON (ADR 0027).
 - Secrets excluded from logs and replay.
 - Request-body limits.
 - Header allowlists.
@@ -1291,7 +1289,7 @@ Metric and attribute conventions are normative in `docs/OBSERVABILITY.md`.
 ### 16.2 Default retention
 
 - Prompts and responses: not stored.
-- Headers: allowlisted metadata only.
+- Headers: none retained as headers in Stage 1. A record keeps the request id and the runtime's media type as named fields; `agentsplice:diagnostics:storeHeaders` and `storeBodies` are refused unless off until a stage implements them (ADR 0027).
 - Metrics: aggregated and bounded labels.
 - Request metadata: configurable short retention.
 - Replay artifacts: opt-in with explicit expiration.

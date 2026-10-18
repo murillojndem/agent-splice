@@ -41,6 +41,14 @@ internal static class ChatCompletionRequestScanner
             scan.Failure = ScanFailure.MalformedJson;
             return scan;
         }
+        catch (InvalidOperationException)
+        {
+            // A string the reader accepted and could not decode: an escaped lone surrogate in a
+            // property name, the model, or a role. The request cannot be read, which is the client's
+            // 400, and it used to escape as the gateway's 500.
+            scan.Failure = ScanFailure.MalformedJson;
+            return scan;
+        }
 
         return scan;
     }

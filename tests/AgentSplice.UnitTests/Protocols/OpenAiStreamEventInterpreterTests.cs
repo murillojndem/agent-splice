@@ -246,6 +246,41 @@ public sealed class OpenAiStreamEventInterpreterTests
         Assert.True(second.Usage.IsUnknown);
     }
 
+    [Theory]
+    [InlineData("reasoning_content")]
+    [InlineData("reasoning")]
+    public void A_reasoning_delta_is_the_first_semantic_output(string field)
+    {
+        // A reasoning model that streams its reasoning in a field of its own produces output from its
+        // first such delta. Waiting for content dated time to first token after the reasoning and
+        // divided every reported token by the answer's window alone — 3.7 times too fast in the
+        // verification that found it (ADR 0027).
+        var state = New();
+
+        var reasoning = Read(state, """{"choices":[{"index":0,"delta":{"FIELD":"Let me think."}}]}""".Replace("FIELD", field, StringComparison.Ordinal));
+        var answer = Read(state, """{"choices":[{"index":0,"delta":{"content":"42"}}]}""");
+
+        Assert.True(reasoning.IsFirstSemanticOutput);
+        Assert.False(answer.IsFirstSemanticOutput);
+    }
+
+    [Fact]
+    public void An_empty_reasoning_delta_is_not_semantic_output()
+    {
+        Assert.False(Interpret("""{"choices":[{"delta":{"reasoning_content":""}}]}""").IsFirstSemanticOutput);
+    }
+
+    [Theory]
+    [InlineData("""{"choices":[{"index":0,"finish_reason":"\ud800"}]}""")]
+    [InlineData("""{"choices":[{"index":0,"delta":{"content":"\udc00"}}]}""")]
+    public void A_string_that_cannot_be_decoded_is_a_malformed_event_rather_than_a_fault(string data)
+    {
+        // An escaped lone surrogate parses as JSON and cannot be read as text. It used to escape the
+        // interpreter, and the relay, as a gateway fault that abandoned a stream the client was
+        // receiving correctly.
+        Assert.True(Interpret(data).IsMalformed);
+    }
+
     [Fact]
     public void A_top_level_error_object_is_the_runtime_reporting_an_error()
     {

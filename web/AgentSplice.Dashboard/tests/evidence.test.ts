@@ -4,6 +4,7 @@ import {
   UNKNOWN,
   duration,
   measurement,
+  measurementProvenanceLabel,
   measurementValue,
   optional,
   provenanceLabel,
@@ -85,6 +86,21 @@ describe('provenance is carried through to the display', () => {
     expect(provenanceLabel('upstream_reported')).toBe('reported by runtime');
     expect(provenanceLabel('client_reported')).toBe('reported by client');
     expect(provenanceLabel('measured')).toBe('measured');
+  });
+
+  it('says a derived throughput was derived, not reported', () => {
+    // AgentSplice divides the tokens a runtime reported by a window it measured itself. Labelled
+    // "reported by runtime", the figure read as one the runtime produced (ADR 0027).
+    const throughput: Measurement = {
+      name: 'usage.generation.tokens_per_second',
+      value: 52.3,
+      unit: 'tokens_per_second',
+      provenance: 'upstream_reported',
+    };
+
+    expect(measurementProvenanceLabel(throughput)).toMatch(/^derived: /);
+    expect(measurementProvenanceLabel(throughput)).not.toBe('reported by runtime');
+    expect(measurementProvenanceLabel({ ...throughput, name: 'usage.prompt.tokens', unit: 'tokens' })).toBe('reported by runtime');
   });
 });
 

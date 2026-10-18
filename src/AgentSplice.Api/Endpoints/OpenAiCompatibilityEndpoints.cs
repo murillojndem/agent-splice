@@ -48,12 +48,29 @@ internal static class OpenAiCompatibilityEndpoints
     private static async Task CreateChatCompletionAsync(
         HttpContext context,
         [FromServices] ChatCompletionGateway gateway,
+        [FromServices] IChatCompletionRequestCodec requestCodec,
         [FromServices] IErrorEnvelopeWriter errorWriter,
         [FromServices] IOptions<AgentSpliceOptions> options,
         [FromServices] TimeProvider timeProvider)
     {
         var (requestId, _) = ClientRequestId.Resolve(context.Request.Headers[GatewayHeaderNames.ClientRequestId]);
         var cancellationToken = context.RequestAborted;
+
+        if (!requestCodec.AcceptsMediaType(context.Request.ContentType))
+        {
+            // Refused before the body is read, like an oversized one. Forms and plain text are what a
+            // page on another site can post here without asking first (ADR 0027).
+            await GatewayResponseWriter
+                .WriteErrorAsync(
+                    context,
+                    GatewayErrorCatalogue.UnsupportedMediaType,
+                    errorWriter,
+                    requestId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
+        }
 
         // Read here rather than in the application: this is the first instant AgentSplice can
         // observe, and the body read that follows is a phase of its own rather than part of

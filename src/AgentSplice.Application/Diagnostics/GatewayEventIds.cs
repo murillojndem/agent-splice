@@ -46,6 +46,9 @@ public static class GatewayEventIds
     /// <summary>The dashboard is enabled but no build was found; the message names where the gateway looked.</summary>
     public static EventId DashboardBuildMissing { get; } = new(1204, nameof(DashboardBuildMissing));
 
+    /// <summary>The gateway listens where a network can reach <c>/v1</c>, which authenticates no one.</summary>
+    public static EventId InferenceReachableBeyondLoopback { get; } = new(1205, nameof(InferenceReachableBeyondLoopback));
+
     /// <summary>The bounded metadata queue was full, so an exchange's evidence was dropped.</summary>
     public static EventId MetadataQueueSaturated { get; } = new(1301, nameof(MetadataQueueSaturated));
 

@@ -414,7 +414,7 @@ than repeating them (ADR 0021). `WindowsPackageContractTests` became `SelfContai
 - the release takes that artifact by ID and nothing else, verifies the digests before it creates the
   draft, checks every platform's archive, and creates the draft from what `SHA256SUMS` lists.
 
-What only the real package can prove is the CI `package-linux` job, on `ubuntu-latest`, running the same
+What only the real package can prove is the CI `package-linux` job, on `ubuntu-24.04`, running the same
 `smoke-package.ps1` the Windows job runs. It runs the installation guide's own `sha256sum` check, then
 reads the archive's listing before extracting it: every entry owned by 0:0, folders and the executable
 `rwxr-xr-x`, every other file `rw-r--r--`. Then it holds the Linux package to every check the Windows one
@@ -602,6 +602,38 @@ whose JSON is `{"error":{...}}`, closed without `[DONE]`, and the same object as
   through an `ActivityListener` in the test process, matched to the response by its trace id.
 - The dashboard's `outcome.test.tsx` renders the Exchanges list and an exchange's page through the real
   root with `fetch` stubbed, and reads the outcome pill and the response summary.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
+## Delivered by Stage 1D, part 15: what a local gateway exposes
+
+- `BrowserOriginTests` sends what a rebinding page and a cross-site form send: a foreign `Host` on
+  `/v1`, `/api/v1`, the probes, and the dashboard, refused with an empty `400` and logged where the
+  shipped configuration shows it; a name `AllowedHosts` allows, served; and completions sent as plain
+  text, a form, multipart, and with no type, each a `415` that reached no runtime and left no record,
+  beside the JSON forms that are forwarded.
+- `AdministrationAuthorizationTests` holds the guard to `Kestrel:Endpoints` and forwarded headers, and
+  its refusal to the setting's name rather than its value; `NetworkExposureNoticeTests` holds event
+  `1205` to a binding beyond loopback and its absence to the default.
+- `CredentialAndHeaderPolicyTests` pins the exact header set a runtime receives, and the trace context
+  in it to the gateway's own; `TelemetryExportTests` finds no exported span carrying the caller's
+  `tracestate`.
+- `LogRedactionTests` drives the two exception-logging paths — a provider that throws and a sink that
+  refuses its record — and requires each log record to name the exchange identifier the client was
+  given and no sentinel; the model list's fault log is searched for the client's request id.
+- Unit tests feed a lone surrogate escape to the request scanner, the stream interpreter, and the
+  response codec, and `ListModelsEndpointTests` to the catalogue reader; the validator's tests hold a
+  key pasted in place of a variable's name out of its message, and refuse the diagnostics flags.
+- `MetadataStoreTests` drops a table from a real store under the running gateway and reads the loss
+  back from `/api/v1/system`; the unit tests hold each reason's count.
+- Contract tests hold the Stage 2 operations' planned marker to `docs/API.md`, every response reference
+  to having no siblings, every path the dashboard's client requests to the OpenAPI document, every
+  event identifier to `docs/OBSERVABILITY.md`, the installation guide's version to the build's, the
+  release notes to their limitations and support date, `.env.example` to assigning no token, and every
+  Linux job to a pinned runner. `DiagnosticsApiTests` holds the planned operations to a `404`.
+- The dashboard's `screens.test.tsx` renders the overview — with and without lost evidence — and the
+  runtimes page through the real root with `fetch` stubbed; `evidence.test.ts` and
+  `waterfall.test.tsx` hold the derived label and each phase's origin.
 
 Each fails against its reintroduced defect, listed in the changelog.
 

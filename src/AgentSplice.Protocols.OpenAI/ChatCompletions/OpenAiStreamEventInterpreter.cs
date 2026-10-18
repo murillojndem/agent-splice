@@ -28,6 +28,9 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
     {
         private static ReadOnlySpan<byte> DoneSentinel => "[DONE]"u8;
 
+        /// <summary>The delta fields OpenAI-compatible runtimes stream reasoning in.</summary>
+        private static readonly string[] ReasoningFields = ["reasoning_content", "reasoning"];
+
         private readonly List<string> finishReasons = [];
         private int choiceCount;
         private int toolCallCount;
@@ -72,6 +75,14 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
             }
             catch (JsonException)
             {
+                return new StreamEventFacts { IsMalformed = true };
+            }
+            catch (InvalidOperationException)
+            {
+                // A string the reader accepted and could not decode, such as an escaped lone
+                // surrogate in a finish reason. Malformed, like any payload that cannot be read; it
+                // used to escape the relay as a gateway fault, abandoning a stream the client was
+                // receiving correctly.
                 return new StreamEventFacts { IsMalformed = true };
             }
         }
@@ -154,6 +165,21 @@ public sealed class OpenAiStreamEventInterpreter : IStreamEventInterpreter
                 && content.GetString() is { Length: > 0 })
             {
                 carriedOutput = true;
+            }
+
+            // Reasoning is model output too. A runtime that streams it in a field of its own —
+            // `reasoning_content`, or `reasoning` — dated the first semantic event at the first answer
+            // token while the reported completion tokens still counted the reasoning, so generation
+            // throughput was inflated and time to first token absorbed the reasoning (ADR 0027). Only
+            // whether the field carries text is read, as for content.
+            foreach (var field in ReasoningFields)
+            {
+                if (delta.TryGetProperty(field, out var reasoning)
+                    && reasoning.ValueKind == JsonValueKind.String
+                    && reasoning.GetString() is { Length: > 0 })
+                {
+                    carriedOutput = true;
+                }
             }
 
             if (!delta.TryGetProperty("tool_calls", out var toolCalls)

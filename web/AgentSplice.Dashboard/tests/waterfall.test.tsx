@@ -22,6 +22,15 @@ describe('the latency waterfall', () => {
     expect(screen.getByTestId('phase-value-Upstream connect')).toHaveTextContent('not observed');
   });
 
+  it('names where each phase is measured from', () => {
+    // The upstream rows start when the request to the runtime was opened and the output rows when the
+    // request was accepted. Drawn from one zero, the difference between them read as a gap it is not.
+    render(<Waterfall measurements={[measured('exchange.total.duration', 1000)]} />);
+
+    expect(screen.getByTestId('phase-origin-First upstream byte')).toHaveTextContent('since upstream request opened');
+    expect(screen.getByTestId('phase-origin-First output event')).toHaveTextContent('since request accepted');
+  });
+
   it('shows wall-clock time as the prominent figure', () => {
     render(<Waterfall measurements={[measured('exchange.total.duration', 47_000)]} />);
 

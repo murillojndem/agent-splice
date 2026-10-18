@@ -165,6 +165,14 @@ public sealed class ChatCompletionResponseCodecTests
     }
 
     [Fact]
+    public void A_string_that_cannot_be_decoded_costs_the_summary_and_nothing_else()
+    {
+        var facts = Read("""{"choices":[{"index":0,"finish_reason":"\ud800"}]}""");
+
+        Assert.False(facts.WasInterpretable);
+    }
+
+    [Fact]
     public void A_body_that_is_the_protocols_error_object_reports_an_error()
     {
         // The buffered form of the in-stream error: a 2xx body that is an error envelope. Relayed

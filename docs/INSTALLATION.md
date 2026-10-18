@@ -116,7 +116,8 @@ and start the stack:
 
 ```bash
 cp .env.example .env
-echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "AGENTSPLICE_ADMIN_API_KEY=$AGENTSPLICE_ADMIN_API_KEY" >> .env
 docker compose up --build --wait
 ```
 
@@ -125,13 +126,15 @@ In PowerShell:
 ```powershell
 Copy-Item .env.example .env
 $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-Add-Content .env ("AGENTSPLICE_ADMIN_API_KEY=" + (($bytes | ForEach-Object { $_.ToString('x2') }) -join ''))
+$env:AGENTSPLICE_ADMIN_API_KEY = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+Add-Content .env "AGENTSPLICE_ADMIN_API_KEY=$env:AGENTSPLICE_ADMIN_API_KEY"
 docker compose up --build --wait
 ```
 
 `--wait` returns once the image's own health check reports the gateway healthy (ADR 0016), and
-`docker compose ps` shows the status afterwards. Open `http://127.0.0.1:5280/` and paste the token from
-`.env` into the dashboard's token field; the page keeps it in memory only. Compose builds the image as
+`docker compose ps` shows the status afterwards. The token is in `.env`, where Compose reads it on every
+start, and in this shell, for calls to `/api/v1`. Open `http://127.0.0.1:5280/` and paste it into the
+dashboard's token field; the page keeps it in memory only. Compose builds the image as
 `agentsplice:dev` and never pulls it.
 
 **Reaching LM Studio.** The container reaches the host as `host.docker.internal`, and the Compose file
@@ -224,9 +227,11 @@ Open `http://127.0.0.1:5280/` for the dashboard and point clients at `http://127
 ### Administrative token
 
 With no token configured, the gateway serves its administrative API and dashboard data to any caller
-on this machine, and refuses to start on any binding another machine could reach. That is the
-default, and it leaves one documented gap: a web page you visit could use DNS rebinding to read the
-administrative API from your browser (`docs/THREAT_MODEL.md`). Setting a token closes it:
+on this machine — any program, any account signed in to it — and refuses to start on any binding
+another machine could reach. A web page you visit cannot use it: the gateway answers only requests
+addressed to `localhost`, `127.0.0.1`, or `[::1]`, which closes DNS rebinding
+(`docs/THREAT_MODEL.md`). Set a token when other accounts share the machine, or to close the stored
+evidence to every program that does not hold it:
 
 ```powershell
 $env:AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE = 'AGENTSPLICE_ADMIN_API_KEY'
@@ -267,8 +272,12 @@ one — and point the setting at it:
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\AgentSplice" | Out-Null
-[Environment]::SetEnvironmentVariable('AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING', "Data Source=$env:LOCALAPPDATA\AgentSplice\agentsplice.db", 'User')
+$env:AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING = "Data Source=$env:LOCALAPPDATA\AgentSplice\agentsplice.db"
+[Environment]::SetEnvironmentVariable('AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING', $env:AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING, 'User')
 ```
+
+A variable set for your account reaches windows opened after it, not the one that set it, so the first
+line sets it for this window too. The startup log names the store the gateway opened, as event `1305`.
 
 A relative path in that setting is resolved against the package folder. To back the store up, stop the
 gateway first, then copy `agentsplice.db`, and `agentsplice.db-wal` and `agentsplice.db-shm` if they
@@ -389,9 +398,9 @@ startup files.
 ## From source
 
 With the .NET 10 SDK installed (`docs/DEVELOPMENT.md` lists the prerequisites), from the repository
-root on Windows, Linux, or macOS:
+root on Windows, Linux, or macOS, in any shell:
 
-```powershell
+```text
 dotnet run --project src/AgentSplice.Api
 ```
 
@@ -409,8 +418,39 @@ Copy-Item -Recurse web/AgentSplice.Dashboard/dist out/dashboard
 Set-Location out; dotnet AgentSplice.Api.dll
 ```
 
+On Linux or macOS:
+
+```bash
+dotnet publish src/AgentSplice.Api -c Release -o out
+pnpm --dir web/AgentSplice.Dashboard install --frozen-lockfile
+pnpm --dir web/AgentSplice.Dashboard build
+cp -R web/AgentSplice.Dashboard/dist out/dashboard
+cd out && dotnet AgentSplice.Api.dll
+```
+
 Start it from inside `out`: unlike the packages, a framework-dependent build takes its content root from
 the working directory, as every ASP.NET Core application does.
+
+## Host names
+
+The gateway answers only requests addressed to `localhost`, `127.0.0.1`, or `[::1]`; any other name
+gets a `400` with no body, before anything answers (ADR 0027). That is what keeps a web page from
+pointing a domain of its own at `127.0.0.1` and reading the gateway from your browser. A client that
+reaches the gateway by another name — a Compose service name, `host.docker.internal` from another
+container, a LAN address, a reverse proxy's upstream name — needs that name in `AllowedHosts`,
+ASP.NET Core's own setting, as a semicolon-separated list without ports:
+
+```text
+--AllowedHosts="localhost;127.0.0.1;[::1];agentsplice"
+```
+
+or the environment variable `AllowedHosts` with the same value, passed to the container with
+`--env` under Docker. Naming hosts replaces the default list, so keep the loopback names you still use;
+`*` turns the check off and gives the rebinding read back. Each refusal is logged as
+`The host '…' does not match an allowed host.` (`NoAllowedHostMatched`), which names the host to add.
+
+A host name is not a network boundary: a binding beyond loopback still needs the administrative
+token, and `/v1` takes no credential on any binding (`docs/SECURITY.md`).
 
 ## Checking that it is up
 
@@ -435,7 +475,12 @@ curl.exe -i http://127.0.0.1:5280/health/live
 | `Permission denied` starting `AgentSplice.Api` on Linux | The archive was extracted with a tool that dropped the execute bit. Extract it with `tar -xzf`, which keeps it, or run `chmod +x AgentSplice.Api`. |
 | On Linux, `/api/v1` answers `401` with the token you set | The gateway did not see the variable: its name differs in case from the one `agentsplice:administration:apiKeyEnvironmentVariable` names, which on Linux must match exactly, or it was not exported in the shell that started the gateway. Export it, then start the gateway from that shell. |
 | `Failed to bind to address http://127.0.0.1:5280` | Something else is using the port. Stop it, or pass `--urls http://127.0.0.1:<another port>`. |
-| Startup refuses a binding beyond loopback | Serving stored evidence to a network requires an administrative token (`docs/SECURITY.md`). |
+| Startup refuses a binding beyond loopback | Serving stored evidence to a network requires an administrative token (`docs/SECURITY.md`). A `Kestrel:Endpoints` entry that is not loopback, a socket or pipe endpoint, and `FORWARDEDHEADERS_ENABLED` count as beyond loopback too. |
+| `1205 InferenceReachableBeyondLoopback` at startup | A warning, not a failure: the gateway listens beyond loopback, or trusts forwarded headers, and `/v1` authenticates no one, so anyone who can reach it can run completions on your runtime. The token protects `/api/v1` only. Bind to loopback, or put `/v1` behind an authenticating proxy. |
+| Every request answers `400` with no body | The client used a host name the gateway does not serve. See [Host names](#host-names); the log names the refused host. |
+| A completion answers `415` | The request did not say `Content-Type: application/json`. With `curl`, pass `-H "Content-Type: application/json"`; `-d` alone sends a form. |
+| Exchanges are missing from the dashboard and `/api/v1/exchanges` | The store is refusing writes, or the metadata queue overflowed. The overview says how many exchanges were lost since the gateway started (`persistenceFailures` in `/api/v1/system`), and the log has an event `1302` for each failed write and `1301` for each overflow. Client responses are not affected. |
+| Startup fails with `agentsplice:diagnostics:storeHeaders must be None` or `storeBodies must be false` | A configuration carried over from an earlier build turns on a capture this build does not have. Remove the setting (ADR 0027). |
 | The container exits at once, and `docker logs agentsplice` says the variable `AGENTSPLICE_ADMIN_API_KEY` is unset or empty | Docker set nothing, because the variable was not exported in the shell that ran `docker run`, or `sudo` cleared it. Export it, `docker rm agentsplice`, and run the same command again ([Published image](#published-image)). |
 | A setting seems to be ignored | Environment variables use double underscores (`AGENTSPLICE__PERSISTENCE__MODE`), and a command-line argument wins over both a variable and `appsettings.json`. |
 | Requests fail with `agentsplice_runtime_unavailable` | The runtime is not listening where the gateway was told. Check that its server is started and the URL, including `/v1`. |

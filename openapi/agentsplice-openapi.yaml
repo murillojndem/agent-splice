@@ -346,7 +346,10 @@ paths:
       operationId: createReplayArtifact
       security:
         - AdministrationBearer: []
-      description: Stage 2 endpoint. Creates a sanitized immutable artifact.
+      x-agentsplice-planned: true
+      description: >-
+        Planned for Stage 2 and not served by this build, which answers 404. Will create a sanitized,
+        immutable replay artifact from a stored exchange (docs/REPLAY.md).
       requestBody:
         required: true
         content:
@@ -360,15 +363,14 @@ paths:
       responses:
         '202':
           description: Artifact creation accepted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationAccepted'
         '400':
           $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/v1/conformance/runs:
     post:
@@ -376,7 +378,10 @@ paths:
       operationId: startConformanceRun
       security:
         - AdministrationBearer: []
-      description: Stage 2 endpoint.
+      x-agentsplice-planned: true
+      description: >-
+        Planned for Stage 2 and not served by this build, which answers 404. Will start a conformance
+        run against a configured target (docs/CONFORMANCE.md).
       requestBody:
         required: true
         content:
@@ -391,13 +396,12 @@ paths:
       responses:
         '202':
           description: Run accepted
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OperationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
 security: []
 
@@ -600,6 +604,16 @@ components:
             Whether spans and metrics are exported over OTLP. The destination is deliberately not
             reported; that telemetry leaves the process at all is what a reviewer of the deployment
             needs to know.
+        persistenceFailures:
+          type: object
+          required: [queueSaturated, writeFailed]
+          description: >-
+            Exchanges whose evidence never reached the store since the gateway started, by reason:
+            the metadata queue was full, or the store rejected the batch. Zero means nothing was
+            lost. The same counts reach agentsplice.persistence.failures only when export is on.
+          properties:
+            queueSaturated: { type: integer, minimum: 0 }
+            writeFailed: { type: integer, minimum: 0 }
 
     Readiness:
       type: object

@@ -3,7 +3,14 @@
 ## Defaults
 
 - Listen on loopback unless explicitly configured otherwise. The default is applied as a fallback when no binding is configured, so that `ASPNETCORE_URLS` and container port settings still take effect. In a container the process binds the container interface and the operator maps the published port to loopback on the host; see ADR 0007.
-- Require authentication when listening on a non-loopback address.
+- Require the administrative token for `/api/v1` when listening beyond loopback. `/v1`
+  authenticates no one on any binding, as an OpenAI-compatible endpoint for local clients does, so a
+  gateway a network can reach runs completions on the configured runtimes for whoever reaches it, and
+  adds their exchanges to the store. Startup says so as event `1205` (ADR 0027).
+- Serve only requests addressed to `localhost`, `127.0.0.1` or `[::1]` unless `AllowedHosts` names
+  others, and refuse a completion body not declared as `application/json`. The first closes DNS
+  rebinding, the second the form a page on another site can post without a preflight (ADR 0027,
+  docs/THREAT_MODEL.md "Browser-originated requests").
 - Do not store request or response bodies by default.
 - Do not log authorization headers, prompts, source code, tool arguments, or model output.
 - Do not execute tools in the core gateway or replay subsystem.
@@ -83,15 +90,21 @@ starts them, from a folder that user extracted:
 
 ## Authentication
 
-Stage 1 supports a static bearer token for the administrative API. Only a secret reference is stored:
-`agentsplice:administration:apiKeyEnvironmentVariable` holds the *name* of an environment variable.
-Future deployments may add OIDC, but OIDC is not required for the first alpha.
+Stage 1 supports a static bearer token for the administrative API, `/api/v1`, and for nothing else:
+`/v1` and the health probes take no credential. Only a secret reference is stored:
+`agentsplice:administration:apiKeyEnvironmentVariable` holds the *name* of an environment variable,
+and neither startup nor the validator ever repeats that setting's value, so a token pasted into it by
+mistake stays out of logs (ADR 0027). Future deployments may add OIDC, but OIDC is not required for the
+first alpha.
 
 The rule is chosen by whether a token is configured, and there is deliberately no middle setting:
 
 - **A token is configured.** Every `/api/v1` request carries it, including one arriving from loopback.
 - **No token is configured.** Only loopback is served, and startup refuses a binding a network can
-  reach, so this case cannot be combined with exposure by forgetting.
+  reach, so this case cannot be combined with exposure by forgetting. A binding counts as reachable
+  when `urls`, `ASPNETCORE_URLS` or a `Kestrel:Endpoints` entry names anything but a loopback
+  address — an endpoint with no URL, a socket and a pipe included — and when
+  `FORWARDEDHEADERS_ENABLED` is set, because a proxy in front makes every caller look local.
 
 A loopback remote address is not evidence of a local caller. A reverse proxy on the same host connects
 to Kestrel from `127.0.0.1`, so a relayed external request is indistinguishable from a local one at
@@ -166,6 +179,9 @@ Sanitization occurs before persistence, not after.
   `OTEL_EXPORTER_OTLP_HEADERS`, which the SDK reads and AgentSplice neither stores nor logs. Exported
   spans and metrics carry the bounded attributes of `docs/OBSERVABILITY.md` and nothing a client or
   model chose; logs are not exported.
+- Trace context carries nothing a client chose. The exchange span continues the caller's trace id but
+  does not inherit its `tracestate`, and a runtime receives the gateway's own `traceparent` and no
+  `tracestate` or `baggage` (ADR 0027).
 - Errors must not expose upstream credentials, connection strings, or raw response bodies.
 - Unknown values remain unknown rather than being derived from sensitive content without policy.
 

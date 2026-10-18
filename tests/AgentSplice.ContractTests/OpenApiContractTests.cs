@@ -5,6 +5,7 @@ using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Runtimes;
 using AgentSplice.TestSupport;
 using Xunit;
+using YamlDotNet.RepresentationModel;
 
 namespace AgentSplice.ContractTests;
 
@@ -21,6 +22,7 @@ public sealed class OpenApiContractTests
 {
     private const string Stage1AdministrativeHeading = "## Stage 1 administrative endpoints";
     private const string Stage2Heading = "## Stage 2 replay and conformance endpoints";
+    private const string Stage3Heading = "## Stage 3 evaluation endpoints";
 
     [Fact]
     public void The_openai_compatibility_endpoints_are_declared()
@@ -63,7 +65,7 @@ public sealed class OpenApiContractTests
             foreach (var request in MarkdownLists.HttpBlockRequests(
                 ApiDocument(),
                 heading,
-                heading == Stage1AdministrativeHeading ? Stage2Heading : "## Stage 3 evaluation endpoints"))
+                heading == Stage1AdministrativeHeading ? Stage2Heading : Stage3Heading))
             {
                 documented.Add(NormalisePathParameters(request.Path));
             }
@@ -79,6 +81,52 @@ public sealed class OpenApiContractTests
         Assert.True(
             undocumented.Length == 0,
             "The OpenAPI draft declares undocumented administrative endpoints: " + string.Join(", ", undocumented));
+    }
+
+    [Fact]
+    public void Exactly_the_stage_2_operations_are_marked_planned()
+    {
+        // This build answers 404 for them. Unmarked, they read as served to anyone generating a
+        // client from the document (ADR 0027).
+        var stage2 = MarkdownLists
+            .HttpBlockRequests(ApiDocument(), Stage2Heading, Stage3Heading)
+            .Select(request => NormalisePathParameters(request.Path))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.NotEmpty(stage2);
+
+        var document = OpenApiDocument.Load();
+
+        foreach (var path in document.Paths())
+        {
+            foreach (var (verb, operation) in document.Operations(path))
+            {
+                Assert.True(
+                    OpenApiDocument.IsPlanned(operation) == stage2.Contains(NormalisePathParameters(path)),
+                    FormattableString.Invariant($"{verb} {path} must be marked x-agentsplice-planned exactly when docs/API.md lists it under Stage 2."));
+            }
+        }
+    }
+
+    [Fact]
+    public void No_response_reference_carries_keys_a_reader_would_ignore()
+    {
+        // A $ref response object takes no siblings. Two Stage 2 operations once declared their 202
+        // body under the 401 reference beside it, so the body was described nowhere a reader looks.
+        var document = OpenApiDocument.Load();
+
+        foreach (var path in document.Paths())
+        {
+            foreach (var (verb, operation) in document.Operations(path))
+            {
+                foreach (var (status, response) in OpenApiDocument.Responses(operation))
+                {
+                    Assert.False(
+                        response.Children.ContainsKey(new YamlScalarNode("$ref")) && response.Children.Count > 1,
+                        FormattableString.Invariant($"{verb} {path} {status} is a reference with sibling keys."));
+                }
+            }
+        }
     }
 
     [Fact]

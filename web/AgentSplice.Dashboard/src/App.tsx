@@ -72,7 +72,10 @@ function TokenField() {
         <input
           type="password"
           value={value}
-          placeholder={applied ? 'set for this tab' : 'not required from loopback'}
+          // Neutral on purpose. A gateway with a token configured requires it from loopback too, and
+          // Docker deployments always have one, so "not required from loopback" was wrong exactly
+          // where the notice beside it said a token was required.
+          placeholder={applied ? 'set for this tab' : 'required if the gateway has one'}
           onChange={(event) => setValue(event.target.value)}
           autoComplete="off"
         />

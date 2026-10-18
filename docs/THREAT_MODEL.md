@@ -35,7 +35,9 @@
 
 Threat: service bound to LAN/internet without adequate authentication.
 
-Mitigations: loopback default, startup refusal/warning for unsafe bind, authentication, rate limits, audit metadata, separate administration authorization.
+Mitigations: loopback default; startup refuses a reachable binding without an administrative token, and counts `Kestrel:Endpoints` and `FORWARDEDHEADERS_ENABLED` as reachable; the token protects `/api/v1` from every caller once configured; concurrency limits.
+
+Residual: `/v1` authenticates no one on any binding, as an OpenAI-compatible endpoint for local clients does, so a gateway a network can reach runs completions on the configured runtimes for whoever reaches it, and adds their exchanges to the store. Startup says so as event `1205` at Warning, and a deployment that needs `/v1` closed puts it behind its own authenticating proxy (ADR 0027).
 
 ### Credential confusion
 
@@ -119,9 +121,9 @@ Mitigations: `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every dashb
 
 ### Cross-origin requests to a loopback gateway
 
-Threat: a web page the operator visits sends requests to a gateway on `127.0.0.1`. With no administrative token configured, loopback callers are served, so DNS rebinding — a hostile hostname re-resolved to `127.0.0.1` — makes the page same-origin with the gateway and lets it read `/api/v1`. Separately, the ingress does not require a JSON content type, so any page can send a cross-site "simple" `POST` to `/v1/chat/completions` that runs inference and is recorded as an exchange, though it cannot read the answer.
+Threat: a web page the operator visits sends requests to a gateway on `127.0.0.1`. DNS rebinding — a hostile hostname re-resolved to `127.0.0.1` — makes the page same-origin with the gateway, so it could read `/v1`, and `/api/v1` when no token is configured. Separately, any page can send a cross-site "simple" `POST` — plain text, a form, or a multipart body — without the browser asking first.
 
-Status: residual, and unchanged by serving the dashboard — an attacker needs only the API, which was reachable the same way before. Mitigations today: configuring an administrative token closes the rebinding read of `/api/v1`, and nothing reads a response cross-origin without CORS, which the gateway never sends. Follow-ups: a Host allowlist for the loopback default, and refusing completion requests that are not `application/json`.
+Status: closed for the default configuration (ADR 0027). When `AllowedHosts` is not set, only requests addressed to `localhost`, `127.0.0.1` and `[::1]` are served, and a rebinding page's requests carry its own domain as the `Host`, so they are refused with a `400` before anything answers; the refusal is logged as `NoAllowedHostMatched`. A completion body must be declared as `application/json`, which a page cannot send cross-site without a preflight that the gateway never answers with CORS headers; anything else is a `415`, forwarded nowhere and recorded nowhere. Residual: a deployment that sets `AllowedHosts` to `*`, or names a host a hostile page can resolve, gives the rebinding read back.
 
 The Windows and Linux packages run in exactly this configuration by default — loopback, no token — on the machine where their operator browses the web, so `docs/INSTALLATION.md` recommends setting a token and shows how (ADR 0017, ADR 0021).
 
@@ -183,16 +185,20 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 
 ## Security test cases
 
-- authorization and runtime secrets never appear in logs/traces/artifacts;
+Each case below says whether a test holds it today, so the list cannot be read as coverage it does not
+have.
+
+Held by a test that fails if it regresses:
+
+- authorization and runtime secrets never appear in logs or traces;
+- a setting that names an environment variable is never repeated in a startup error (ADR 0027);
 - nothing is exported unless OTLP export is explicitly enabled, and exported spans and metrics carry no content;
+- no span carries the caller's `tracestate`, and a runtime receives the gateway's `traceparent` and no `tracestate` or `baggage` (ADR 0027);
 - content retention remains off after upgrade;
-- arbitrary upstream/replay URL is rejected;
+- an arbitrary upstream URL is rejected;
 - giant or malformed SSE terminates safely;
-- known secret patterns are removed before replay persistence;
-- replay never invokes tools;
-- evaluation cannot modify host fixture source outside mounted workspace;
-- database failure does not leak connection strings;
-- dashboard encodes all content;
+- a request addressed to a name other than `localhost`, `127.0.0.1` or `[::1]` is refused before anything answers, unless `AllowedHosts` names it (ADR 0027);
+- a completion body not declared as `application/json` is refused, forwarded nowhere, and recorded nowhere (ADR 0027);
 - every dashboard response carries a policy forbidding inline script, `eval`, cross-origin connections, and framing;
 - nothing outside the dashboard build directory, and no hidden file in it, is served;
 - serving the dashboard changes no answer outside `/dashboard`;
@@ -201,5 +207,18 @@ Mitigations: size/concurrency/retention limits, bounded queues, separate workers
 - each package writes nothing to the directory it is started from, and listens on loopback only;
 - the image reaches the registry only from a published, immutable release, by the one job of any workflow that may write packages, which installs nothing and never moves a tag;
 - a release is created only as a draft, only by the release workflow's `publish` job, and only after its digests verify;
-- adapter cannot activate outside declared constraints;
-- exported reports include provenance and omit secret values.
+- a dated trace report includes provenance and omits secret values.
+
+Stated, and not yet held by a dedicated test:
+
+- database failure does not leak connection strings — the failure is logged with its exception, and no test searches that text for the connection string;
+- the dashboard encodes all content — React renders strings as text and the policy forbids inline script, but no test renders hostile content.
+
+Later stages, with nothing to test yet:
+
+- an arbitrary replay URL is rejected;
+- known secret patterns are removed before replay persistence;
+- replay never invokes tools;
+- evaluation cannot modify host fixture source outside the mounted workspace;
+- an adapter cannot activate outside its declared constraints — today `agentsplice:adapters:enabled` is refused outright;
+- exported issue bundles include provenance and omit secret values.

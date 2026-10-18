@@ -2,30 +2,30 @@
 
 **Local agent interoperability, observability, and evaluation.**
 
-AgentSplice is a local-first platform for tracing, replaying, comparing, and evaluating interactions between AI-agent clients and model runtimes.
+AgentSplice is a local-first platform for tracing the interactions between AI-agent clients and model runtimes, built to grow into replaying, comparing, and evaluating them. Tracing is what it does today.
 
-It sits between clients such as OpenCode, Cline, Aider, IDE extensions, test harnesses, and automation scripts, and runtimes such as LM Studio, llama.cpp, Ollama, vLLM, SGLang, or other compatible services.
+It sits between clients such as OpenCode, Cline, Aider, IDE extensions, test harnesses, and automation scripts, and a model runtime. LM Studio is the runtime this build supports; llama.cpp, Ollama, vLLM, SGLang, and other compatible services are planned.
 
 ```text
 Agent client
   OpenCode / Cline / Aider / custom harness
           |
-          | OpenAI or Anthropic-compatible request
+          | OpenAI-compatible request (Anthropic: planned)
           v
 +------------------------------------------------+
 |                  AgentSplice                   |
 | trace capture and timeline reconstruction      |
-| protocol and tool-call conformance             |
-| sanitized replay and differential comparison  |
-| agent evaluation and regression testing        |
 | OpenTelemetry export and local dashboard       |
-| optional compatibility adapters                |
+| protocol and tool-call conformance   (planned) |
+| sanitized replay and comparison      (planned) |
+| agent evaluation and regression      (planned) |
+| optional compatibility adapters      (planned) |
 +------------------------------------------------+
           |
-          | transparent or explicitly adapted request
+          | transparent request (adapted: planned)
           v
 Model runtime
-  LM Studio / llama.cpp / Ollama / vLLM / SGLang
+  LM Studio   (llama.cpp / Ollama / vLLM / SGLang: planned)
 ```
 
 ## Quickstart
@@ -78,6 +78,10 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
 
 [Pointing a client at AgentSplice](docs/CLIENTS.md) explains each setting and what to do when a request
 fails.
+
+![A streamed exchange in the dashboard: where the time went, tokens, and the provenance of each measurement](docs/images/dashboard-exchange-stream.png)
+
+The dashboard on a streamed exchange, from synthetic data ([more screens](docs/images/README.md)).
 
 ## Why this project exists
 
@@ -135,7 +139,8 @@ found in three review passes over 1A and 1B are corrected in
 
 **Stage 1C — Metadata persistence, administrative APIs, and the minimal dashboard is complete.**
 Exchanges are written to a local SQLite store through a bounded queue and a background writer, swept
-by retention, and served by the authenticated `/api/v1` surface and the dashboard that reads it;
+by retention, and served by the `/api/v1` surface and the dashboard that reads it — to every caller
+holding the administrative token once one is configured, and to loopback callers alone when none is;
 `agentsplice:persistence:mode: None` keeps purely ephemeral operation available.
 
 **Stage 1D — Local packaging and first public alpha is in progress.** The OpenTelemetry SDK now
@@ -217,9 +222,10 @@ The dashboard is served by the gateway at `http://127.0.0.1:5280/dashboard/`, an
 
 ```bash
 cp .env.example .env
-echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "AGENTSPLICE_ADMIN_API_KEY=$AGENTSPLICE_ADMIN_API_KEY" >> .env
 docker compose up --build --wait
-# open http://127.0.0.1:5280/ and paste the token from .env into the dashboard's token field
+# open http://127.0.0.1:5280/ and paste the token into the dashboard's token field
 ```
 
 The same in PowerShell:
@@ -227,7 +233,8 @@ The same in PowerShell:
 ```powershell
 Copy-Item .env.example .env
 $bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-Add-Content .env ("AGENTSPLICE_ADMIN_API_KEY=" + (($bytes | ForEach-Object { $_.ToString('x2') }) -join ''))
+$env:AGENTSPLICE_ADMIN_API_KEY = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
+Add-Content .env "AGENTSPLICE_ADMIN_API_KEY=$env:AGENTSPLICE_ADMIN_API_KEY"
 docker compose up --build --wait
 ```
 

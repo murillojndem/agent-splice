@@ -28,7 +28,7 @@ jobs:
     # and what /api/v1/system reports are one value. A tag that disagrees stops here, before anything
     # is built.
     name: version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -77,7 +77,7 @@ jobs:
     # re-uploaded under the same name is never what it publishes.
     name: publish
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -127,6 +127,18 @@ jobs:
           **Checking a download.** \`SHA256SUMS\` lists every asset's SHA-256 digest; check the one you downloaded against its line before extracting it, as docs/INSTALLATION.md shows. GitHub shows each asset's digest too.
 
           **Docker.** Publishing this release pushes the image to \`ghcr.io/${GITHUB_REPOSITORY,,}:$version\`, for linux/amd64, and adds its digest to these notes. \`agentsplice-$version-image-linux-amd64.tar.gz\` is the same image, for a machine without registry access: check it against \`SHA256SUMS\`, then \`docker load --input\` it. See docs/INSTALLATION.md.
+
+          **.NET.** The packages carry .NET 10, which Microsoft supports until November 14, 2028, and the image is built on it. Windows Update and .NET installers never patch a package: upgrading AgentSplice is how it receives .NET security fixes.
+
+          **Known limitations.**
+
+          - Only \`GET /v1/models\` and \`POST /v1/chat/completions\` are served, and LM Studio is the only runtime provider. The image is linux/amd64 only; the packages are win-x64 and linux-x64.
+          - \`/v1\` takes no credential. Any program on the machine can run completions through the gateway, and a gateway bound beyond loopback serves whoever reaches it; startup says so as event 1205. The administrative token protects \`/api/v1\` only.
+          - The packages configure no administrative token, so every account on the machine can read the stored trace metadata through \`/api/v1\` until one is set (docs/INSTALLATION.md).
+          - A client that reaches the gateway by a name other than \`localhost\`, \`127.0.0.1\`, or \`[::1]\` gets \`400\` until that name is in \`AllowedHosts\`.
+          - Nothing is signed. \`SHA256SUMS\` proves a download is intact, not who built it, and Smart App Control can block the Windows package with no way to allow it.
+          - A failing OTLP export is not reported in the gateway's log (docs/OBSERVABILITY.md).
+          - The dashboard keeps the administrative token in memory for one tab.
 
           What changed is in CHANGELOG.md at this tag.
           EOF

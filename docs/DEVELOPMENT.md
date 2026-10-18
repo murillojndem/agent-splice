@@ -134,8 +134,9 @@ Compose requires an administrative token and refuses to start without one:
 
 ```bash
 cp .env.example .env
-# choose your own value and put it in .env
-echo "AGENTSPLICE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> .env
+# your own value, in this shell for the calls below and in .env for Compose
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "AGENTSPLICE_ADMIN_API_KEY=$AGENTSPLICE_ADMIN_API_KEY" >> .env
 docker compose up --build --wait
 ```
 
@@ -264,8 +265,12 @@ A release is a tag, what the tag produces is a draft for a maintainer to review,
 the draft pushes the image (ADR 0018, ADR 0022):
 
 1. Set the version in `Directory.Build.props` (`VersionPrefix` and `VersionSuffix`) and the same value
-   in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ. Move the
-   `Unreleased` entries in `CHANGELOG.md` under a heading for the version.
+   in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ, and another if
+   `docs/INSTALLATION.md` names another. Move the `Unreleased` entries in `CHANGELOG.md` under a
+   heading for the version, `## <version> — <date>`; no test checks that move, so read the heading
+   against the tag. Leave the current stage `in progress` in `docs/ROADMAP.md`: the release is part of
+   the stage, `ImplementedStageContractTests` requires the stage the build reports to be the one the
+   roadmap marks in progress, and marking it complete is a commit of its own after the release.
 2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
    the tag. Tag only a reviewed commit on `main`: a tag runs the workflows of the commit it names, as they
    are there, with whatever permissions they ask for. Release immutability is on, so a tag whose release

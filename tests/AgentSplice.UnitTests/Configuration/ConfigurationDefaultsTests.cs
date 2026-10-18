@@ -29,20 +29,9 @@ public sealed class ConfigurationDefaultsTests
     }
 
     [Fact]
-    public void Headers_are_captured_by_allowlist_by_default()
+    public void No_header_is_retained_by_default()
     {
-        Assert.Equal(HeaderCaptureMode.Allowlist, new DiagnosticsOptions().StoreHeaders);
-    }
-
-    [Fact]
-    public void The_default_header_allowlist_contains_no_credential_bearing_header()
-    {
-        string[] credentialHeaders = ["authorization", "cookie", "set-cookie", "proxy-authorization", "api-key"];
-
-        foreach (var header in new DiagnosticsOptions().HeaderAllowlist)
-        {
-            Assert.DoesNotContain(header.ToLowerInvariant(), credentialHeaders);
-        }
+        Assert.Equal(HeaderCaptureMode.None, new DiagnosticsOptions().StoreHeaders);
     }
 
     [Fact]

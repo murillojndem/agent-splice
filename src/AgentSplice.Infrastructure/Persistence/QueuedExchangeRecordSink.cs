@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using AgentSplice.Application.Administration;
 using AgentSplice.Application.Configuration;
 using AgentSplice.Application.Diagnostics;
 using AgentSplice.Application.Exchanges;
@@ -38,6 +39,7 @@ public sealed class QueuedExchangeRecordSink : IExchangeRecordSink
     private readonly Channel<QueuedExchangeRecord> channel;
     private readonly TimeProvider timeProvider;
     private readonly IExchangeTelemetry telemetry;
+    private readonly PersistenceFailureCounts failures;
     private readonly ILogger<QueuedExchangeRecordSink> logger;
 
     /// <summary>Creates the sink and its bounded queue.</summary>
@@ -45,15 +47,18 @@ public sealed class QueuedExchangeRecordSink : IExchangeRecordSink
         IOptions<AgentSpliceOptions> options,
         TimeProvider timeProvider,
         IExchangeTelemetry telemetry,
+        PersistenceFailureCounts failures,
         ILogger<QueuedExchangeRecordSink> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(telemetry);
+        ArgumentNullException.ThrowIfNull(failures);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.timeProvider = timeProvider;
         this.telemetry = telemetry;
+        this.failures = failures;
         this.logger = logger;
 
         channel = Channel.CreateBounded<QueuedExchangeRecord>(
@@ -85,6 +90,7 @@ public sealed class QueuedExchangeRecordSink : IExchangeRecordSink
         }
 
         telemetry.RecordPersistenceFailure(PersistenceFailureReason.QueueSaturated);
+        failures.Record(PersistenceFailureReason.QueueSaturated);
 
         // The exchange identifier, never the correlation token. PublicRequestId is whatever the
         // client put in x-request-id — up to 128 characters of printable ASCII it chose — so logging

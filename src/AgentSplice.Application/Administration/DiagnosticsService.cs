@@ -37,23 +37,27 @@ public sealed class DiagnosticsService
     private readonly ModelCatalogueService catalogue;
     private readonly IAdministrativeEnvelopeWriter writer;
     private readonly IOptions<AgentSpliceOptions> options;
+    private readonly PersistenceFailureCounts persistenceFailures;
 
     /// <summary>Creates the service.</summary>
     public DiagnosticsService(
         Runtimes.RuntimeRegistry runtimes,
         ModelCatalogueService catalogue,
         IAdministrativeEnvelopeWriter writer,
-        IOptions<AgentSpliceOptions> options)
+        IOptions<AgentSpliceOptions> options,
+        PersistenceFailureCounts persistenceFailures)
     {
         ArgumentNullException.ThrowIfNull(runtimes);
         ArgumentNullException.ThrowIfNull(catalogue);
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(persistenceFailures);
 
         this.runtimes = runtimes;
         this.catalogue = catalogue;
         this.writer = writer;
         this.options = options;
+        this.persistenceFailures = persistenceFailures;
     }
 
     /// <summary>Build and module information.</summary>
@@ -68,6 +72,11 @@ public sealed class DiagnosticsService
             MetadataRetentionEnabled = options.Value.Persistence.Mode != PersistenceMode.None
                 && options.Value.Capture.MetadataEnabled,
             TelemetryExportEnabled = options.Value.Telemetry.Otlp.Enabled,
+            PersistenceFailures = new PersistenceFailureCountsView
+            {
+                QueueSaturated = persistenceFailures.QueueSaturated,
+                WriteFailed = persistenceFailures.WriteFailed,
+            },
         };
 
         return GatewayResponse.Success(200, writer.MediaType, writer.Write(view), requestId);
