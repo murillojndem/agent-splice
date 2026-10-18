@@ -65,7 +65,14 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
 
             await response.StartAsync(cancellationToken).ConfigureAwait(false);
 
-            return ClientWriteResult.Written;
+            // StartAsync commits the headers to the output pipe; Kestrel sends them only when the pipe
+            // is flushed. Flushed here, so the moment this returns is the moment the client was sent
+            // its status, which is what the caller records it as (ADR 0025).
+            var flush = await response.BodyWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+
+            return flush.IsCanceled || flush.IsCompleted
+                ? ClientWriteResult.ClientGone
+                : ClientWriteResult.Written;
         }
         catch (Exception exception) when (exception is OperationCanceledException or IOException)
         {

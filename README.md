@@ -170,6 +170,10 @@ gateway recorded, what that showed, and no compatibility claim
 Every build, package, and image runs on .NET 10 LTS, supported until November 2028, rather than on
 .NET 8, whose support ends on November 10, 2026
 ([ADR 0024](docs/adr/0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md)).
+A stream's status is committed with the runtime's first byte, so a runtime that fails before it is
+answered with the gateway's `504` or `502` and every correlation header rather than a bare reset, and
+an exchange records an error code only when an envelope carrying it reached the client
+([ADR 0025](docs/adr/0025-stage-1d-a-stream-commits-with-its-first-byte.md)).
 Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
 belong to later milestones.
 

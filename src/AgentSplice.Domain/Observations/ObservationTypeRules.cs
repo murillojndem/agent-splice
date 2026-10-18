@@ -29,8 +29,13 @@ public static class ObservationTypeRules
         ObservationType.FirstSemanticEvent,
         ObservationType.FirstClientEventFlushed,
         ObservationType.UpstreamCompleted,
+        ObservationType.ClientResponseStarted,
         ObservationType.ClientCompleted,
         ObservationType.ClientCancelled,
+        ObservationType.ClientResponseAbandoned,
+
+        // One upstream request, so at most one way it failed.
+        ObservationType.UpstreamFailed,
     ];
 
     /// <summary>True when the boundary may appear at most once per exchange.</summary>

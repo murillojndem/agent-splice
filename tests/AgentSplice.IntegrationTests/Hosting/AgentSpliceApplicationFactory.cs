@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -30,12 +31,26 @@ internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Prog
     private readonly IReadOnlyDictionary<string, string?> overrides;
     private readonly Action<IServiceCollection>? configureServices;
 
+    /// <param name="overrides">Configuration applied over the shipped settings.</param>
+    /// <param name="configureServices">The few service substitutions a test genuinely needs.</param>
+    /// <param name="kestrel">
+    /// Host the gateway on a real Kestrel listener on the IPv4 loopback, on a port the system picks,
+    /// rather than in memory. The in-memory server sends a response's headers as soon as they are
+    /// committed and Kestrel sends them with the first body write, which is the difference ADR 0019
+    /// found and only a real listener can show (ADR 0025).
+    /// </param>
     internal AgentSpliceApplicationFactory(
         IReadOnlyDictionary<string, string?>? overrides = null,
-        Action<IServiceCollection>? configureServices = null)
+        Action<IServiceCollection>? configureServices = null,
+        bool kestrel = false)
     {
         this.overrides = overrides ?? new Dictionary<string, string?>(StringComparer.Ordinal);
         this.configureServices = configureServices;
+
+        if (kestrel)
+        {
+            UseKestrel(options => options.Listen(IPAddress.Loopback, 0));
+        }
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

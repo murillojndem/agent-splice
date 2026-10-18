@@ -174,10 +174,12 @@ The rest of the list below is not done.
   (done, ADR 0024);
 - close the streaming gap recorded in ADR 0019: a stream that times out or loses its runtime after the
   runtime's headers but before its first relayed byte must reach the client as more than a bare
-  connection reset — the first trace report met it in a real session;
-- record a runtime error that arrives inside a `200` stream as the failure it is, not as a completion,
-  and an exchange's error code only when an envelope carried it to the client (both found by the first
-  trace report);
+  connection reset — the first trace report met it in a real session (done, ADR 0025: the status is
+  committed with the first byte, and the failure is answered with the gateway's `504` or `502`);
+- record an exchange's error code only when an envelope carried it to the client (done, ADR 0025), and
+  every timeout phase and upstream failure on its timeline (done, ADR 0025);
+- record a runtime error that arrives inside a `200` stream as the failure it is, not as a completion
+  (found by the first trace report);
 - first dated trace report (done, ADR 0023);
 - documentation and demo capture.
 

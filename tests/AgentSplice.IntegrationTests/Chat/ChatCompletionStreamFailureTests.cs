@@ -2,9 +2,12 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using AgentSplice.Application.Exchanges;
+using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Exchanges;
+using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 using AgentSplice.IntegrationTests.Hosting;
+using AgentSplice.Protocols.OpenAI.ChatCompletions;
 using AgentSplice.TestSupport.FakeUpstream;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -132,7 +135,185 @@ public sealed class ChatCompletionStreamFailureTests
             Assert.Equal(ExchangeStatus.Failed, record.Exchange!.Status);
             Assert.Equal(StreamTermination.ConnectionLost, record.Exchange.StreamTermination);
             Assert.Equal(FailureClass.InvalidUpstreamResponse, record.Exchange.FailureClass);
+
+            // The client was mid-stream and got no envelope, so the record names no code it received
+            // and says the response was abandoned (ADR 0025).
+            AssertAbandoned(record);
+            Assert.Equal(
+                "connection.lost",
+                record.Observations.Single(o => o.Type == ObservationType.UpstreamFailed).Details.Values["upstream.stream"]);
         }
+    }
+
+    [Fact]
+    public async Task A_stream_that_stalls_before_its_first_byte_is_answered_with_a_gateway_timeout()
+    {
+        // LM Studio sends a stream's headers at once and its first byte only after the prompt is
+        // processed. A timeout in that window reached the client as a reset with no status and no
+        // correlation header, because its status had been committed and was not yet sent (ADR 0019).
+        // Committed at the first byte instead, the gateway can still say what happened (ADR 0025).
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            settings =>
+            {
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.300";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
+            },
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(20)));
+
+        using var response = await SendAsync(fixture);
+
+        Assert.Equal(HttpStatusCode.GatewayTimeout, response.StatusCode);
+        Assert.Equal("agentsplice_upstream_timeout", await ErrorCodeAsync(response));
+        AssertCorrelated(response);
+
+        // The runtime is told too: a stream nobody will read is not left generating.
+        await Assert.Single(fixture.Upstream.ReceivedRequests).WaitForAbortAsync(WaitBudget);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(ExchangeStatus.Failed, record.Exchange!.Status);
+        Assert.Equal(FailureClass.UpstreamTimeout, record.Exchange.FailureClass);
+
+        // The runtime did answer with a stream, and the record keeps saying how that stream ended.
+        Assert.True(record.Exchange.StreamedResponse);
+        Assert.Equal(StreamTermination.Timeout, record.Exchange.StreamTermination);
+
+        AssertDelivered(record, "agentsplice_upstream_timeout");
+        Assert.Equal(
+            nameof(TimeoutPhaseNames.IdleStream),
+            record.Observations.Single(o => o.Type == ObservationType.TimeoutFired).Details.Values["timeout.phase"]);
+    }
+
+    [Fact]
+    public async Task A_stream_whose_total_budget_elapses_before_its_first_byte_records_that_phase()
+    {
+        var record = await StreamAndRecordAsync(
+            UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(20)),
+            settings =>
+            {
+                // No phase may exceed the total, so all of them are as short as it is. The total was
+                // armed first, when the request was sent, so it is the one that elapses.
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:connect")] = "00:00:00.400";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.400";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.400";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:00.400";
+            });
+
+        AssertDelivered(record, "agentsplice_upstream_timeout");
+        Assert.Equal(
+            nameof(TimeoutPhaseNames.Total),
+            record.Observations.Single(o => o.Type == ObservationType.TimeoutFired).Details.Values["timeout.phase"]);
+    }
+
+    [Fact]
+    public async Task A_runtime_that_drops_before_its_first_byte_is_answered_with_a_bad_gateway()
+    {
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            configure: null,
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        // Held open before the reset, so the gateway has the runtime's headers when the connection
+        // drops. A reset hard on the heels of the headers can arrive first, and then the runtime was
+        // honestly never heard from at all.
+        fixture.Upstream.EnqueueFor("/v1/chat/completions", HeadersThenReset());
+
+        using var response = await SendAsync(fixture);
+
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal("agentsplice_invalid_upstream_response", await ErrorCodeAsync(response));
+        AssertCorrelated(response);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(StreamTermination.ConnectionLost, record.Exchange!.StreamTermination);
+        AssertDelivered(record, "agentsplice_invalid_upstream_response");
+        Assert.Equal(
+            "connection.lost",
+            record.Observations.Single(o => o.Type == ObservationType.UpstreamFailed).Details.Values["upstream.stream"]);
+    }
+
+    [Fact]
+    public async Task A_fault_after_the_response_started_abandons_it_without_an_envelope()
+    {
+        // A defect inside the gateway once the status is committed. Writing a 500 envelope then threw
+        // "headers are read-only" over the real cause, and the record kept an internal_error code no
+        // client ever received.
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            configure: null,
+            services =>
+            {
+                services.AddSingleton<IExchangeRecordSink>(sink);
+                services.AddSingleton<IStreamEventInterpreter>(new FaultingInterpreter());
+            });
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create().Data(ContentChunk).Data(ContentChunk).Done().Build());
+
+        Assert.False(await CompletesCleanlyAsync(fixture));
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.Equal(ExchangeStatus.Failed, record.Exchange!.Status);
+        Assert.Equal(FailureClass.InternalError, record.Exchange.FailureClass);
+        Assert.Equal(StreamTermination.Unknown, record.Exchange.StreamTermination);
+        AssertAbandoned(record);
+    }
+
+    [Fact]
+    public async Task An_ordinary_body_cut_off_in_answer_to_a_streaming_request_does_not_end_cleanly()
+    {
+        // The runtime ignored the streaming flag and then died mid-body. The started response used to
+        // end with a clean chunked close, handing the client truncated JSON that looked whole.
+        var gate = new UpstreamGate();
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            configure: null,
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            SseScript.Create()
+                .WithContentType("application/json")
+                .Raw("""{"id":"c1","choices":[""")
+                .Gate(gate)
+                .ClosePrematurely()
+                .Build());
+
+        using var response = await SendAsync(fixture);
+        using var stream = await response.Content.ReadAsStreamAsync();
+
+        var first = new byte[1];
+        Assert.Equal(1, await stream.ReadAsync(first));
+
+        await gate.WaitForReachedAsync(WaitBudget);
+        gate.Release();
+
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        {
+            var rest = new byte[4096];
+
+            while (await stream.ReadAsync(rest) > 0)
+            {
+            }
+        });
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.False(record.Exchange!.StreamedResponse);
+        Assert.Equal(FailureClass.InvalidUpstreamResponse, record.Exchange.FailureClass);
+        AssertAbandoned(record);
     }
 
     [Fact]
@@ -188,6 +369,9 @@ public sealed class ChatCompletionStreamFailureTests
         var timeout = record.Observations.Single(o => o.Type == ObservationType.TimeoutFired);
 
         Assert.Equal(nameof(TimeoutPhaseNames.IdleStream), timeout.Details.Values["timeout.phase"]);
+
+        // Mid-stream, so abandoned: the timeout is recorded, and no code the client never received.
+        AssertAbandoned(record);
     }
 
     [Fact]
@@ -195,12 +379,16 @@ public sealed class ChatCompletionStreamFailureTests
     {
         // Nothing has been committed yet, so this failure can still be expressed as a status the
         // client can act on rather than as an abandoned stream.
-        await using var fixture = await StartAsync(settings =>
-        {
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.300";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:10";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-        });
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(
+            settings =>
+            {
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.300";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:10";
+                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
+            },
+            services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",
@@ -210,6 +398,15 @@ public sealed class ChatCompletionStreamFailureTests
 
         Assert.Equal(HttpStatusCode.GatewayTimeout, response.StatusCode);
         Assert.Equal("agentsplice_upstream_timeout", await ErrorCodeAsync(response));
+
+        // FR-CHAT-008: the phase that elapsed is recorded here too, not only mid-stream.
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+
+        Assert.False(record.Exchange!.StreamedResponse);
+        AssertDelivered(record, "agentsplice_upstream_timeout");
+        Assert.Equal(
+            nameof(TimeoutPhaseNames.ResponseHeaders),
+            record.Observations.Single(o => o.Type == ObservationType.TimeoutFired).Details.Values["timeout.phase"]);
     }
 
     [Fact]
@@ -223,6 +420,7 @@ public sealed class ChatCompletionStreamFailureTests
 
         Assert.Equal(StreamTermination.LimitExceeded, record.Exchange!.StreamTermination);
         Assert.Equal(FailureClass.InvalidUpstreamStream, record.Exchange.FailureClass);
+        AssertAbandoned(record);
     }
 
     [Fact]
@@ -436,6 +634,65 @@ public sealed class ChatCompletionStreamFailureTests
         return document.RootElement.GetProperty("error").GetProperty("code").GetString();
     }
 
+    /// <summary>A runtime that sends a stream's headers and then drops the connection.</summary>
+    internal static UpstreamResponseScript HeadersThenReset() =>
+        SseScript.Create().WithTrailingDelay(TimeSpan.FromMilliseconds(300)).ClosePrematurely().Build();
+
+    /// <summary>The error envelope reached the client, and the record says so.</summary>
+    private static void AssertDelivered(ExchangeRecord record, string code)
+    {
+        Assert.Equal(code, record.Error?.Code);
+
+        var completed = record.Observations.Single(o => o.Type == ObservationType.ClientCompleted);
+
+        Assert.Equal("gateway_error", completed.Details.Values["client.response"]);
+        Assert.DoesNotContain(record.Observations, o => o.Type == ObservationType.ClientResponseAbandoned);
+    }
+
+    /// <summary>The started response was abandoned, so the record names no code the client never got.</summary>
+    private static void AssertAbandoned(ExchangeRecord record)
+    {
+        Assert.Null(record.Error);
+        Assert.Single(record.Observations, o => o.Type == ObservationType.ClientResponseAbandoned);
+        Assert.DoesNotContain(record.Observations, o => o.Type == ObservationType.ClientCompleted);
+    }
+
+    /// <summary>Every correlation header a completion's error envelope is entitled to.</summary>
+    private static void AssertCorrelated(HttpResponseMessage response)
+    {
+        Assert.True(response.Headers.Contains("x-agentsplice-request-id"));
+        Assert.True(response.Headers.Contains("x-agentsplice-exchange-id"));
+        Assert.True(response.Headers.Contains("x-agentsplice-trace-id"));
+        Assert.Equal(GatewayFixture.RuntimeId, response.Headers.GetValues("x-agentsplice-runtime").Single());
+    }
+
+    /// <summary>The real interpreter, except that reading an event throws.</summary>
+    /// <remarks>
+    /// Throws from inside the relay, after the first bytes were written, which is the one place a
+    /// gateway defect can surface once the client's status is committed.
+    /// </remarks>
+    private sealed class FaultingInterpreter : IStreamEventInterpreter
+    {
+        private readonly OpenAiStreamEventInterpreter inner = new();
+
+        public string StreamMediaType => inner.StreamMediaType;
+
+        public bool MatchesStreamMediaType(string? contentType) => inner.MatchesStreamMediaType(contentType);
+
+        public IStreamEventInterpreterState Begin() => new FaultingState(inner.Begin());
+
+        private sealed class FaultingState(IStreamEventInterpreterState state) : IStreamEventInterpreterState
+        {
+            public UsageObservation Usage => state.Usage;
+
+            public StreamEventFacts Interpret(ReadOnlySpan<byte> eventName, ReadOnlySpan<byte> data) =>
+                throw new InvalidOperationException("A fault inside the gateway, raised for the test.");
+
+            public StructuralResponseSummary Summarise(int responseBodyBytes, int streamEventCount) =>
+                state.Summarise(responseBodyBytes, streamEventCount);
+        }
+    }
+
     private static async Task<ExchangeRecord> StreamAndRecordAsync(
         UpstreamResponseScript script,
         Action<Dictionary<string, string?>>? configure = null)
@@ -495,5 +752,7 @@ public sealed class ChatCompletionStreamFailureTests
     private static class TimeoutPhaseNames
     {
         internal const string IdleStream = nameof(IdleStream);
+        internal const string ResponseHeaders = nameof(ResponseHeaders);
+        internal const string Total = nameof(Total);
     }
 }

@@ -347,6 +347,7 @@ as written in each shell, and that OpenCode reaches a model through the sample �
 a workstation against LM Studio, which makes no compatibility claim. So was a gap the in-process host
 cannot show, because it sends headers as soon as they are committed: under Kestrel, a stream that times
 out after the runtime's headers but before its first byte ends with no response at all (ADR 0019).
+ADR 0025 closed it, and `KestrelWireTests` now shows it on a real listener (part 13).
 
 ## Delivered by Stage 1D, part 7: the license and the reporting channel
 
@@ -553,6 +554,34 @@ The rest covers what .NET 10 changed in hosting, configuration, and Entity Frame
   their bounds.
 
 Each fails against its reintroduced defect, listed in the changelog.
+
+## Delivered by Stage 1D, part 13: a stream commits with its first byte
+
+`KestrelWireTests` hosts the gateway on a real Kestrel listener on the IPv4 loopback, on a port the
+system picks, through `WebApplicationFactory.UseKestrel`, new in .NET 10, and `StartServer`; the
+factory's `CreateClient` then talks to it over a socket. It is the only place a test sees what the
+in-process host hides — that Kestrel sends a started response's headers with its first body write — and
+it shows a stream stalled or dropped before its first byte answered with a `504` or `502` and its
+correlation headers, a successful stream byte for byte, a mid-stream stall still abandoned, and a client
+that hangs up on a large buffered answer recorded as cancelled. That last one reads the status line
+through a raw socket with a 4 KiB receive window: `HttpClient` reads ahead, and on the loopback the
+kernel's buffers hold all 32 MiB of the answer, so through it the write always finishes.
+
+The rest runs in process:
+
+- `ChatCompletionStreamFailureTests`: the same cases before the first byte, with what the record says —
+  the stream termination, the phase or the lost connection, the code, and a `client_completed` whose
+  `client.response` is `gateway_error` — and abandoned streams recording `client_response_abandoned` and
+  no code. A fault after the response started comes from an interpreter that throws once the first bytes
+  are written, the one place a gateway defect can surface then. A runtime that drops after its headers is
+  held open 300 ms first, because a reset hard on their heels can beat them to the gateway.
+- `FailureEvidenceTests`: the buffered path's phases, failures, and their details, the trace id of a
+  request refused before its model was known, and a client that leaves during model discovery.
+- `StreamRelayBoundaryTests` and `ExchangeRecorderTests`: when the response starts and the boundary that
+  says so, what is left unstarted, and how each ending is recorded.
+
+Each fails against its reintroduced defect, listed in the changelog, except where two guards cover one
+case; the changelog says which, and that the test fails with both removed.
 
 ## Testcontainers
 

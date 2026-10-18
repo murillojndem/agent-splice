@@ -10,6 +10,10 @@ namespace AgentSplice.Application.Exchanges;
 /// ends the stream with a recorded termination and no error, because the runtime answered and
 /// AgentSplice did not fail; a bound violation ends it with both, because AgentSplice stopped a
 /// response the client had already begun receiving.
+///
+/// <see cref="ResponseStarted"/> decides what the client can still be told. A failure before the
+/// runtime's first byte reaches a client whose response has not started, so the gateway answers it
+/// with an error envelope; after it, the response can only be abandoned (ADR 0025).
 /// </remarks>
 public sealed record StreamRelayOutcome
 {
@@ -19,13 +23,20 @@ public sealed record StreamRelayOutcome
     /// <summary>The failure to report, or <c>null</c> when AgentSplice did not fail.</summary>
     public GatewayError? Error { get; init; }
 
+    /// <summary>True once the client's status and headers were committed with the relayed answer.</summary>
+    public bool ResponseStarted { get; init; }
+
     /// <summary>The status relayed to the client.</summary>
     public required int StatusCode { get; init; }
 
     /// <summary>The media type relayed to the client.</summary>
     public required string MediaType { get; init; }
 
-    /// <summary>Bytes forwarded to the client.</summary>
+    /// <summary>Bytes of the runtime's answer handed to the client's connection.</summary>
+    /// <remarks>
+    /// Counted when each write returned, which is when the server accepted the bytes. An abandoned
+    /// response ends in a reset, which can discard the last of them before they reach the client.
+    /// </remarks>
     public long ClientBytes { get; init; }
 
     /// <summary>Events delivered to the client.</summary>

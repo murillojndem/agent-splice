@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 namespace AgentSplice.Application.Exchanges;
 
 /// <summary>
-/// The Stage 1A non-streaming request path (docs/ARCHITECTURE.md "Stage 1 primary request flow").
+/// The Stage 1 completion request path (docs/ARCHITECTURE.md "Stage 1 primary request flow").
 /// </summary>
 /// <remarks>
 /// The whole of the completion path lives here rather than in an endpoint, because an endpoint is
@@ -22,10 +22,17 @@ namespace AgentSplice.Application.Exchanges;
 /// The order of the first steps is deliberate: the structural summary is built <em>before</em>
 /// resolution, so a request that names an unknown model still leaves safe evidence of what arrived.
 /// Building it afterwards would lose that evidence in precisely the case an operator most needs it.
+///
+/// Every response is written here, through <see cref="IClientResponseSink"/>, and the exchange is
+/// recorded only after the write returned. Recording first dated the client's completion before the
+/// client had been sent anything, and recorded an error code for an envelope that might never be
+/// written (ADR 0025).
 /// </remarks>
 public sealed class ChatCompletionGateway
 {
     private const string JsonMediaType = "application/json";
+
+    private static readonly Dictionary<string, string> NoHeaders = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly IChatCompletionRequestCodec requestCodec;
     private readonly IChatCompletionResponseCodec responseCodec;
@@ -74,14 +81,15 @@ public sealed class ChatCompletionGateway
         this.logger = logger;
     }
 
-    /// <summary>Forwards a completion request and returns what the client should receive.</summary>
+    /// <summary>Forwards a completion request and writes the client's response.</summary>
     /// <param name="request">The request as the transport received it.</param>
     /// <param name="client">
-    /// The client half of the response. A streamed answer is written through this as it arrives, so
-    /// by the time an outcome exists the response is already complete on the wire.
+    /// The client half of the response. Everything the client receives is written through this — a
+    /// relayed answer as it arrives, or the gateway's own error envelope — so when this returns the
+    /// response is complete on the wire and the transport adds nothing.
     /// </param>
     /// <param name="cancellationToken">The client's token.</param>
-    public async Task<ChatCompletionOutcome> CompleteAsync(
+    public async Task CompleteAsync(
         ChatCompletionRequest request,
         IClientResponseSink client,
         CancellationToken cancellationToken)
@@ -101,12 +109,11 @@ public sealed class ChatCompletionGateway
 
         try
         {
-            return await RunAsync(request, recorder, client, request.AcceptedAt, cancellationToken)
-                .ConfigureAwait(false);
+            await RunAsync(request, recorder, client, request.AcceptedAt, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return await CancelAsync(recorder).ConfigureAwait(false);
+            await CancelAsync(recorder).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -118,19 +125,27 @@ public sealed class ChatCompletionGateway
                 "Completion exchange {ExchangeId} failed unexpectedly.",
                 recorder.ExchangeId.Value);
 
+            var internalError = GatewayErrorCatalogue.For(FailureClass.InternalError);
+
             if (client.HasStarted)
             {
-                // The status is already committed, so there is no envelope to send. Ending the
-                // response politely would let a fault look like a complete answer.
+                // The status is already committed, so there is no envelope to send and none to
+                // record. Ending the response politely would let a fault look like a complete answer,
+                // and writing an envelope now would throw over the top of the real cause.
                 client.Abort();
+
+                await AbandonAsync(recorder, internalError, AbandonedTermination(recorder))
+                    .ConfigureAwait(false);
+
+                return;
             }
 
-            return await FailAsync(recorder, GatewayErrorCatalogue.For(FailureClass.InternalError))
+            await FailAsync(recorder, client, internalError, runtime: null, termination: null, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
 
-    private async Task<ChatCompletionOutcome> RunAsync(
+    private async Task RunAsync(
         ChatCompletionRequest request,
         ExchangeRecorder recorder,
         IClientResponseSink client,
@@ -143,7 +158,10 @@ public sealed class ChatCompletionGateway
         {
             // No exchange exists: CompletionExchange.Accept requires a valid model, and inventing a
             // placeholder to satisfy it would fabricate evidence (ADR 0008).
-            return await FailAsync(recorder, read.Error!).ConfigureAwait(false);
+            await FailAsync(recorder, client, read.Error!, runtime: null, termination: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
         }
 
         var envelope = read.Envelope!;
@@ -157,7 +175,19 @@ public sealed class ChatCompletionGateway
 
         if (!resolution.Succeeded)
         {
-            return await FailAsync(recorder, Unresolved(resolution.Failure)).ConfigureAwait(false);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // The client left while its model was being looked up, and the lookup it abandoned
+                // says nothing about the runtime. Recording it as an outage would blame a runtime for
+                // a disconnect, and an envelope written now would reach nobody.
+                await CancelAsync(recorder).ConfigureAwait(false);
+                return;
+            }
+
+            await FailAsync(recorder, client, Unresolved(resolution.Failure), runtime: null, termination: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
         }
 
         recorder.Observe(ObservationType.ModelResolved, resolution.Details);
@@ -167,19 +197,29 @@ public sealed class ChatCompletionGateway
 
         if (providers.Find(target) is not { } provider)
         {
-            return await FailAsync(
+            await FailAsync(
                 recorder,
+                client,
                 GatewayErrorCatalogue.For(FailureClass.RuntimeNotFound),
-                target.Id).ConfigureAwait(false);
+                target.Id,
+                termination: null,
+                cancellationToken).ConfigureAwait(false);
+
+            return;
         }
 
         var body = Forwardable(request, recorder, envelope, resolution);
 
-        return envelope.StreamRequested
-            ? await StreamAsync(recorder, provider, target, body, client, request.RequestId, cancellationToken)
-                .ConfigureAwait(false)
-            : await ForwardAsync(recorder, provider, target, body, request.RequestId, cancellationToken)
+        if (envelope.StreamRequested)
+        {
+            await StreamAsync(recorder, provider, target, body, client, request.RequestId, cancellationToken)
                 .ConfigureAwait(false);
+        }
+        else
+        {
+            await ForwardAsync(recorder, provider, target, body, client, request.RequestId, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -223,11 +263,11 @@ public sealed class ChatCompletionGateway
     /// <remarks>
     /// Separate from <see cref="ForwardAsync"/> rather than a flag inside it, because the two differ
     /// in when the response becomes unchangeable. The buffered path can still decide to answer with
-    /// an error after the runtime has replied; this one commits a status line before the first body
-    /// byte exists, and everything after that has to be expressed inside the stream or by abandoning
-    /// it.
+    /// an error after the runtime has finished; this one commits the client's status with the
+    /// runtime's first body byte, and everything after that has to be expressed inside the stream or
+    /// by abandoning it.
     /// </remarks>
-    private async Task<ChatCompletionOutcome> StreamAsync(
+    private async Task StreamAsync(
         ExchangeRecorder recorder,
         IModelRuntimeProvider provider,
         RuntimeTarget target,
@@ -258,17 +298,19 @@ public sealed class ChatCompletionGateway
 
         if (opened.Failure is { } failure)
         {
-            return failure.Reason == UpstreamFailureReason.Cancelled
-                ? await CancelAsync(recorder).ConfigureAwait(false)
-                : await FailAsync(recorder, GatewayErrorCatalogue.Translate(failure), target.Id)
-                    .ConfigureAwait(false);
-        }
+            if (failure.Reason == UpstreamFailureReason.Cancelled)
+            {
+                await CancelAsync(recorder).ConfigureAwait(false);
+                return;
+            }
 
-        var correlation = new GatewayCorrelation(
-            recorder.RequestId,
-            recorder.ExchangeId,
-            recorder.TraceId,
-            target.Id);
+            recorder.ObserveUpstreamFailure(failure);
+
+            await FailAsync(recorder, client, GatewayErrorCatalogue.Translate(failure), target.Id, termination: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            return;
+        }
 
         // Its own span. The provider span ends when the response is opened, so for a long generation
         // the interval the exchange actually spends transferring would otherwise be visible in no
@@ -276,10 +318,10 @@ public sealed class ChatCompletionGateway
         using var streamSpan = telemetry.StartStream(target.Id, target.ProviderKey);
 
         var relayed = await relay
-            .RelayAsync(recorder, opened, client, correlation, cancellationToken)
+            .RelayAsync(recorder, opened, client, Correlation(recorder, target.Id), cancellationToken)
             .ConfigureAwait(false);
 
-        return await CompleteRelayAsync(recorder, relayed, target).ConfigureAwait(false);
+        await CompleteRelayAsync(recorder, client, relayed, target, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Opens the upstream response, timing the call as a provider request.</summary>
@@ -304,38 +346,53 @@ public sealed class ChatCompletionGateway
             .ConfigureAwait(false);
     }
 
-    /// <summary>Records what the relay observed and produces the outcome for a written response.</summary>
-    private async Task<ChatCompletionOutcome> CompleteRelayAsync(
+    /// <summary>Records how a relay ended, answering with an envelope if the client still can be.</summary>
+    /// <remarks>
+    /// A failure before the runtime's first byte reaches a client whose response never started, so
+    /// its status is still the gateway's to choose and the stable error goes out with every
+    /// correlation header. After that byte the response can only be abandoned, and the exchange
+    /// records why it failed and no code (ADR 0025).
+    /// </remarks>
+    private async Task CompleteRelayAsync(
         ExchangeRecorder recorder,
+        IClientResponseSink client,
         StreamRelayOutcome relayed,
-        RuntimeTarget target)
+        RuntimeTarget target,
+        CancellationToken cancellationToken)
     {
         if (relayed.Summary is { } summary)
         {
             recorder.Update(exchange => exchange.WithResponseSummary(summary).WithUsage(relayed.Usage));
         }
 
+        if (relayed.ResponseStarted)
+        {
+            recorder.RecordRelayedToClient(relayed.ClientBytes);
+        }
+
         if (relayed.ClientGone)
         {
-            return await CancelAsync(recorder).ConfigureAwait(false);
+            await CancelAsync(recorder).ConfigureAwait(false);
+            return;
         }
 
         if (relayed.Error is { } error)
         {
-            recorder.Fail(error, relayed.Termination);
+            if (relayed.ResponseStarted)
+            {
+                await AbandonAsync(recorder, error, relayed.Termination).ConfigureAwait(false);
+                return;
+            }
 
-            return await FinishAsync(
-                recorder,
-                ChatCompletionOutcome.Streamed(recorder, relayed.StatusCode, relayed.MediaType, target.Id, error))
+            await FailAsync(recorder, client, error, target.Id, relayed.Termination, cancellationToken)
                 .ConfigureAwait(false);
+
+            return;
         }
 
         recorder.Complete(relayed.Termination, DescribeStream(relayed));
 
-        return await FinishAsync(
-            recorder,
-            ChatCompletionOutcome.Streamed(recorder, relayed.StatusCode, relayed.MediaType, target.Id, gatewayError: null))
-            .ConfigureAwait(false);
+        await FinishAsync(recorder).ConfigureAwait(false);
     }
 
     /// <summary>Whether the runtime answered with an event stream, as the protocol judges it.</summary>
@@ -346,11 +403,12 @@ public sealed class ChatCompletionGateway
     private bool IsStream(UpstreamResponseMetadata metadata) =>
         relay.MatchesStreamMediaType(metadata.ParsedMediaType);
 
-    private async Task<ChatCompletionOutcome> ForwardAsync(
+    private async Task ForwardAsync(
         ExchangeRecorder recorder,
         IModelRuntimeProvider provider,
         RuntimeTarget target,
         ReadOnlyMemory<byte> body,
+        IClientResponseSink client,
         PublicRequestId requestId,
         CancellationToken cancellationToken)
     {
@@ -359,13 +417,16 @@ public sealed class ChatCompletionGateway
             ObservationType.UpstreamRequestOpened,
             SafeDetails.Create("runtime.id", target.Id.Value, "provider.type", target.ProviderKey));
 
-        using var providerSpan = telemetry.StartProviderRequest(target.Id, target.ProviderKey);
+        ProviderCompletionResult result;
 
-        var result = await provider
-            .CompleteAsync(
-                ProviderCompletionRequest.Create(target, body, JsonMediaType, JsonMediaType, requestId),
-                cancellationToken)
-            .ConfigureAwait(false);
+        using (telemetry.StartProviderRequest(target.Id, target.ProviderKey))
+        {
+            result = await provider
+                .CompleteAsync(
+                    ProviderCompletionRequest.Create(target, body, JsonMediaType, JsonMediaType, requestId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         ObserveConnection(recorder, result.Connection);
 
@@ -396,16 +457,21 @@ public sealed class ChatCompletionGateway
             // exchange list and the metrics.
             if (failure.Reason == UpstreamFailureReason.Cancelled)
             {
-                return await CancelAsync(recorder).ConfigureAwait(false);
+                await CancelAsync(recorder).ConfigureAwait(false);
+                return;
             }
 
-            return await FailAsync(recorder, GatewayErrorCatalogue.Translate(failure), target.Id)
+            recorder.ObserveUpstreamFailure(failure);
+
+            await FailAsync(recorder, client, GatewayErrorCatalogue.Translate(failure), target.Id, termination: null, cancellationToken)
                 .ConfigureAwait(false);
+
+            return;
         }
 
         recorder.Observe(ObservationType.UpstreamCompleted, result.CompletedAt ?? recorder.Now);
 
-        return await RelayAsync(recorder, result, target).ConfigureAwait(false);
+        await RelayAsync(recorder, client, result, target, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -420,11 +486,17 @@ public sealed class ChatCompletionGateway
     /// The exchange therefore completes with no failure class even for a relayed 500: the transport
     /// cycle finished and AgentSplice did not fail. Success is classified from the recorded upstream
     /// status, never from the absence of a failure.
+    ///
+    /// It completes only once the write has returned. A client that leaves during it was given part
+    /// of an answer at most, so the exchange is the cancellation it was, and records no byte count,
+    /// because how much reached the client is not known.
     /// </remarks>
-    private async Task<ChatCompletionOutcome> RelayAsync(
+    private async Task RelayAsync(
         ExchangeRecorder recorder,
+        IClientResponseSink client,
         ProviderCompletionResult result,
-        RuntimeTarget target)
+        RuntimeTarget target,
+        CancellationToken cancellationToken)
     {
         var metadata = result.Response!;
         var facts = responseCodec.Read(result.Body.Span, metadata.ContentType);
@@ -439,10 +511,7 @@ public sealed class ChatCompletionGateway
             }
         }
 
-        recorder.Complete();
-
-        var outcome = ChatCompletionOutcome.Relayed(
-            recorder,
+        var start = new ClientResponseStart(
             metadata.StatusCode,
 
             // The runtime's own header, not the normalised token the evidence keeps: a client that
@@ -451,11 +520,20 @@ public sealed class ChatCompletionGateway
             // domain refused to relay falls back to the token, which says less rather than something
             // untrue.
             metadata.RelayableContentType ?? metadata.ContentType ?? JsonMediaType,
-            result.Body,
-            target.Id,
-            result.RelayedHeaders);
+            Correlation(recorder, target.Id),
+            result.RelayedHeaders,
+            DisableCaching: false);
 
-        return await FinishAsync(recorder, outcome).ConfigureAwait(false);
+        if (!await WriteResponseAsync(recorder, client, start, result.Body, cancellationToken).ConfigureAwait(false))
+        {
+            await CancelAsync(recorder).ConfigureAwait(false);
+            return;
+        }
+
+        recorder.RecordRelayedToClient(result.Body.Length);
+        recorder.Complete();
+
+        await FinishAsync(recorder).ConfigureAwait(false);
     }
 
     /// <summary>Records a client disconnect and writes nothing back.</summary>
@@ -463,46 +541,95 @@ public sealed class ChatCompletionGateway
     /// The socket is gone, so writing would throw and setting a status on a response that has
     /// already started would throw over the top of the real cause.
     /// </remarks>
-    private async Task<ChatCompletionOutcome> CancelAsync(ExchangeRecorder recorder)
+    private async Task CancelAsync(ExchangeRecorder recorder)
     {
         recorder.Cancel(SafeDetails.Create("cancellation.source", "client"));
 
-        return await FinishAsync(recorder, ChatCompletionOutcome.Disconnected(recorder))
-            .ConfigureAwait(false);
+        await FinishAsync(recorder).ConfigureAwait(false);
     }
 
-    private async Task<ChatCompletionOutcome> FailAsync(
-        ExchangeRecorder recorder,
-        GatewayError gatewayError,
-        RuntimeEndpointId? runtime = null)
+    /// <summary>Records a failure whose started response was abandoned; nothing more is written.</summary>
+    private async Task AbandonAsync(ExchangeRecorder recorder, GatewayError failure, StreamTermination termination)
     {
-        recorder.Fail(gatewayError);
+        recorder.Abandon(failure, termination);
 
-        var outcome = ChatCompletionOutcome.Failed(
-            recorder,
-            gatewayError,
+        await FinishAsync(recorder).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes the gateway's error envelope, then records the failure it reported.</summary>
+    /// <remarks>
+    /// The error is recorded only once its envelope was written, because the record's error code is
+    /// the code the client received. A client that left before it could be told received nothing, so
+    /// the exchange ends as the cancellation it became, and the boundary that recorded what had gone
+    /// wrong upstream stays on its timeline.
+    /// </remarks>
+    private async Task FailAsync(
+        ExchangeRecorder recorder,
+        IClientResponseSink client,
+        GatewayError gatewayError,
+        RuntimeEndpointId? runtime,
+        StreamTermination? termination,
+        CancellationToken cancellationToken)
+    {
+        var start = new ClientResponseStart(
+            gatewayError.StatusCode,
             errorWriter.MediaType,
-            errorWriter.Write(gatewayError),
-            runtime);
+            Correlation(recorder, runtime),
+            NoHeaders,
+            DisableCaching: false);
 
-        return await FinishAsync(recorder, outcome).ConfigureAwait(false);
+        if (!await WriteResponseAsync(recorder, client, start, errorWriter.Write(gatewayError), cancellationToken)
+                .ConfigureAwait(false))
+        {
+            await CancelAsync(recorder).ConfigureAwait(false);
+            return;
+        }
+
+        recorder.Fail(gatewayError, termination);
+
+        await FinishAsync(recorder).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes one whole response, returning <c>false</c> when the client is gone before it ends.
+    /// </summary>
+    /// <remarks>
+    /// The commit is a boundary of its own, stamped when the headers were flushed, so that every
+    /// response's timeline says when the client was sent its status — the moment ADR 0019 found
+    /// invisible.
+    /// </remarks>
+    private static async Task<bool> WriteResponseAsync(
+        ExchangeRecorder recorder,
+        IClientResponseSink client,
+        ClientResponseStart start,
+        ReadOnlyMemory<byte> body,
+        CancellationToken cancellationToken)
+    {
+        if (await client.StartAsync(start, cancellationToken).ConfigureAwait(false) is ClientWriteResult.ClientGone)
+        {
+            return false;
+        }
+
+        recorder.Observe(ObservationType.ClientResponseStarted);
+
+        return body.IsEmpty
+            || await client.WriteAsync(body, cancellationToken).ConfigureAwait(false) is ClientWriteResult.Written;
     }
 
     /// <summary>Hands the evidence to the sink, which must never be able to fail an exchange.</summary>
     /// <remarks>
     /// Runs at most once per exchange. A fault raised after the response was already written reaches
-    /// the catch-all in <see cref="CompleteAsync"/>, which would otherwise produce a second outcome
-    /// and a second record for the same request — two accounts of one exchange, disagreeing about
-    /// how it ended.
+    /// the catch-all in <see cref="CompleteAsync"/>, which would otherwise produce a second record
+    /// for the same request — two accounts of one exchange, disagreeing about how it ended.
     /// </remarks>
-    private async Task<ChatCompletionOutcome> FinishAsync(ExchangeRecorder recorder, ChatCompletionOutcome outcome)
+    private async Task FinishAsync(ExchangeRecorder recorder)
     {
         if (!recorder.TryBeginRecording())
         {
-            return outcome;
+            return;
         }
 
-        Instrument(recorder, outcome);
+        Instrument(recorder);
 
         try
         {
@@ -518,8 +645,6 @@ public sealed class ChatCompletionGateway
                 "Recording evidence for exchange {ExchangeId} failed. The client response is unaffected.",
                 recorder.ExchangeId.Value);
         }
-
-        return outcome;
     }
 
     /// <summary>
@@ -531,23 +656,34 @@ public sealed class ChatCompletionGateway
     /// <see cref="CompletionExchange"/>, and no metric is emitted for it: a dimension set with no
     /// protocol, runtime, or status would be a row that describes nothing.
     ///
+    /// The error type is the failure's, whether or not its envelope reached the client: a response
+    /// abandoned mid-stream failed as surely as one answered with a 504, and only the record's error
+    /// code depends on delivery.
+    ///
     /// Every interval passes through <see cref="NonNegative"/>. Boundary timestamps are wall-clock
     /// readings, so a clock stepped backwards mid-exchange can order two boundaries impossibly. The
     /// timeline keeps that visible on purpose, and the measurement path already refuses to derive
     /// from it; a histogram is the one place where recording it anyway would quietly poison an
     /// aggregate that no one can trace back to the exchange that caused it.
     /// </remarks>
-    private void Instrument(ExchangeRecorder recorder, ChatCompletionOutcome outcome)
+    private void Instrument(ExchangeRecorder recorder)
     {
         try
         {
+            var errorType = recorder.Failure?.Type;
+
             if (recorder.Exchange is not { } exchange)
             {
-                recorder.Trace?.SetOutcome(ExchangeStatus.Failed, outcome.Error?.Type);
+                // The store classifies such a request from its timeline, and so does its span: a
+                // client that left before its model was known cancelled, and did not fail.
+                recorder.Trace?.SetOutcome(
+                    recorder.HasObserved(ObservationType.ClientCancelled) ? ExchangeStatus.Cancelled : ExchangeStatus.Failed,
+                    errorType);
+
                 return;
             }
 
-            recorder.Trace?.SetOutcome(exchange.Status, outcome.Error?.Type);
+            recorder.Trace?.SetOutcome(exchange.Status, errorType);
 
             var completedAt = exchange.CompletedAt ?? recorder.Now;
 
@@ -559,13 +695,18 @@ public sealed class ChatCompletionGateway
                 return;
             }
 
+            // The stream's size is what reached the client. A stream that failed before its first
+            // byte was answered with an envelope instead, and contributes no data point rather than
+            // a zero that would read as a stream the client was sent and that carried nothing.
+            var relayedBytes = exchange.StreamedResponse ? recorder.RelayedClientBytes : null;
+
             telemetry.RecordExchange(new ExchangeTelemetrySnapshot(
                 exchange.IngressProtocol,
                 exchange.RuntimeEndpointId,
                 recorder.ProviderKey,
                 exchange.Streaming,
                 exchange.Status,
-                outcome.Error?.Type,
+                errorType,
                 exchange.UpstreamResponse?.StatusClass,
                 total,
                 NonNegative(UpstreamDuration(recorder)),
@@ -580,8 +721,8 @@ public sealed class ChatCompletionGateway
                 // Present only for an exchange that actually streamed, which is also what tells the
                 // metric layer to attach the termination dimension at all.
                 StreamTermination = exchange.StreamedResponse ? exchange.StreamTermination : null,
-                StreamEvents = exchange.StreamedResponse ? exchange.ResponseSummary?.StreamEventCount : null,
-                StreamBytes = exchange.StreamedResponse ? exchange.ResponseSummary?.ResponseBodyBytes : null,
+                StreamEvents = relayedBytes is null ? null : exchange.ResponseSummary?.StreamEventCount,
+                StreamBytes = relayedBytes,
                 TimeToFirstSemanticEvent = NonNegative(recorder.DurationBetween(
                     ObservationType.RequestAccepted,
                     ObservationType.FirstSemanticEvent)),
@@ -600,6 +741,17 @@ public sealed class ChatCompletionGateway
                 recorder.ExchangeId.Value);
         }
     }
+
+    /// <summary>How a response abandoned by the catch-all ended, in the domain's terms.</summary>
+    /// <remarks>
+    /// An exchange that streamed must record how its stream ended, and a fault is not a way AgentSplice
+    /// can classify; one that never streamed has no stream to describe.
+    /// </remarks>
+    private static StreamTermination AbandonedTermination(ExchangeRecorder recorder) =>
+        recorder.Exchange?.StreamedResponse == true ? StreamTermination.Unknown : StreamTermination.NotApplicable;
+
+    private static GatewayCorrelation Correlation(ExchangeRecorder recorder, RuntimeEndpointId? runtime) =>
+        new(recorder.RequestId, recorder.ExchangeId, recorder.TraceId, runtime);
 
     /// <summary>
     /// Records what establishing a connection cost, when this request had to establish one.

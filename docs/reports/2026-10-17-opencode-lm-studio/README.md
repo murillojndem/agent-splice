@@ -284,3 +284,12 @@ records `contentRetentionState: metadata_only`.
 - `exchanges.json` — what the administrative API answered: its system information, every page of its
   exchange list, and for every exchange listed, its detail and its timeline, with the time of the
   export.
+
+## Notes
+
+- **2026-10-18.** Findings 2 and 3 were fixed after this report (ADR 0025). A later build answers a
+  stream that fails before its first byte with a `504` or `502` and every correlation header, records an
+  error code only for an envelope it wrote, and ends every timeline with `client_completed`,
+  `client_cancelled`, or `client_response_abandoned`. The records here are what the build this report
+  ran wrote: exchange `d8f5a743` names a code its client never received and has no client-side
+  boundary, which is how a record made before ADR 0025 can be told apart from a later one.

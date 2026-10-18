@@ -4,6 +4,56 @@ All notable changes will be documented here.
 
 ## Unreleased
 
+### Stage 1D, part 13: a stream's status is committed with its first byte
+
+A stream's status was committed when the runtime's headers arrived, and Kestrel sends a started
+response's headers only with its first body write, so a runtime that timed out or dropped before its
+first byte left the client a reset with no status and no correlation header (ADR 0019; the first trace
+report's finding 2). The same exchange recorded an error code nothing delivered (finding 3). ADR 0025
+commits the status with the first byte instead and records an error code only for an envelope that was
+written.
+
+- A stream that fails before the runtime's first byte is answered with `504`
+  `agentsplice_upstream_timeout` or `502` `agentsplice_invalid_upstream_response` and every correlation
+  header, and the runtime's request is aborted. The exchange still records how the runtime's stream
+  ended, `timeout` or `connection_lost`. A successful stream is unchanged byte for byte; in the
+  in-process test host its headers now arrive with its first byte, as they always did on Kestrel.
+- The gateway writes every completion response itself and records the exchange after the write. Each
+  exchange ends with one client-side boundary: `client_completed`, whose new `client.response` detail
+  says `relayed` or `gateway_error`; `client_cancelled`; or the new `client_response_abandoned`. The
+  new `client_response_started` boundary records when the client's status and headers were flushed.
+  `exchange.total.duration` runs to the ending boundary, so failed and cancelled exchanges have one.
+- `errorCode` is recorded only for an envelope that was written. A response abandoned after it started
+  records its failure class and termination and no code; the span and the metrics keep the error type.
+- A streaming request answered with an ordinary body that fails mid-body is abandoned rather than ended
+  cleanly. A fault after a response started is abandoned and recorded as `internal_error` with no code,
+  rather than writing a 500 over it and throwing.
+- A client that leaves during a buffered answer's write is recorded as cancelled, not completed, and no
+  bytes are claimed delivered. `stream.client.bytes` is recorded by whatever wrote the bytes, and is
+  absent when the client received an error envelope instead of the runtime's answer.
+- Every upstream failure reaches the timeline: `timeout_fired` with its `timeout.phase` wherever the
+  timeout elapsed, now on the buffered path and before a stream's headers too, and the new
+  `upstream_failed` with the failure's classification and the provider's bounded detail, such as
+  `upstream.stream: connection.lost` or `upstream.socket_error: ConnectionRefused`.
+- A client that leaves while its model is discovered is recorded as cancelled, not as
+  `agentsplice_runtime_unavailable`. A request refused before its model was known keeps the trace id it
+  was given.
+- The recorder computes a transition before it marks the exchange terminal, so a transition the domain
+  refuses no longer leaves a non-terminal row with an undelivered error.
+- `docs/API.md`'s error table, `docs/CLIENTS.md`'s troubleshooting rows, `docs/OBSERVABILITY.md`, the
+  roadmap, the README, `docs/TESTING.md`, and ADRs 0009 and 0019 say so. The trace report keeps
+  describing the build it ran, with a dated note.
+
+Every new guard was verified to fail against a deliberately reintroduced defect: the response committed
+at the runtime's headers, a relay that failed before its first byte abandoned, an error code recorded
+for an abandoned response, a buffered completion recorded before its write, the failure observation
+dropped on the buffered path, before a stream's headers, and mid-stream, a failed ordinary body ended
+cleanly, an envelope written after a fault on a started response, the trace id of a request with no
+exchange dropped, the recorder marked terminal before its transition, the total duration running only
+to a completion, and delivered bytes taken from the runtime's body length. A client that leaves during
+discovery is covered twice — the gateway checks the client's token, and the envelope's write finds the
+client gone — so removing either alone changes nothing; the test fails with both removed.
+
 ### Stage 1D, part 12: .NET 10 LTS before the first alpha
 
 Microsoft ends support for .NET 8 on November 10, 2026, and every package and image the first alpha

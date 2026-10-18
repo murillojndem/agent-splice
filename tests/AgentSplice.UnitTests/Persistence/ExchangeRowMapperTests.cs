@@ -96,17 +96,34 @@ public sealed class ExchangeRowMapperTests
     }
 
     [Fact]
-    public void A_failure_with_no_completion_boundary_stores_no_completion_time()
+    public void A_failure_before_the_model_was_known_is_dated_from_the_envelope_it_was_sent()
     {
-        // ExchangeRecorder.Fail appends no boundary of its own, so nothing observed when the
-        // exchange ended. A terminal status with a null completion time says exactly that; filling
-        // it with the current clock would invent a boundary the timeline does not contain.
+        // No exchange exists to carry a completion time, so the row takes it from the client-side
+        // boundary the envelope's write recorded (ADR 0025).
         var recorder = Recorder(out var clock);
         recorder.Observe(ObservationType.RequestAccepted, Origin);
         clock.Advance(TimeSpan.FromSeconds(1));
         recorder.Fail(GatewayErrorCatalogue.For(FailureClass.ModelNotFound));
 
-        Assert.Null(Row(recorder).CompletedAtTicks);
+        Assert.Equal(Origin.AddSeconds(1).UtcTicks, Row(recorder).CompletedAtTicks);
+    }
+
+    [Fact]
+    public void A_record_with_no_terminal_boundary_stores_no_completion_time()
+    {
+        // No current path produces one, but a terminal status with a null completion time is the
+        // honest reading of it; filling it with the current clock would invent a boundary the
+        // timeline does not contain.
+        var timeline = new ExchangeTimeline(ExchangeId.New());
+        timeline.Append(ObservationType.RequestAccepted, Origin);
+
+        var record = ExchangeRecord.Create(
+            timeline.ExchangeId,
+            PublicRequestId.FromExchangeId(timeline.ExchangeId),
+            timeline.Observations,
+            gatewayError: GatewayErrorCatalogue.For(FailureClass.ModelNotFound));
+
+        Assert.Null(ExchangeRowMapper.ToRow(record, ContentRetentionState.MetadataOnly).CompletedAtTicks);
     }
 
     [Fact]

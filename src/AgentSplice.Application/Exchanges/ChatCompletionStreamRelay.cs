@@ -98,6 +98,12 @@ public sealed class ChatCompletionStreamRelay
 
         await using (upstream.ConfigureAwait(false))
         {
+            // Prepared now and committed by the pump with the runtime's first byte, not here. A
+            // server sends a started response's headers only with its first body write anyway, so a
+            // status committed at the runtime's headers was unchangeable and still unsent: a runtime
+            // that failed before its first byte left the client a reset with no status and no
+            // correlation header at all (ADR 0019). Committed at the first byte, the same failure is
+            // still the gateway's to answer (ADR 0025).
             var start = new ClientResponseStart(
                 metadata.StatusCode,
                 mediaType,
@@ -105,23 +111,11 @@ public sealed class ChatCompletionStreamRelay
                 opened.RelayedHeaders,
                 DisableCaching: streamed);
 
-            if (await client.StartAsync(start, cancellationToken).ConfigureAwait(false) is ClientWriteResult.ClientGone)
-            {
-                // Nothing was committed, so this is an ordinary cancellation rather than a stream
-                // that ended badly.
-                return new StreamRelayOutcome
-                {
-                    Termination = StreamTermination.NotApplicable,
-                    StatusCode = metadata.StatusCode,
-                    MediaType = mediaType,
-                    ClientGone = true,
-                };
-            }
-
             if (streamed)
             {
-                // From here the status line is on the wire and can no longer be changed, which is
-                // the fact every remaining decision turns on.
+                // The runtime answered with a stream, so from here the exchange has a stream whose
+                // ending must be recorded — whether the client then receives it or, if the runtime
+                // fails before its first byte, the gateway's error envelope.
                 recorder.BeginStreaming();
             }
 
@@ -129,6 +123,7 @@ public sealed class ChatCompletionStreamRelay
                 recorder,
                 upstream,
                 client,
+                start,
                 streamed ? interpreter.Begin() : null,
                 responseCodec,
                 options.Value.Limits,

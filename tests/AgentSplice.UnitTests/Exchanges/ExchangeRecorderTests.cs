@@ -1,5 +1,6 @@
 using AgentSplice.Application.Errors;
 using AgentSplice.Application.Exchanges;
+using AgentSplice.Application.Runtimes;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Identifiers;
 using AgentSplice.Domain.Measurements;
@@ -109,6 +110,175 @@ public sealed class ExchangeRecorderTests
 
         Assert.Equal(ExchangeStatus.Completed, recorder.Exchange?.Status);
         Assert.Null(recorder.Exchange?.FailureClass);
+
+        // Nor does it leave an error code behind for a record that completed: the refused call used
+        // to overwrite the error before its transition was refused.
+        Assert.Null(recorder.ToRecord().Error);
+        Assert.Null(recorder.Failure);
+    }
+
+    [Fact]
+    public void A_transition_the_domain_refuses_leaves_the_exchange_open_to_end_properly()
+    {
+        // A streamed exchange must say how its stream ended, so completing it without a termination
+        // throws. Marking it terminated before the transition left a row that was never terminal and
+        // an error no envelope carried; computed first, the catch-all can still end it.
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: true, Origin);
+        recorder.BeginStreaming();
+
+        Assert.Throws<ArgumentException>(() => recorder.Complete(StreamTermination.NotApplicable));
+        Assert.False(recorder.IsTerminated);
+        Assert.DoesNotContain(recorder.ToRecord().Observations, o => o.Type == ObservationType.ClientCompleted);
+
+        recorder.Abandon(GatewayErrorCatalogue.For(FailureClass.InternalError), StreamTermination.Unknown);
+
+        Assert.Equal(ExchangeStatus.Failed, recorder.Exchange?.Status);
+        Assert.Equal(FailureClass.InternalError, recorder.Exchange?.FailureClass);
+    }
+
+    [Fact]
+    public void An_abandoned_response_records_why_it_failed_and_no_error_code()
+    {
+        // No envelope reached the client, so no code may be recorded as though one had: the failure
+        // class and the termination say why the response stopped (ADR 0025).
+        var clock = new FakeTimeProvider(Origin);
+        var recorder = Recorder(clock);
+
+        recorder.Observe(ObservationType.RequestAccepted, Origin);
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: true, Origin);
+        recorder.BeginStreaming();
+
+        clock.Advance(TimeSpan.FromSeconds(2));
+        recorder.Abandon(GatewayErrorCatalogue.For(FailureClass.UpstreamTimeout), StreamTermination.Timeout);
+
+        var record = recorder.ToRecord();
+
+        Assert.Null(record.Error);
+        Assert.Equal(FailureClass.UpstreamTimeout, record.Exchange?.FailureClass);
+        Assert.Equal(StreamTermination.Timeout, record.Exchange?.StreamTermination);
+        Assert.Equal("upstream_timeout_error", recorder.Failure?.Type);
+
+        var abandoned = Assert.Single(record.Observations, o => o.Type == ObservationType.ClientResponseAbandoned);
+
+        Assert.Equal(Origin.AddSeconds(2), abandoned.Timestamp);
+        Assert.DoesNotContain(record.Observations, o => o.Type == ObservationType.ClientCompleted);
+    }
+
+    [Fact]
+    public void A_failure_whose_envelope_was_written_records_its_code_and_says_the_client_got_it()
+    {
+        // The positive fact of delivery. Without it a failure whose 504 reached the client and one
+        // whose connection was reset read the same, field for field.
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
+        recorder.Fail(GatewayErrorCatalogue.For(FailureClass.UpstreamTimeout));
+
+        var record = recorder.ToRecord();
+
+        Assert.Equal("agentsplice_upstream_timeout", record.Error?.Code);
+
+        var completed = Assert.Single(record.Observations, o => o.Type == ObservationType.ClientCompleted);
+
+        Assert.Equal("gateway_error", completed.Details.Values["client.response"]);
+    }
+
+    [Fact]
+    public void A_relayed_answer_says_so_on_its_completion()
+    {
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
+        recorder.Complete();
+
+        var completed = Assert.Single(recorder.ToRecord().Observations, o => o.Type == ObservationType.ClientCompleted);
+
+        Assert.Equal("relayed", completed.Details.Values["client.response"]);
+    }
+
+    [Theory]
+    [InlineData("cancelled")]
+    [InlineData("abandoned")]
+    [InlineData("failed")]
+    public void Every_ending_has_a_total_duration_from_its_own_client_boundary(string ending)
+    {
+        // The exported duration histogram counted failed and cancelled exchanges while their records
+        // carried no total at all, because it ran only to a completion boundary.
+        var clock = new FakeTimeProvider(Origin);
+        var recorder = Recorder(clock);
+
+        recorder.Observe(ObservationType.RequestAccepted, Origin);
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
+
+        clock.Advance(TimeSpan.FromSeconds(3));
+
+        switch (ending)
+        {
+            case "cancelled":
+                recorder.Cancel();
+                break;
+            case "abandoned":
+                recorder.Abandon(GatewayErrorCatalogue.For(FailureClass.InvalidUpstreamResponse), StreamTermination.NotApplicable);
+                break;
+            default:
+                recorder.Fail(GatewayErrorCatalogue.For(FailureClass.RuntimeUnavailable));
+                break;
+        }
+
+        var total = Assert.Single(recorder.ToRecord().Measurements, m => m.Name == MeasurementNames.TotalDuration);
+
+        Assert.Equal(3000d, total.Value, 3);
+        Assert.Equal(Origin.AddSeconds(3), recorder.Exchange?.CompletedAt);
+    }
+
+    [Fact]
+    public void No_bytes_are_claimed_delivered_for_an_answer_that_was_not()
+    {
+        // The runtime's body length is a fact about the runtime. Reported as bytes forwarded to a
+        // client that left during the write, it claimed a delivery nobody observed.
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
+        recorder.Update(exchange => exchange.WithResponseSummary(Summary(streamEventCount: 0)));
+        recorder.Cancel();
+
+        Assert.DoesNotContain(
+            recorder.ToRecord().Measurements,
+            measurement => measurement.Name == MeasurementNames.ClientResponseBytes);
+    }
+
+    [Fact]
+    public void A_timeout_is_recorded_with_its_phase_and_any_other_failure_with_its_classification()
+    {
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.ObserveUpstreamFailure(UpstreamFailure.Timeout(TimeoutPhase.Connect));
+        recorder.ObserveUpstreamFailure(UpstreamFailure.Create(
+            UpstreamFailureReason.ResponseTooLarge,
+            details: SafeDetails.Create("upstream.completion", "body.too_large")));
+
+        var observations = recorder.ToRecord().Observations;
+
+        Assert.Equal("Connect", Assert.Single(observations, o => o.Type == ObservationType.TimeoutFired).Details.Values["timeout.phase"]);
+
+        var failed = Assert.Single(observations, o => o.Type == ObservationType.UpstreamFailed);
+
+        Assert.Equal("ResponseTooLarge", failed.Details.Values["upstream.failure"]);
+        Assert.Equal("body.too_large", failed.Details.Values["upstream.completion"]);
+    }
+
+    [Fact]
+    public void A_cancelled_upstream_call_records_no_failure_of_its_own()
+    {
+        // The client's own departure. The cancellation boundary says so, and an upstream failure next
+        // to it would blame the runtime for it.
+        var recorder = Recorder(new FakeTimeProvider(Origin));
+
+        recorder.ObserveUpstreamFailure(UpstreamFailure.Create(UpstreamFailureReason.Cancelled));
+
+        Assert.Empty(recorder.ToRecord().Observations);
     }
 
     [Fact]
@@ -161,6 +331,7 @@ public sealed class ExchangeRecorderTests
 
         recorder.Accept(ClientModelId.Create("local-coder"), streaming: false, Origin);
         recorder.Update(exchange => exchange.WithResponseSummary(Summary(streamEventCount: 0)));
+        recorder.RecordRelayedToClient(4096);
         recorder.Complete();
 
         var measurements = recorder.ToRecord().Measurements;

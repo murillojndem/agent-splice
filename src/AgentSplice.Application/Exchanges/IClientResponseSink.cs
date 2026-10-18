@@ -20,7 +20,16 @@ public interface IClientResponseSink
     /// <summary>True once status and headers are committed and can no longer be changed.</summary>
     bool HasStarted { get; }
 
-    /// <summary>Commits status, headers, and media type, and disables transport buffering.</summary>
+    /// <summary>
+    /// Commits status, headers, and media type, disables transport buffering, and flushes the headers
+    /// before returning.
+    /// </summary>
+    /// <remarks>
+    /// Flushed rather than only committed, so that returning means the client has been sent the
+    /// status. A server holds a started response's headers until the first body write otherwise, and
+    /// the moment the caller records as the response starting would be one that had not happened
+    /// (ADR 0025).
+    /// </remarks>
     ValueTask<ClientWriteResult> StartAsync(ClientResponseStart start, CancellationToken cancellationToken);
 
     /// <summary>Writes bytes and flushes them before returning.</summary>

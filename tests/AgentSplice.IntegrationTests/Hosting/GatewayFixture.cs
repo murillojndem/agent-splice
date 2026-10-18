@@ -18,10 +18,18 @@ internal sealed class GatewayFixture : IAsyncDisposable
 
     private readonly AgentSpliceApplicationFactory factory;
 
-    private GatewayFixture(FakeUpstreamServer upstream, AgentSpliceApplicationFactory factory)
+    private GatewayFixture(FakeUpstreamServer upstream, AgentSpliceApplicationFactory factory, bool kestrel)
     {
         Upstream = upstream;
         this.factory = factory;
+
+        if (kestrel)
+        {
+            // Started before the client is created, so the client is given the listener's address
+            // and talks to it over a real socket.
+            factory.StartServer();
+        }
+
         Client = factory.CreateClient();
     }
 
@@ -34,7 +42,8 @@ internal sealed class GatewayFixture : IAsyncDisposable
 
     internal static async Task<GatewayFixture> StartAsync(
         Action<Dictionary<string, string?>>? configure = null,
-        Action<IServiceCollection>? configureServices = null)
+        Action<IServiceCollection>? configureServices = null,
+        bool kestrel = false)
     {
         var upstream = await FakeUpstreamServer.StartAsync().ConfigureAwait(false);
 
@@ -52,9 +61,9 @@ internal sealed class GatewayFixture : IAsyncDisposable
 
         configure?.Invoke(settings);
 
-        var factory = new AgentSpliceApplicationFactory(settings, configureServices);
+        var factory = new AgentSpliceApplicationFactory(settings, configureServices, kestrel);
 
-        return new GatewayFixture(upstream, factory);
+        return new GatewayFixture(upstream, factory, kestrel);
     }
 
     /// <summary>Configuration key for a property of the runtime at a given index.</summary>

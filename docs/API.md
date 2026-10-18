@@ -77,7 +77,7 @@ Those limits bound what may be **written back**, and nothing else. Whether the b
 
 Verbatim within limits, and the limits refuse rather than repair. A content type longer than 1024 characters, or carrying a control character, is not written back at all — the normalised media type is sent instead. Truncating would produce a header the runtime never sent while leaving it looking valid, and a `CR` or `LF` in a header value is a response-splitting attempt rather than a formatting quirk (ADR 0011).
 
-Once the runtime's headers have arrived, the gateway has committed the status and can no longer change it; the client receives it with the first relayed byte, so a failure before that byte leaves the client with no response at all — a known gap (ADR 0019). From that point a failure is expressed by abandoning the response rather than by an error envelope, because an event stream that stops early but closes cleanly is indistinguishable from a complete one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
+The gateway commits the client's status with the runtime's first body byte — or at the end of a response that had none — and not when the runtime's headers arrive. Until that byte nothing has been sent, so a runtime that times out or drops the connection after its headers and before its first byte is answered with the gateway's own error envelope and every correlation header, as it would be before its headers (ADR 0025). From the first byte a failure is expressed by abandoning the response rather than by an error envelope, because a stream that stops early but closes cleanly is indistinguishable from a complete one; the same holds for an ordinary body sent in answer to a streaming request. The exchange then records why it failed and no error code, because no envelope carried one. A payload AgentSplice cannot parse never causes that: it is recorded and relayed, since the client's own parser is the authority on the runtime's protocol.
 
 ## Gateway headers
 
@@ -330,14 +330,16 @@ Client-validation failures reuse OpenAI's own `invalid_request_error`, including
 | Resolved runtime has no provider module | `agentsplice_runtime_not_found` | 503 | `configuration_error` |
 | Runtime unreachable, or no runtime could be consulted | `agentsplice_runtime_unavailable` | 502 | `upstream_unavailable_error` |
 | Runtime rejected the gateway's credentials | `agentsplice_runtime_authentication_failed` | 502 | `upstream_authentication_error` |
-| A configured timeout phase elapsed before the gateway committed its response: any phase of a request that is not streamed, or connecting and waiting for headers on a stream | `agentsplice_upstream_timeout` | 504 | `upstream_timeout_error` |
-| A configured timeout phase elapsed during a stream, after the runtime's headers arrived | `agentsplice_upstream_timeout` | *(the connection is abandoned. The status was committed when the runtime's headers arrived, and reaches the client only with the first relayed byte, so a timeout before that byte leaves the client with no response at all — a known gap, ADR 0019)* | `upstream_timeout_error` |
+| A configured timeout phase elapsed before the gateway committed its response: any phase of a request that is not streamed, and on a stream any phase before the runtime's first body byte | `agentsplice_upstream_timeout` | 504 | `upstream_timeout_error` |
+| A configured timeout phase elapsed during a stream, after the runtime's first body byte | *(none reaches the client; the exchange records failure class `upstream_timeout`)* | *(the connection is abandoned: the status was committed with the first byte — ADR 0025)* | `upstream_timeout_error` |
 | Upstream **2xx** body unreadable, truncated, or oversized, on a request that is not streamed | `agentsplice_invalid_upstream_response` | 502 | `upstream_protocol_error` |
-| A stream's connection to the runtime lost after the runtime's headers arrived | `agentsplice_invalid_upstream_response` | *(the connection is abandoned, as for a timeout; before the first relayed byte the client receives no response at all — ADR 0019)* | `upstream_protocol_error` |
-| Upstream event stream exceeded a configured bound | `agentsplice_invalid_upstream_stream` | *(the connection is abandoned; the status was committed with the response headers)* | `upstream_protocol_error` |
+| A stream's connection to the runtime lost after its headers and before its first body byte | `agentsplice_invalid_upstream_response` | 502 | `upstream_protocol_error` |
+| A stream's connection to the runtime lost after its first body byte, or an ordinary body sent in answer to a streaming request cut off after its first byte | *(none reaches the client; the exchange records failure class `invalid_upstream_response`)* | *(the connection is abandoned, as for a timeout)* | `upstream_protocol_error` |
+| Upstream event stream exceeded a configured bound | *(none reaches the client; the exchange records failure class `invalid_upstream_stream`)* | *(the connection is abandoned; the offending bytes were already relayed, so the status was committed)* | `upstream_protocol_error` |
 | Gateway already serving `limits:maxConcurrentCompletions` completions | `agentsplice_gateway_overloaded` | 429 with `Retry-After` | `rate_limit_error` |
 | Client disconnected | `agentsplice_request_cancelled` | *(nothing written)* | `cancellation_error` |
-| Unhandled gateway fault | `agentsplice_internal_error` | 500 | `internal_error` |
+| Unhandled gateway fault, before the response started | `agentsplice_internal_error` | 500 | `internal_error` |
+| Unhandled gateway fault, after the response started | *(none reaches the client; the exchange records failure class `internal_error`)* | *(the connection is abandoned)* | `internal_error` |
 | **Any other upstream non-2xx** | *(none — the runtime's own body)* | **upstream status, verbatim** | *(the runtime's own)* |
 
 There is no AgentSplice error type for a relayed upstream status: the runtime's own envelope is what the client receives, so the gateway writes nothing for a type to describe.

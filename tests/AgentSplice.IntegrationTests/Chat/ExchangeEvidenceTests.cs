@@ -49,6 +49,10 @@ public sealed class ExchangeEvidenceTests
                 ObservationType.UpstreamHeadersReceived,
                 ObservationType.FirstUpstreamByte,
                 ObservationType.UpstreamCompleted,
+
+                // The client is written to only after the runtime's whole answer arrived, and the
+                // completion is recorded only after that write returned (ADR 0025).
+                ObservationType.ClientResponseStarted,
                 ObservationType.ClientCompleted,
             ],
             record.Observations.Select(observation => observation.Type));

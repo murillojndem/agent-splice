@@ -82,13 +82,14 @@ internal static class OpenAiCompatibilityEndpoints
             return;
         }
 
-        var outcome = await gateway
+        // The gateway writes the whole response through the sink — a relayed answer or its own error
+        // envelope — and records the exchange only once the write returned, so there is nothing left
+        // for the endpoint to add (ADR 0025).
+        await gateway
             .CompleteAsync(
                 ChatCompletionRequest.Create(body.Body, requestId, acceptedAt, bodyReadAt),
                 new HttpClientResponseSink(context),
                 cancellationToken)
             .ConfigureAwait(false);
-
-        await GatewayResponseWriter.WriteAsync(context, outcome, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -71,26 +71,56 @@ A completion timeline may contain:
 - first upstream byte received;
 - first SSE event decoded;
 - first semantic output event observed;
+- client response started (its status and headers flushed);
 - first client event flushed;
 - first structured tool call observed;
 - adapter candidate observed;
 - adapter applied/rejected/skipped;
 - upstream completed;
-- client completed;
+- upstream failed, with its classification and bounded detail;
+- client completed, with whether the client received the relayed answer or the gateway's error envelope;
 - client cancelled;
+- client response abandoned;
 - timeout fired with phase;
 - metadata queued;
 - metadata persisted or failed.
 
 Timeline events must be sequence-ordered and immutable. Unknown events must not be invented. Runtime prefill completion is recorded only when a reliable provider/runtime signal exists.
 
+### How an exchange ends for the client
+
+Every exchange ends with exactly one client-side boundary, recorded when it happened rather than when
+the gateway decided on it (ADR 0025):
+
+| Boundary | Recorded when |
+| --- | --- |
+| `client_completed` | the last write of the response returned. Its `client.response` detail is `relayed` for the runtime's answer and `gateway_error` for the gateway's own error envelope. |
+| `client_cancelled` | the client went away, including in the middle of a buffered answer's write. |
+| `client_response_abandoned` | AgentSplice abandoned a response it had started, because the runtime's answer could not be completed. No error envelope reached the client, so the exchange records its failure class and no error code. |
+
+The exchange's completion time is that boundary's, and `exchange.total.duration` runs from acceptance
+to it, so a failed or cancelled exchange has a total too and it agrees with
+`agentsplice.exchange.duration`. `client_response_started` precedes it on every response the gateway
+writes, stamped when the status and headers had been flushed: for a relayed response that is with the
+runtime's first body byte, not with the runtime's headers, so a runtime that fails before that byte is
+still answered with an error envelope.
+
+Every upstream failure is on the timeline. A timeout is `timeout_fired` with its `timeout.phase` —
+`Connect`, `ResponseHeaders`, `IdleStream`, or `Total` — wherever it elapsed. Any other failure is
+`upstream_failed`, whose `upstream.failure` is the classification (`Unreachable`,
+`AuthenticationRejected`, `InvalidResponse`, or `ResponseTooLarge`) and whose other details are the
+provider's own bounded tokens, such as `upstream.stream: connection.lost`,
+`upstream.completion: body.truncated`, or `upstream.socket_error: ConnectionRefused`. A client that
+left records neither: `client_cancelled` says so.
+
 ### Where each streaming boundary is stamped
 
-Four boundaries describe the first moments of a streamed response, and they are four different instants. Sharing one clock reading between them — which the first Stage 1B implementation did — makes time to first byte, flush latency, decode cost, and time to first token all exactly zero, which is indistinguishable from not measuring at all (ADR 0010).
+These boundaries describe the first moments of a streamed response, and each is a different instant. Sharing one clock reading between them — which the first Stage 1B implementation did — makes time to first byte, flush latency, decode cost, and time to first token all exactly zero, which is indistinguishable from not measuring at all (ADR 0010).
 
 | Boundary | The operation it names |
 | --- | --- |
 | first upstream byte | the upstream read returned a positive byte count. Never a reading taken before that read: it would date the moment AgentSplice began waiting. |
+| client response started | the client's status and headers, committed with that first byte, had been flushed. |
 | first client event flushed | the write carrying the bytes that completed the first event a client **dispatches** finished flushing. |
 | first SSE event decoded | the frame reader handed out its first complete frame. A comment or keepalive counts. |
 | first semantic output event | the protocol interpreter classified a frame as carrying model output. |
@@ -187,7 +217,7 @@ Token instruments record only what a runtime actually reported. Absent usage pro
 
 The window closes at the protocol terminator, not at transport end, so a runtime that stops generating and keeps its connection open cannot deflate this figure with idle time (ADR 0010).
 
-`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished. The same holds for bytes behind a per-event bound violation in that read: the terminator that preceded it still ends the exchange normally (ADR 0011).
+`agentsplice.stream.bytes` and `agentsplice.stream.events` count different things and can legitimately disagree. Bytes count everything forwarded to the client, counted when each write returned — that is, when the server accepted them. An abandoned response ends in a reset, which can discard the last of them before they arrive, so for an abandoned response the count is an upper bound. A stream the runtime failed before its first byte was answered with an error envelope instead, and contributes no data point to either. The record's `stream.client.bytes` measurement follows the same rule, on the buffered path too: it is absent for an answer the client left in the middle of, because how much of it arrived is not known. Events count what was interpreted, and interpretation stops at the protocol terminator — so bytes a runtime coalesced behind its own `[DONE]` inside one network read are delivered and counted as bytes, but contribute no events. Interpreting them would extend a response the protocol had already declared finished. The same holds for bytes behind a per-event bound violation in that read: the terminator that preceded it still ends the exchange normally (ADR 0011).
 
 `agentsplice.prompt.tokens_per_second` is **absent by design, not deferred**. Nothing AgentSplice can observe marks the end of prompt processing, so the only interval available is time to first token — which measures the prompt, the queue, and the network together. Publishing that under a prompt-throughput name is exactly the conflation this document forbids. It becomes derivable only with runtime-log evidence (Stage 2E).
 

@@ -372,6 +372,10 @@ public sealed class ChatCompletionStreamingTests
                 ObservationType.UpstreamHeadersReceived,
                 ObservationType.FirstUpstreamByte,
 
+                // The client's status is committed with the runtime's first byte, not with its
+                // headers, so the commit follows the first read (ADR 0025).
+                ObservationType.ClientResponseStarted,
+
                 // Flush before decode, because that is the order the pump performs them: bytes reach
                 // the client and only then does anything look at them. The previous expectation had
                 // decode first, which contradicted the relay's own structure (ADR 0010).

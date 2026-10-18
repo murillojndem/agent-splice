@@ -1,6 +1,6 @@
 # ADR 0019 — Stage 1D: sample client configurations and a quickstart
 
-- Status: Accepted
+- Status: Accepted, its gap found and not fixed closed by [ADR 0025](0025-stage-1d-a-stream-commits-with-its-first-byte.md)
 - Date: 2026-10-15
 - Related: [ADR 0008](0008-stage-1a-transparent-request-path.md) (the client's credential is never
   forwarded; pass-through routing is opt-in),
@@ -100,6 +100,10 @@ and still parse, still read correctly, and fail only in a user's client.
   `agentsplice` service where a line in `.env` does not. Cline was not run: its table was checked
   against the Cline 4.1.22 extension itself. None of that is a compatibility result, and Linux and
   macOS shells, Docker reaching LM Studio, and other client versions were not exercised.
+
+> **Closed by ADR 0025.** The gap found above is closed: a stream's status is committed with its first
+> byte, so a runtime that fails before it is answered with a `504` or `502` and every correlation
+> header, and a test on a real Kestrel listener shows it.
 
 ## Tests proving these decisions
 

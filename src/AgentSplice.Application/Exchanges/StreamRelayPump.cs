@@ -19,6 +19,11 @@ namespace AgentSplice.Application.Exchanges;
 /// ended have to agree about the same facts — how many events reached the client, whether the
 /// protocol said it was finished, whether anything was malformed — and threading those through
 /// closures is how the two drift apart.
+///
+/// The client's response is started here, with the runtime's first body byte, or at the end of a
+/// response that had none. Until then nothing is committed, and a failure is returned for the
+/// gateway to answer with an error envelope instead of abandoning a response the client never
+/// received (ADR 0025).
 /// </remarks>
 internal sealed class StreamRelayPump
 {
@@ -29,6 +34,7 @@ internal sealed class StreamRelayPump
     private readonly ExchangeRecorder recorder;
     private readonly IUpstreamResponseBody upstream;
     private readonly IClientResponseSink client;
+    private readonly ClientResponseStart start;
     private readonly IStreamEventInterpreterState? interpreter;
     private readonly IChatCompletionResponseCodec responseCodec;
     private readonly LimitsOptions limits;
@@ -64,11 +70,13 @@ internal sealed class StreamRelayPump
     private bool sawSemanticEvent;
     private bool sawTerminator;
     private bool sawMalformedEvent;
+    private bool responseStarted;
 
     internal StreamRelayPump(
         ExchangeRecorder recorder,
         IUpstreamResponseBody upstream,
         IClientResponseSink client,
+        ClientResponseStart start,
         IStreamEventInterpreterState? interpreter,
         IChatCompletionResponseCodec responseCodec,
         LimitsOptions limits,
@@ -80,6 +88,7 @@ internal sealed class StreamRelayPump
         this.recorder = recorder;
         this.upstream = upstream;
         this.client = client;
+        this.start = start;
         this.interpreter = interpreter;
         this.responseCodec = responseCodec;
         this.limits = limits;
@@ -134,7 +143,7 @@ internal sealed class StreamRelayPump
                 }
 
                 return read.EndOfStream
-                    ? EndOfStream()
+                    ? await EndOfStreamAsync(cancellationToken).ConfigureAwait(false)
                     : Faulted(read.Failure!);
             }
         }
@@ -158,6 +167,11 @@ internal sealed class StreamRelayPump
         ReadOnlyMemory<byte> chunk,
         CancellationToken cancellationToken)
     {
+        if (!await StartResponseAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ClientVanished();
+        }
+
         if (await client.WriteAsync(chunk, cancellationToken).ConfigureAwait(false) is ClientWriteResult.ClientGone)
         {
             return ClientVanished();
@@ -306,6 +320,32 @@ internal sealed class StreamRelayPump
         observations.Add((type, at));
     }
 
+    /// <summary>
+    /// Commits the client's status and headers, once, and returns <c>false</c> if the client is gone.
+    /// </summary>
+    /// <remarks>
+    /// The boundary is stamped after the commit returns, because that is when the headers were
+    /// flushed; stamping it before would date a moment the client had not yet been given anything
+    /// (ADR 0010).
+    /// </remarks>
+    private async Task<bool> StartResponseAsync(CancellationToken cancellationToken)
+    {
+        if (responseStarted)
+        {
+            return true;
+        }
+
+        if (await client.StartAsync(start, cancellationToken).ConfigureAwait(false) is ClientWriteResult.ClientGone)
+        {
+            return false;
+        }
+
+        responseStarted = true;
+        recorder.Observe(ObservationType.ClientResponseStarted, timeProvider.GetUtcNow());
+
+        return true;
+    }
+
     /// <summary>The protocol declared the response complete, so the relay stops without reading on.</summary>
     /// <remarks>
     /// Completion is dated from recognising the terminator rather than from the transport ending.
@@ -322,6 +362,18 @@ internal sealed class StreamRelayPump
         return Finish(
             sawMalformedEvent ? StreamTermination.MalformedEvent : StreamTermination.ProtocolTerminatorReceived,
             error: null);
+    }
+
+    private async Task<StreamRelayOutcome> EndOfStreamAsync(CancellationToken cancellationToken)
+    {
+        // A runtime that answered and closed without a body byte has still answered, so its status
+        // is committed now: the client receives exactly what the runtime said, which was nothing.
+        if (!await StartResponseAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return ClientVanished();
+        }
+
+        return EndOfStream();
     }
 
     private StreamRelayOutcome EndOfStream()
@@ -372,6 +424,11 @@ internal sealed class StreamRelayPump
     /// Unreachable after the protocol terminator, because recognising it ends the loop before
     /// another read is issued. That is the point: a timeout or a reset that arrives after the
     /// runtime has already said it finished can no longer be reported against it (ADR 0010).
+    ///
+    /// A response that has started is abandoned, event stream or not: one that stops early and ends
+    /// cleanly is indistinguishable from a whole one, and a truncated JSON body closed politely is as
+    /// much a false success as a truncated stream. One that has not started is left alone, so the
+    /// gateway can still answer with an envelope (ADR 0025).
     /// </remarks>
     private StreamRelayOutcome Faulted(UpstreamFailure failure)
     {
@@ -380,14 +437,9 @@ internal sealed class StreamRelayPump
             return ClientVanished();
         }
 
-        if (failure.Phase is { } phase)
-        {
-            recorder.Observe(
-                ObservationType.TimeoutFired,
-                SafeDetails.Create("timeout.phase", phase.ToString()));
-        }
+        recorder.ObserveUpstreamFailure(failure);
 
-        if (streamed)
+        if (responseStarted)
         {
             client.Abort();
         }
@@ -399,7 +451,7 @@ internal sealed class StreamRelayPump
                     : StreamTermination.ConnectionLost
                 : StreamTermination.NotApplicable,
             GatewayErrorCatalogue.Translate(failure),
-            aborted: streamed);
+            aborted: responseStarted);
     }
 
     /// <summary>
@@ -429,6 +481,7 @@ internal sealed class StreamRelayPump
         {
             Termination = termination,
             Error = error,
+            ResponseStarted = responseStarted,
             StatusCode = metadata.StatusCode,
             MediaType = mediaType,
             ClientBytes = clientBytes,

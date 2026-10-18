@@ -51,12 +51,16 @@ public sealed record CompletionExchange
     /// <summary>True when the client requested a streamed response.</summary>
     public bool Streaming { get; private init; }
 
-    /// <summary>True once AgentSplice committed a streamed response to the client.</summary>
+    /// <summary>True once the runtime answered with an event stream and AgentSplice began relaying it.</summary>
     /// <remarks>
     /// Distinct from <see cref="Streaming"/>, which records only what the client asked for. A request
     /// that asked to stream and received a buffered JSON error never streamed anything, and requiring
-    /// it to record how its stream ended would fabricate evidence. This is also the moment the status
-    /// line becomes unchangeable, which is the fact every later termination decision turns on.
+    /// it to record how its stream ended would fabricate evidence.
+    ///
+    /// Not the moment the client's status became unchangeable. That moment is the runtime's first body
+    /// byte, recorded as the <c>ClientResponseStarted</c> boundary, so a stream that fails before it is
+    /// answered with an error envelope and still records how the runtime's stream ended (ADR 0025,
+    /// superseding the definition in ADR 0009 decision 4).
     /// </remarks>
     public bool StreamedResponse { get; private init; }
 
@@ -227,11 +231,12 @@ public sealed record CompletionExchange
         return this with { Resolution = resolution, Status = ExchangeStatus.Forwarding };
     }
 
-    /// <summary>Records that a streamed response has been committed to the client.</summary>
+    /// <summary>Records that the runtime answered with an event stream, which is now being relayed.</summary>
     /// <remarks>
-    /// Called when the status line and headers carrying the stream media type have been sent, not
-    /// when the first byte of a body arrives. After this point the status can no longer be changed,
-    /// so every failure has to be expressed inside the stream or by abandoning it.
+    /// Called when the runtime's headers carrying the stream media type arrive, not when the client's
+    /// status is committed. From here the exchange has a stream whose ending must be recorded, whether
+    /// the client then receives the stream or, when the runtime fails before its first byte, the
+    /// gateway's error envelope (ADR 0025).
     /// </remarks>
     public CompletionExchange BeginStreaming()
     {

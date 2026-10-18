@@ -1,18 +1,21 @@
 using AgentSplice.Api.Correlation;
 using AgentSplice.Application.Errors;
-using AgentSplice.Application.Exchanges;
 using AgentSplice.Application.Protocols;
 using AgentSplice.Domain.Identifiers;
 
 namespace AgentSplice.Api.Endpoints;
 
 /// <summary>
-/// Writes an application-decided response to the wire.
+/// Writes an application-decided response to the wire, for every surface except completions.
 /// </summary>
 /// <remarks>
 /// Correlation headers are set before the body and on every status, including errors. An error
 /// arriving without a request identifier would be the one response a user most needs to correlate
 /// and least able to.
+///
+/// A completion's response is written by the application itself, through
+/// <see cref="HttpClientResponseSink"/>, so that the exchange is recorded after the client was sent
+/// it rather than before (ADR 0025).
 /// </remarks>
 internal static class GatewayResponseWriter
 {
@@ -27,38 +30,6 @@ internal static class GatewayResponseWriter
         context.Response.ContentType = response.MediaType;
 
         await context.Response.Body.WriteAsync(response.Body, cancellationToken).ConfigureAwait(false);
-    }
-
-    internal static async Task WriteAsync(
-        HttpContext context,
-        ChatCompletionOutcome outcome,
-        CancellationToken cancellationToken)
-    {
-        if (outcome.ClientDisconnected)
-        {
-            // The socket is gone. Writing would throw, and setting a status on a response that has
-            // already started would throw over the top of the real cause.
-            return;
-        }
-
-        if (outcome.ResponseAlreadyWritten)
-        {
-            // A streamed answer was written as it arrived, headers included. Touching the response
-            // now would either throw or append bytes the client would read as another event.
-            return;
-        }
-
-        SetCorrelation(context, outcome.RequestId, outcome.ExchangeId, outcome.TraceId, outcome.Runtime);
-
-        foreach (var (name, value) in outcome.RelayedHeaders)
-        {
-            context.Response.Headers[name] = value;
-        }
-
-        context.Response.StatusCode = outcome.StatusCode;
-        context.Response.ContentType = outcome.MediaType;
-
-        await context.Response.Body.WriteAsync(outcome.Body, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Writes an error raised at the transport boundary, before the application ran.</summary>

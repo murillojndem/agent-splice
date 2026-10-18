@@ -92,6 +92,7 @@ public sealed class StreamRelayBoundaryTests
         Assert.Equal(
             [
                 ObservationType.FirstUpstreamByte,
+                ObservationType.ClientResponseStarted,
                 ObservationType.FirstClientEventFlushed,
                 ObservationType.FirstDecodedEvent,
                 ObservationType.FirstSemanticEvent,
@@ -359,6 +360,152 @@ public sealed class StreamRelayBoundaryTests
         Assert.Equal(Event(ContentChunk).Length, outcome.ClientBytes);
     }
 
+    [Fact]
+    public async Task A_timeout_before_the_first_byte_leaves_the_client_response_unstarted()
+    {
+        // The runtime's headers arrived and then nothing did. Nothing has reached the client, so the
+        // relay must leave the response alone for the gateway to answer with an envelope; abandoning
+        // it here is what left a client a reset with no status at all (ADR 0019, ADR 0025).
+        var clock = Clock();
+        var sink = Sink(clock);
+        var body = new ScriptedUpstreamBody(clock, [Timeout(after: Stall)]);
+
+        var recorder = Recorder(clock);
+        var outcome = await RelayAsync(clock, recorder, body, sink);
+
+        Assert.False(outcome.ResponseStarted);
+        Assert.Equal(0, sink.Starts);
+        Assert.False(sink.Aborted);
+        Assert.Equal("agentsplice_upstream_timeout", outcome.Error?.Code);
+
+        // The runtime's stream still ended somehow, and the exchange still says how.
+        Assert.Equal(StreamTermination.Timeout, outcome.Termination);
+
+        var record = recorder.ToRecord();
+        var timeout = record.Observations.Single(observation => observation.Type == ObservationType.TimeoutFired);
+
+        Assert.Equal("IdleStream", timeout.Details.Values["timeout.phase"]);
+        Assert.DoesNotContain(ObservationType.ClientResponseStarted, Types(record));
+    }
+
+    [Fact]
+    public async Task A_runtime_that_drops_before_its_first_byte_leaves_the_client_response_unstarted()
+    {
+        var clock = Clock();
+        var sink = Sink(clock);
+        var body = new ScriptedUpstreamBody(clock, [Reset(after: Stall)]);
+
+        var recorder = Recorder(clock);
+        var outcome = await RelayAsync(clock, recorder, body, sink);
+
+        Assert.False(outcome.ResponseStarted);
+        Assert.False(sink.Aborted);
+        Assert.Equal("agentsplice_invalid_upstream_response", outcome.Error?.Code);
+        Assert.Equal(StreamTermination.ConnectionLost, outcome.Termination);
+
+        // The loss is on the timeline, with the provider's bounded detail. It used to leave no trace
+        // there at all: only a timeout recorded a boundary.
+        var failed = recorder.ToRecord().Observations.Single(observation => observation.Type == ObservationType.UpstreamFailed);
+
+        Assert.Equal("InvalidResponse", failed.Details.Values["upstream.failure"]);
+        Assert.Equal("connection.lost", failed.Details.Values["upstream.stream"]);
+    }
+
+    [Fact]
+    public async Task The_client_response_starts_with_the_first_read_that_returned_bytes()
+    {
+        // Committed with the runtime's first byte and the runtime's own status, media type, and
+        // headers, before that byte is written: the first write then carries both, as the server
+        // would have sent them anyway.
+        var clock = Clock();
+        var sink = Sink(clock, startCost: FlushCost);
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ContentChunk), after: Stall), End()]);
+
+        var record = await RelayAsync(clock, body, sink);
+
+        Assert.Equal(1, sink.Starts);
+        Assert.Equal(0, sink.WritesBeforeStart);
+        Assert.Equal(200, sink.Started?.StatusCode);
+        Assert.Equal("text/event-stream", sink.Started?.MediaType);
+        Assert.True(sink.Started?.DisableCaching);
+
+        // Stamped once the commit returned, which is when the headers had been flushed.
+        var started = At(record, ObservationType.ClientResponseStarted);
+
+        Assert.True(started >= At(record, ObservationType.FirstUpstreamByte) + FlushCost);
+        Assert.True(started <= At(record, ObservationType.FirstClientEventFlushed));
+
+        AssertNonDecreasing(record);
+    }
+
+    [Fact]
+    public async Task A_runtime_that_answers_with_no_body_byte_still_has_its_answer_relayed()
+    {
+        // An empty stream is an answer, so its status is committed at the end rather than replaced by
+        // a gateway error.
+        var clock = Clock();
+        var sink = Sink(clock);
+        var body = new ScriptedUpstreamBody(clock, [End()]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, sink);
+
+        Assert.True(outcome.ResponseStarted);
+        Assert.Equal(1, sink.Starts);
+        Assert.Null(outcome.Error);
+        Assert.Equal(StreamTermination.NormalCompletion, outcome.Termination);
+    }
+
+    [Fact]
+    public async Task A_client_gone_when_its_response_would_start_is_a_cancellation()
+    {
+        var clock = Clock();
+        var sink = Sink(clock, goneAtStart: true);
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ContentChunk)), End()]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, sink);
+
+        Assert.True(outcome.ClientGone);
+        Assert.False(outcome.ResponseStarted);
+        Assert.Equal(StreamTermination.ClientCancelled, outcome.Termination);
+        Assert.Equal(0, sink.Writes);
+    }
+
+    [Fact]
+    public async Task A_failure_after_the_first_byte_still_abandons_the_response()
+    {
+        // Once the status is committed there is no envelope to send, and ending politely would make a
+        // truncated stream look whole (ADR 0009 decision 5).
+        var clock = Clock();
+        var sink = Sink(clock);
+        var body = new ScriptedUpstreamBody(clock, [Chunk(Event(ContentChunk)), Timeout(after: Stall)]);
+
+        var outcome = await RelayOutcomeAsync(clock, body, sink);
+
+        Assert.True(outcome.ResponseStarted);
+        Assert.True(outcome.Aborted);
+        Assert.True(sink.Aborted);
+        Assert.Equal(StreamTermination.Timeout, outcome.Termination);
+    }
+
+    [Fact]
+    public async Task An_ordinary_body_that_fails_after_its_first_byte_is_abandoned_too()
+    {
+        // A runtime answering a streaming request with JSON, then dying mid-body. Ending that response
+        // cleanly handed the client truncated JSON and a tidy end, which only aborting tells apart
+        // from a whole answer.
+        var clock = Clock();
+        var sink = Sink(clock);
+        var body = new ScriptedUpstreamBody(clock, [Chunk("""{"id":"c1","choices":"""), Reset(after: Stall)]);
+
+        var outcome = await RelayAsync(clock, Recorder(clock), body, sink, mediaType: "application/json");
+
+        Assert.True(outcome.ResponseStarted);
+        Assert.True(outcome.Aborted);
+        Assert.True(sink.Aborted);
+        Assert.False(outcome.Streamed);
+        Assert.Equal(StreamTermination.NotApplicable, outcome.Termination);
+    }
+
     private static bool IsFirstBoundary(ObservationType type) =>
         type is ObservationType.FirstDecodedEvent or ObservationType.FirstClientEventFlushed;
 
@@ -368,8 +515,10 @@ public sealed class StreamRelayBoundaryTests
     private static RecordingClientSink Sink(
         FakeTimeProvider clock,
         TimeSpan? flushCost = null,
-        int? goneFromWrite = null) =>
-        new(clock, flushCost ?? TimeSpan.Zero, goneFromWrite);
+        int? goneFromWrite = null,
+        TimeSpan? startCost = null,
+        bool goneAtStart = false) =>
+        new(clock, flushCost ?? TimeSpan.Zero, goneFromWrite, startCost ?? TimeSpan.Zero, goneAtStart);
 
     private static string Event(string data) => "data: " + data + "\n\n";
 
@@ -384,6 +533,15 @@ public sealed class StreamRelayBoundaryTests
         new(
             Bytes: null,
             UpstreamFailure.Create(UpstreamFailureReason.Timeout, phase: TimeoutPhase.IdleStream),
+            after);
+
+    /// <summary>The runtime's connection dropping, as the provider classifies it.</summary>
+    private static UpstreamStep Reset(TimeSpan after) =>
+        new(
+            Bytes: null,
+            UpstreamFailure.Create(
+                UpstreamFailureReason.InvalidResponse,
+                details: SafeDetails.Create("upstream.stream", "connection.lost")),
             after);
 
     private static IEnumerable<ObservationType> Types(ExchangeRecord record) =>
@@ -434,7 +592,8 @@ public sealed class StreamRelayBoundaryTests
         ExchangeRecorder recorder,
         ScriptedUpstreamBody body,
         RecordingClientSink sink,
-        int? maxStreamEventBytes = null)
+        int? maxStreamEventBytes = null,
+        string mediaType = "text/event-stream")
     {
         var options = new AgentSpliceOptions();
 
@@ -449,7 +608,7 @@ public sealed class StreamRelayBoundaryTests
             Options.Create(options),
             clock);
 
-        var metadata = UpstreamResponseMetadata.Create(200, clock.GetUtcNow(), "text/event-stream");
+        var metadata = UpstreamResponseMetadata.Create(200, clock.GetUtcNow(), mediaType);
 
         var correlation = new GatewayCorrelation(
             recorder.RequestId,
@@ -545,13 +704,22 @@ public sealed class StreamRelayBoundaryTests
         private readonly FakeTimeProvider clock;
         private readonly TimeSpan flushCost;
         private readonly int? goneFromWrite;
+        private readonly TimeSpan startCost;
+        private readonly bool goneAtStart;
         private readonly List<byte> written = [];
 
-        internal RecordingClientSink(FakeTimeProvider clock, TimeSpan flushCost, int? goneFromWrite)
+        internal RecordingClientSink(
+            FakeTimeProvider clock,
+            TimeSpan flushCost,
+            int? goneFromWrite,
+            TimeSpan startCost,
+            bool goneAtStart)
         {
             this.clock = clock;
             this.flushCost = flushCost;
             this.goneFromWrite = goneFromWrite;
+            this.startCost = startCost;
+            this.goneAtStart = goneAtStart;
         }
 
         public bool HasStarted { get; private set; }
@@ -560,11 +728,33 @@ public sealed class StreamRelayBoundaryTests
 
         internal string Text => Encoding.UTF8.GetString(written.ToArray());
 
+        /// <summary>How many times the response was started; once at most is the contract.</summary>
+        internal int Starts { get; private set; }
+
+        /// <summary>How many writes preceded the start, which must be none.</summary>
+        internal int WritesBeforeStart { get; private set; } = -1;
+
+        /// <summary>What the response was started with.</summary>
+        internal ClientResponseStart? Started { get; private set; }
+
         public ValueTask<ClientWriteResult> StartAsync(
             ClientResponseStart start,
             CancellationToken cancellationToken)
         {
+            Starts++;
+            WritesBeforeStart = Writes;
+
+            // The header flush completes here, so a boundary stamped before the commit returned
+            // cannot land on the far side of this.
+            clock.Advance(startCost);
+
+            if (goneAtStart)
+            {
+                return ValueTask.FromResult(ClientWriteResult.ClientGone);
+            }
+
             HasStarted = true;
+            Started = start;
 
             return ValueTask.FromResult(ClientWriteResult.Written);
         }

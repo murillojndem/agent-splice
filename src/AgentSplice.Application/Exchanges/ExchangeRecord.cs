@@ -29,6 +29,14 @@ public sealed record ExchangeRecord
     /// <summary>The correlation token returned to the client.</summary>
     public PublicRequestId RequestId { get; private init; }
 
+    /// <summary>The trace identifier returned to the client, or <c>null</c> when tracing produced none.</summary>
+    /// <remarks>
+    /// Held here as well as on <see cref="Exchange"/>, because a request refused before its model was
+    /// known has no exchange and was still given an <c>x-agentsplice-trace-id</c>. Reading it from the
+    /// exchange alone dropped the one link from such a record to its spans.
+    /// </remarks>
+    public TraceId? TraceId { get; private init; }
+
     /// <summary>The exchange, or <c>null</c> when the request failed before its model was known.</summary>
     public CompletionExchange? Exchange { get; private init; }
 
@@ -47,7 +55,12 @@ public sealed record ExchangeRecord
     /// </remarks>
     public IReadOnlyList<Measurement> Measurements { get; private init; } = [];
 
-    /// <summary>The error reported to the client, or <c>null</c> when none was.</summary>
+    /// <summary>The error envelope the client received, or <c>null</c> when none reached it.</summary>
+    /// <remarks>
+    /// Only an envelope that was written. A response abandoned after it started, and a client that
+    /// left, carry none: the exchange's failure class says why it failed, and no code is recorded that
+    /// the client never received (ADR 0025).
+    /// </remarks>
     public GatewayError? Error { get; private init; }
 
     /// <summary>Creates a record.</summary>
@@ -57,7 +70,8 @@ public sealed record ExchangeRecord
         IReadOnlyList<ExchangeObservation> observations,
         IReadOnlyList<Measurement>? measurements = null,
         CompletionExchange? exchange = null,
-        GatewayError? gatewayError = null)
+        GatewayError? gatewayError = null,
+        TraceId? traceId = null)
     {
         ArgumentNullException.ThrowIfNull(observations);
 
@@ -65,6 +79,7 @@ public sealed record ExchangeRecord
         {
             ExchangeId = exchangeId,
             RequestId = requestId,
+            TraceId = traceId ?? exchange?.TraceId,
             Exchange = exchange,
             Observations = observations,
             Measurements = measurements ?? [],

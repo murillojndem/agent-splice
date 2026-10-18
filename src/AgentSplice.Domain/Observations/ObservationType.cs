@@ -53,7 +53,12 @@ public enum ObservationType
     /// <summary>The upstream response completed normally.</summary>
     UpstreamCompleted = 14,
 
-    /// <summary>The client response completed normally.</summary>
+    /// <summary>The client response was written in full: a relayed answer or the gateway's own error.</summary>
+    /// <remarks>
+    /// Stamped when the last write returned, never before it. Its <c>client.response</c> detail says
+    /// which of the two the client received, so a failure whose error envelope reached the client is
+    /// told apart from one whose response was abandoned (ADR 0025).
+    /// </remarks>
     ClientCompleted = 15,
 
     /// <summary>The client disconnected or cancelled (FR-CHAT-006).</summary>
@@ -85,4 +90,31 @@ public enum ObservationType
     /// (docs/OBSERVABILITY.md "Latency phases").
     /// </remarks>
     UpstreamConnectionEstablished = 22,
+
+    /// <summary>The client response's status line and headers were flushed to the client.</summary>
+    /// <remarks>
+    /// The moment the status became unchangeable. A relayed response commits it with the runtime's
+    /// first body byte rather than with the runtime's headers, so a runtime that fails before that
+    /// byte can still be answered with an error envelope (ADR 0025).
+    /// </remarks>
+    ClientResponseStarted = 23,
+
+    /// <summary>AgentSplice abandoned a client response it had already started.</summary>
+    /// <remarks>
+    /// The only way left to say "this is not a whole answer" once the status is committed. No error
+    /// envelope reaches the client, so the exchange records why it failed and no error code
+    /// (ADR 0025).
+    /// </remarks>
+    ClientResponseAbandoned = 24,
+
+    /// <summary>
+    /// The upstream request failed for a reason other than a timeout: the runtime could not be
+    /// reached, refused the gateway's credentials, or sent a response that could not be read.
+    /// </summary>
+    /// <remarks>
+    /// A timeout is recorded as <see cref="TimeoutFired"/> with its phase instead. Its details are the
+    /// failure's classification and the provider's own bounded detail, such as
+    /// <c>upstream.stream=connection.lost</c>, never a message or a host.
+    /// </remarks>
+    UpstreamFailed = 25,
 }

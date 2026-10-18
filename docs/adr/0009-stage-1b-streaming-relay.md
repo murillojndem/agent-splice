@@ -1,6 +1,6 @@
 # ADR 0009 — Stage 1B streaming relay and timeline
 
-- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md) and, for decision 12, by [ADR 0013](0013-stage-1c-metadata-store.md)
+- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md), for decision 12 by [ADR 0013](0013-stage-1c-metadata-store.md), and for decision 4's commit point by [ADR 0025](0025-stage-1d-a-stream-commits-with-its-first-byte.md)
 - Date: 2026-07-30
 - Related: ADR 0006 (durable core), ADR 0007 (Stage 0 toolchain), ADR 0008 (Stage 1A transparent request path)
 
@@ -75,6 +75,13 @@ The invariant "a streamed exchange must state how its stream ended" is keyed on 
 the first, a `stream: true` request answered with a buffered JSON error would have been forced to
 invent a termination for a stream that never existed. `Accept` now starts at `NotApplicable` rather
 than `Unknown` for the same reason: at acceptance there is no stream whose ending is unknown.
+
+> **Superseded in part by ADR 0025.** The status is no longer committed when the runtime's headers
+> arrive: Kestrel sent it only with the first body byte, so it was unchangeable and still unsent, and a
+> failure in between left the client a bare reset. It is committed with the first byte, and a failure
+> before it is answered with an error envelope. `BeginStreaming` stays at the runtime's headers, and
+> `StreamedResponse` now means the runtime answered with an event stream and the relay began; the
+> invariant it keys stands.
 
 ### 5. Malformed payloads are observed; bounds abort
 

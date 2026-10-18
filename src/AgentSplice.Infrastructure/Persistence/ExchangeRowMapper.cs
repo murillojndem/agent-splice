@@ -44,7 +44,7 @@ internal static class ExchangeRowMapper
         {
             ExchangeId = record.ExchangeId.Value,
             PublicRequestId = record.RequestId.Value,
-            TraceId = exchange?.TraceId?.Value,
+            TraceId = record.TraceId?.Value,
             IngressProtocol = (int)(exchange?.IngressProtocol ?? IngressProtocol.OpenAiChatCompletions),
             StartedAtTicks = StartedAt(record).UtcTicks,
             CompletedAtTicks = CompletedAt(record)?.UtcTicks,
@@ -159,16 +159,16 @@ internal static class ExchangeRowMapper
     /// When the exchange ended, or <c>null</c> when no boundary recorded it.
     /// </summary>
     /// <remarks>
-    /// A failed model-less request legitimately has none: <c>ExchangeRecorder.Fail</c> appends no
-    /// boundary of its own, because <see cref="ObservationType"/> has no "failed" member and inventing
-    /// one would say less than the specific boundary the caller already recorded. A terminal status
-    /// with no completion timestamp is unambiguous — it ended, and the moment was not observed — and
-    /// is the honest answer rather than the current clock (FR-TRACE-006).
+    /// A model-less request is dated from the client-side boundary that ended it: the envelope it was
+    /// sent, the client leaving, or a response abandoned (ADR 0025). A terminal status with no
+    /// completion timestamp is still possible for a record no current path produces, and is the
+    /// honest answer rather than the current clock (FR-TRACE-006).
     /// </remarks>
     private static DateTimeOffset? CompletedAt(ExchangeRecord record) =>
         record.Exchange?.CompletedAt
             ?? Find(record, ObservationType.ClientCompleted)?.Timestamp
-            ?? Find(record, ObservationType.ClientCancelled)?.Timestamp;
+            ?? Find(record, ObservationType.ClientCancelled)?.Timestamp
+            ?? Find(record, ObservationType.ClientResponseAbandoned)?.Timestamp;
 
     /// <summary>
     /// The terminal state, including for a request that never produced an exchange.
