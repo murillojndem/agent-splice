@@ -139,7 +139,13 @@ public sealed class ExchangeApiTests
 
         var id = (await WaitForPageAsync(fixture)).GetProperty("items")[0].GetProperty("exchangeId").GetString();
 
-        var timeline = await ReadJsonAsync(fixture, "/api/v1/exchanges/" + id + "/timeline");
+        // The store writes an exchange, and then, in a transaction of its own, the boundary saying the
+        // write had finished. An exchange is listed after the first, so the two routes compared before
+        // the second could each see a different timeline, and on CI's Linux runner they once did.
+        var timeline = await WaitForAsync(
+            fixture,
+            "/api/v1/exchanges/" + id + "/timeline",
+            document => document.EnumerateArray().Any(observation => observation.GetProperty("type").GetString() == "persistence_completed"));
         var observations = await ReadJsonAsync(fixture, "/api/v1/exchanges/" + id + "/observations");
 
         Assert.Equal(timeline.GetRawText(), observations.GetRawText());
