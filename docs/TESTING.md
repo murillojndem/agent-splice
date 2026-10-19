@@ -680,6 +680,11 @@ the idle budget the gaps after it.
 - `GatewayFixture.SetTimeouts` sets all five phases, each argument required, for every test that
   shortens the total: with two phases defaulting to five minutes, a total below that refuses to start
   unless each phase is stated.
+- `ConfigurationKeyContractTests` reads the shipped `appsettings.json`: every key under `agentsplice`
+  must bind to a setting, and each runtime's `timeouts` must state exactly the phases `TimeoutOptions`
+  declares. Binding ignores a key that matches no property, and every shipped value is also its class's
+  default, so a misspelled key would start the gateway on the default with `HostStartupTests` still
+  passing; before these tests, `timeouts:firstByte` was held only by the client guide that names it.
 
 A budget a test must not see fire is at least five times the wait it covers, and a wait a defect would
 cut runs well past the budget the defect would apply, so a slow machine can hide a defect but cannot

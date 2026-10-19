@@ -70,6 +70,60 @@ public sealed partial class ConfigurationKeyContractTests
     }
 
     [Fact]
+    public void Every_setting_in_the_shipped_settings_binds_to_a_real_setting()
+    {
+        // Binding ignores a key that matches no property, and every shipped value is also the default
+        // its options class holds, so a misspelled key here changes nothing a booted host can show:
+        // the gateway starts, reads the default, and reports the value the file only appears to set.
+        // Reading the file is the one place that mistake is caught.
+        using var settings = ShippedSettings();
+        var keys = new List<string>();
+
+        CollectSettingKeys(settings.RootElement.GetProperty("agentsplice"), "agentsplice", keys);
+
+        var unbound = keys
+            .Where(key => !TryResolve(key, out var leafType) || !IsSettingValue(leafType!))
+            .ToArray();
+
+        Assert.NotEmpty(keys);
+        Assert.True(
+            unbound.Length == 0,
+            FormattableString.Invariant(
+                $"appsettings.json sets keys that bind to no setting: {string.Join(", ", unbound)}"));
+    }
+
+    [Fact]
+    public void The_shipped_settings_state_every_timeout_phase()
+    {
+        // The shipped file is where an operator reads which budgets a runtime has and what each is
+        // set to. A phase the options declare and the file leaves out is a budget nobody is shown, as
+        // firstByte would have been had ADR 0028 added only the property; a key the file states and
+        // no phase declares binds to nothing.
+        var phases = typeof(TimeoutOptions)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(property => property.Name.ToUpperInvariant())
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        using var settings = ShippedSettings();
+        var runtimes = settings.RootElement.GetProperty("agentsplice").GetProperty("runtimes");
+
+        Assert.NotEqual(0, runtimes.GetArrayLength());
+
+        foreach (var runtime in runtimes.EnumerateArray())
+        {
+            var shipped = runtime
+                .GetProperty("timeouts")
+                .EnumerateObject()
+                .Select(phase => phase.Name.ToUpperInvariant())
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
+            Assert.Equal(phases, shipped);
+        }
+    }
+
+    [Fact]
     public void The_compose_file_binds_the_gateway_to_loopback_on_the_host()
     {
         var compose = RepositoryPaths.ReadText("docker-compose.yml");
@@ -435,6 +489,38 @@ public sealed partial class ConfigurationKeyContractTests
         }
 
         return keys;
+    }
+
+    /// <summary>
+    /// Every value in a settings file, under the colon-separated key configuration binding reads it by.
+    /// </summary>
+    /// <remarks>
+    /// An array's items are addressed by index, as the JSON configuration provider flattens them, and an
+    /// empty object or array holds no value and yields no key.
+    /// </remarks>
+    private static void CollectSettingKeys(JsonElement element, string key, List<string> keys)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                CollectSettingKeys(property.Value, key + ":" + property.Name, keys);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            var index = 0;
+
+            foreach (var item in element.EnumerateArray())
+            {
+                CollectSettingKeys(item, FormattableString.Invariant($"{key}:{index}"), keys);
+                index++;
+            }
+        }
+        else
+        {
+            keys.Add(key);
+        }
     }
 
     /// <summary>

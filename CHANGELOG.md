@@ -2,6 +2,22 @@
 
 All notable changes will be documented here.
 
+## Unreleased
+
+### After 0.2.1-alpha
+
+- The configuration-key contract tests read the shipped `appsettings.json` too (ADR 0028). Every key
+  under `agentsplice` must bind to a setting, and each runtime's `timeouts` must state exactly the
+  phases `TimeoutOptions` declares, which holds `timeouts:firstByte` as a shipped key rather than only
+  one the client guide names. Binding ignores a key that matches no property, and every shipped value
+  is also its class's default, so a misspelled key would start the gateway on the default with
+  `HostStartupTests` still passing. Each was verified to fail against a deliberately reintroduced
+  defect:
+  - `firstByte` renamed `first_byte` in the shipped file fails
+    `Every_setting_in_the_shipped_settings_binds_to_a_real_setting` and
+    `The_shipped_settings_state_every_timeout_phase`;
+  - the shipped `firstByte` line removed, or a phase added to `TimeoutOptions` alone, fails the second.
+
 ## 0.2.1-alpha — 2026-10-19
 
 ### After 0.2.0-alpha
