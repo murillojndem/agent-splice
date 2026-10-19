@@ -219,6 +219,10 @@ built and smoke-tested by CI on macOS 15, signed ad hoc and not notarized, and c
 when its job passed, since that job gates nothing (ADR 0029, launch decision D3). No runtime behaviour
 changes.
 
+After 0.2.1-alpha, a second dated trace report: OpenCode through the 0.2.1-alpha Windows package to
+llama.cpp's `llama-server`, with the shipped `lmstudio` provider given only another address and id
+(launch decision D4). It changes no status of the compatibility matrix and no runtime behaviour.
+
 ## Stage 2 — Replay and Conformance
 
 ### Stage 2A — Sanitized replay artifacts

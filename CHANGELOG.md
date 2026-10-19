@@ -81,6 +81,23 @@ All notable changes will be documented here.
     verification not naming the macOS archive fails `The_release_publishes_what_ci_assembled_and_nothing_else`;
     and a macOS package name in the guide naming `0.2.0-alpha` fails
     `The_guides_name_the_version_the_build_carries`.
+- **A second dated trace report** (ADR 0023, launch decision D4):
+  `docs/reports/2026-10-19-opencode-llama-server/`. OpenCode 1.18.7 ran the first report's task through
+  the 0.2.1-alpha Windows package to llama.cpp's `llama-server` b10662, with the same two model files and
+  no code change. The shipped `lmstudio` provider was given llama-server's address with
+  `runtimes:0:baseUrl` and a name with `runtimes:0:id`.
+  - All eleven exchanges completed with `[DONE]` and every boundary, and their usage and tool calls
+    agree with what OpenCode recorded.
+  - llama-server rendered the `qwen3-coder-30b-apex` chat template that LM Studio could not in the first
+    report, and OpenCode finished the task with that model.
+  - llama-server sends a stream's headers when a slot takes the request. With one slot, a request's time
+    in the queue fell on `responseHeaders` and its prompt processing on `firstByte`; with four, the title
+    shared the GPU with the first agent step's prompt instead.
+  - No marker reached the gateway's log, store, or evidence.
+  - The same release's ROCm build would not run on the machine, so the report's runtime numbers are
+    Vulkan's, where the first report's were ROCm's.
+  - The report index, the README's limits, the compatibility matrix's evidence line, and the roadmap say
+    what changed. No status of the matrix changes, and no runtime behaviour changes.
 
 ## 0.2.1-alpha — 2026-10-19
 

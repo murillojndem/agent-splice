@@ -1,0 +1,381 @@
+{
+  "report": "2026-10-19-opencode-llama-server",
+  "capturedFrom": "2026-10-19T20:18:42.001Z",
+  "capturedUntil": "2026-10-19T20:21:24.857Z",
+  "environment": {
+    "agentsplice": {
+      "version": {
+        "value": "0.2.1-alpha+39dfc7819d195beb5288621ee84d76cb7e893c9c",
+        "source": "GET /api/v1/system"
+      },
+      "commit": {
+        "value": "39dfc7819d195beb5288621ee84d76cb7e893c9c",
+        "source": "the build metadata of the version, which is the commit the v0.2.1-alpha tag names"
+      },
+      "package": {
+        "value": "agentsplice-0.2.1-alpha-win-x64.zip",
+        "source": "the v0.2.1-alpha release, whose assets CI built in release workflow run 39214008235"
+      },
+      "packageSha256": {
+        "value": "78e10851497d450a97db1c4d34075dfc20a612d56b0d039a093c40fb445bec52",
+        "source": "the release's SHA256SUMS, checked with sha256sum --check --ignore-missing --strict before extracting; gh release verify-asset verified the asset against the release's attestation"
+      },
+      "dotnetRuntime": {
+        "value": "10.0.13",
+        "source": "README.txt in the package"
+      },
+      "configuration": {
+        "value": "appsettings.json as the package ships it, and three arguments: --agentsplice:administration:apiKeyEnvironmentVariable=AGENTSPLICE_ADMIN_API_KEY, naming a variable that held a token generated for these sessions; --agentsplice:runtimes:0:baseUrl=http://127.0.0.1:8080/v1, which points the shipped runtime, whose provider is lmstudio, at llama-server; and --agentsplice:runtimes:0:id=llama-server-local, which names that runtime for the server it describes. The package was extracted into a new folder, so its store began empty",
+        "source": "the command that started the gateway"
+      },
+      "contentCapture": {
+        "value": false,
+        "source": "GET /api/v1/system: contentRetentionEnabled; agentsplice:capture:contentEnabled is false in the shipped appsettings.json"
+      },
+      "timeouts": {
+        "value": {
+          "connect": "00:00:05",
+          "responseHeaders": "00:05:00",
+          "firstByte": "00:05:00",
+          "idleStream": "00:01:00",
+          "total": "00:10:00"
+        },
+        "source": "agentsplice:runtimes:0:timeouts in the shipped appsettings.json"
+      },
+      "listenAddress": {
+        "value": "http://127.0.0.1:5280",
+        "source": "the gateway's startup log"
+      }
+    },
+    "machine": {
+      "operatingSystem": {
+        "value": "Windows 11 Pro 10.0.26200, 64-bit",
+        "source": "Win32_OperatingSystem"
+      },
+      "cpu": {
+        "value": "AMD Ryzen 7 5800X3D, 8 cores, 16 threads",
+        "source": "Win32_Processor"
+      },
+      "memoryBytes": {
+        "value": 68626886656,
+        "source": "Win32_ComputerSystem.TotalPhysicalMemory"
+      },
+      "gpu": {
+        "value": "AMD Radeon RX 7900 XT",
+        "source": "Win32_VideoController"
+      },
+      "gpuMemory": {
+        "value": "19.98 GiB",
+        "source": "the display adapter's HardwareInformation.qwMemorySize registry value"
+      },
+      "gpuDriver": {
+        "value": "32.0.32015.2008",
+        "source": "Win32_VideoController.DriverVersion"
+      },
+      "vulkanLoader": {
+        "value": "1.4.350.0",
+        "source": "the file version of the system's vulkan-1.dll"
+      }
+    },
+    "runtime": {
+      "name": {
+        "value": "llama-server",
+        "source": "the server program of llama.cpp's release archive"
+      },
+      "version": {
+        "value": "b10662",
+        "source": "llama-server --version: version: 0.3.0-dev (build 10662, commit 18443257a); GET /props: build_info b10662-18443257a"
+      },
+      "commit": {
+        "value": "18443257a30c884d5332abb8e7dc43c7ffe42fda",
+        "source": "the commit llama.cpp's b10662 release names, published on 2026-08-27"
+      },
+      "firstReportEngine": {
+        "value": "the same llama.cpp release: LM Studio's ROCm engine 2.31.2, which the 2026-10-17 report ran, is built on b10662",
+        "source": "the release notes LM Studio installs with that engine: llama.cpp release b10662 (commit 18443257a)"
+      },
+      "engine": {
+        "value": "llama.cpp b10662 with its Vulkan backend, from the release asset llama-b10662-bin-win-vulkan-x64.zip",
+        "source": "the release asset; llama-server --list-devices: Vulkan0: AMD Radeon RX 7900 XT (20464 MiB)"
+      },
+      "packageSha256": {
+        "value": "e8961305a6e66d1f6ceb2f7920efd78cf1800f3777e006e2f32ba4555c8a1f68",
+        "source": "sha256sum of the downloaded archive, equal to the digest GitHub publishes for the asset"
+      },
+      "processEnvironment": {
+        "value": "VK_LOADER_LAYERS_DISABLE=~implicit~, set for llama-server's process only. Without it, this build crashed while loading the tensors of any model on this machine, in every load mode and with no layer offloaded, and it loaded with every implicit Vulkan layer disabled. Those layers belong to other applications installed on the machine, overlays among them; which one crashed it was not narrowed down",
+        "source": "llama-server's log and exit code (a segmentation fault right after load_tensors), with and without the variable"
+      },
+      "notUsed": {
+        "value": "The same release's ROCm build, llama-b10662-bin-win-rocm-7.14-x64.zip, which would have matched the first report's backend: its ggml-hip.dll imports hipblas.dll, which the archive does not carry and this machine does not have, and llama-server --list-devices listed no device. The Vulkan build of the latest release, b11739, crashed the same way as b10662's while the implicit layers were enabled",
+        "source": "the archive's file list; the import table of its ggml-hip.dll; llama-server --list-devices; llama-server's log and exit code"
+      },
+      "rocmPackageSha256": {
+        "value": "aa2352533e59c26442912569c4900bbcf2c7c6f1b1afd547ebc573705dc60565",
+        "source": "sha256sum of the ROCm archive that was not used, equal to the digest GitHub publishes for it"
+      },
+      "server": {
+        "value": "http://127.0.0.1:8080, started for each model and stopped after its attempt",
+        "source": "--host 127.0.0.1 --port 8080 on its command line"
+      },
+      "ssePing": {
+        "value": "every 30 seconds, llama-server's default",
+        "source": "llama-server --help: --sse-ping-interval, default 30; not set on the command line"
+      },
+      "logging": {
+        "value": "-lv 4 for the load details below, and --log-prompts-dir, which writes each rendered prompt to a folder, as a control for the marker search; llama-server's own log, at -lv 4, recorded no prompt",
+        "source": "the command lines; the marker search over llama-server's log"
+      }
+    },
+    "models": [
+      {
+        "id": {
+          "value": "qwen3.6-35b-a3b",
+          "source": "--alias on llama-server's command line; GET /v1/models: data[0].id"
+        },
+        "file": {
+          "value": "unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf",
+          "source": "-m on llama-server's command line, relative to LM Studio's model folder, where the 2026-10-17 report's LM Studio loaded the same file"
+        },
+        "bytes": {
+          "value": 13211155424,
+          "source": "the model file's size"
+        },
+        "visionProjector": {
+          "value": "mmproj-F32.gguf, 1786305248 bytes, loaded with the model as the first report's LM Studio loaded it",
+          "source": "--mmproj on the command line; llama-server's log: loaded multimodal model"
+        },
+        "visionProjectorSha256": {
+          "value": "0a1c1cd2772ae6de5e87e023cea454720924675f11fe2b0e7bb7648e48debdc0",
+          "source": "sha256sum of the projector file"
+        },
+        "sha256": {
+          "value": "9c964e657212fea1f24905dd7b0a89b82fd807d19fab0b41da14251b07b88fbe",
+          "source": "sha256sum of the model file, not the projector; the same digest as in the 2026-10-17 report"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3.6-35B-A3B",
+          "source": "the GGUF header: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen35moe, 40 blocks with full attention every fourth, 256 experts with 8 used",
+          "source": "llama-server's log: general.architecture, n_layer, qwen35moe.full_attention_interval, n_expert, n_expert_used"
+        },
+        "quantization": {
+          "value": "UD-IQ3_XXS, with an importance matrix; llama-server reports the file type as IQ3_XXS - 3.0625 bpw",
+          "source": "the file name; the GGUF header: general.file_type 23 and quantize.imatrix.*; llama-server's log: print_info file type"
+        },
+        "contextLength": {
+          "value": 262144,
+          "source": "-c 262144; llama-server's log: llama_context n_ctx = 262144; GET /v1/models: meta.n_ctx"
+        },
+        "gpuOffload": {
+          "value": "all, 41 of 41 layers",
+          "source": "-ngl all; llama-server's log: load_tensors offloaded 41/41 layers to GPU"
+        },
+        "parallel": {
+          "value": 1,
+          "source": "-np 1; llama-server's log: n_slots = 1"
+        },
+        "flashAttention": {
+          "value": "on",
+          "source": "-fa on; llama-server's log: llama_context flash_attn = enabled"
+        },
+        "kvCacheType": {
+          "value": "q8_0 for keys and values",
+          "source": "-ctk q8_0 -ctv q8_0; llama-server's log: llama_kv_cache K (q8_0), V (q8_0)"
+        },
+        "contextCheckpoints": {
+          "value": 32,
+          "source": "--ctx-checkpoints 32; llama-server's log: context checkpoints enabled, max = 32"
+        },
+        "promptCache": {
+          "value": "on, up to 8192 MiB in host memory, llama-server's default",
+          "source": "llama-server's log: prompt cache is enabled, size limit: 8192 MiB"
+        },
+        "chatTemplate": {
+          "value": "the template embedded in the file, rendered by llama.cpp's Jinja engine; the template reports thinking = 1",
+          "source": "--jinja, also llama-server's default; llama-server's log: chat template, thinking = 1"
+        },
+        "speculativeDecoding": {
+          "value": "not requested",
+          "source": "no speculative or draft option on the command line"
+        },
+        "threads": {
+          "value": 6,
+          "source": "-t 6; llama-server's log: llama threadpool init, n_threads = 6"
+        },
+        "commandLine": {
+          "value": "llama-server -m <model folder>/unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf --mmproj <model folder>/unsloth/Qwen3.6-35B-A3B-GGUF/mmproj-F32.gguf --alias qwen3.6-35b-a3b --host 127.0.0.1 --port 8080 -ngl all -c 262144 -np 1 -fa on -ctk q8_0 -ctv q8_0 --ctx-checkpoints 32 -t 6 --jinja --log-timestamps --log-prefix --log-colors off -lv 4 --log-prompts-dir <a folder for the session>",
+          "source": "the command that started llama-server, with VK_LOADER_LAYERS_DISABLE=~implicit~ in its environment"
+        }
+      },
+      {
+        "id": {
+          "value": "qwen3-coder-30b-apex",
+          "source": "--alias on llama-server's command line; GET /v1/models: data[0].id"
+        },
+        "file": {
+          "value": "mudler/Qwen3-Coder-30B-APEX-GGUF/Qwen3-Coder-30B-APEX-I-Compact.gguf",
+          "source": "-m on llama-server's command line, relative to LM Studio's model folder, where the 2026-10-17 report's LM Studio loaded the same file"
+        },
+        "bytes": {
+          "value": 14781815968,
+          "source": "the model file's size"
+        },
+        "sha256": {
+          "value": "e883cea614708d6f0ef26c1d7e6409c56b4a7182ad1e36b5fba3598e1bcf7788",
+          "source": "sha256sum of the file; the same digest as in the 2026-10-17 report"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+          "source": "the GGUF header: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen3moe, 48 blocks, 128 experts with 8 used",
+          "source": "llama-server's log: general.architecture, n_layer, n_expert, n_expert_used"
+        },
+        "quantization": {
+          "value": "APEX I-Compact, with an importance matrix; llama-server reports the file type as Q4_K - Medium",
+          "source": "the file name; the GGUF header: general.file_type 15 and quantize.imatrix.*; llama-server's log: print_info file type"
+        },
+        "contextLength": {
+          "value": 32768,
+          "source": "-c 32768; llama-server's log: llama_context n_ctx = 32768, one KV cache of 32768 cells shared by the slots (kv_unified = true, n_ctx_slot = 32768)"
+        },
+        "gpuOffload": {
+          "value": "all, 49 of 49 layers",
+          "source": "-ngl all; llama-server's log: load_tensors offloaded 49/49 layers to GPU"
+        },
+        "parallel": {
+          "value": 4,
+          "source": "-np 4 --kv-unified, the first report's parallel for this model; llama-server's log: n_slots = 4"
+        },
+        "flashAttention": {
+          "value": "auto, resolved to enabled",
+          "source": "llama-server's default, not set on the command line; llama-server's log: llama_context flash_attn = auto, then Flash Attention enabled"
+        },
+        "kvCacheType": {
+          "value": "f16 for keys and values",
+          "source": "llama-server's default, not set on the command line; llama-server's log: llama_kv_cache K (f16), V (f16)"
+        },
+        "promptCache": {
+          "value": "on, up to 8192 MiB in host memory, llama-server's default",
+          "source": "llama-server's log: prompt cache is enabled, size limit: 8192 MiB"
+        },
+        "chatTemplate": {
+          "value": "the template embedded in the file, rendered by llama.cpp's Jinja engine; it applies tojson | safe in two places, and reports thinking = 0",
+          "source": "--jinja, also llama-server's default; the GGUF header: tokenizer.chat_template; llama-server's log: chat template, thinking = 0"
+        },
+        "speculativeDecoding": {
+          "value": "not requested",
+          "source": "no speculative or draft option on the command line"
+        },
+        "threads": {
+          "value": 6,
+          "source": "-t 6; llama-server's log: llama threadpool init, n_threads = 6"
+        },
+        "commandLine": {
+          "value": "llama-server -m <model folder>/mudler/Qwen3-Coder-30B-APEX-GGUF/Qwen3-Coder-30B-APEX-I-Compact.gguf --alias qwen3-coder-30b-apex --host 127.0.0.1 --port 8080 -ngl all -c 32768 -np 4 --kv-unified -t 6 --jinja --log-timestamps --log-prefix --log-colors off -lv 4 --log-prompts-dir <a folder for the session>",
+          "source": "the command that started llama-server, with VK_LOADER_LAYERS_DISABLE=~implicit~ in its environment"
+        }
+      }
+    ],
+    "client": {
+      "name": {
+        "value": "OpenCode",
+        "source": "opencode-ai, installed with npm"
+      },
+      "version": {
+        "value": "1.18.7",
+        "source": "opencode --version"
+      },
+      "invocation": {
+        "value": "opencode run --format json --model agentsplice/<model id> \"<prompt>\", with stdin closed, from a new directory holding calc.py and opencode.json",
+        "source": "the script that ran each attempt"
+      },
+      "configuration": {
+        "value": {
+          "$schema": "https://opencode.ai/config.json",
+          "provider": {
+            "agentsplice": {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "AgentSplice",
+              "options": {
+                "baseURL": "http://127.0.0.1:5280/v1"
+              },
+              "models": {
+                "<model id>": {
+                  "name": "<model id> through AgentSplice",
+                  "limit": {
+                    "context": "<the context length the model was loaded with>",
+                    "output": 8192
+                  }
+                }
+              }
+            }
+          },
+          "model": "agentsplice/<model id>",
+          "small_model": "agentsplice/<model id>",
+          "permission": {
+            "edit": "allow",
+            "bash": "deny",
+            "webfetch": "deny"
+          },
+          "share": "disabled",
+          "autoupdate": false
+        },
+        "source": "opencode.json in each attempt's directory, from examples/opencode/opencode.json, as in the 2026-10-17 report; the account's global OpenCode configuration holds only $schema"
+      },
+      "environment": {
+        "value": "Both attempts ran with a terminal integration's variables, OPENCODE_CONFIG_DIR among them, unset, as attempts 3 and 4 of the 2026-10-17 report did. In both, OpenCode found 18 skills, and every agent request carried their list in its system message: 15,806 characters as llama-server rendered it, between 35.0% and 38.9% of each rendered agent prompt. The title requests carry none.",
+        "source": "the script that ran each attempt; OpenCode's own log: 'init count=18' in both attempts; llama-server's prompt log, read for its structure only"
+      }
+    }
+  },
+  "scenario": {
+    "prompt": {
+      "value": "calc.py's mean() returns the wrong result. Fix the bug, then add test_calc.py with unittest tests for mean() and clamp(). Do not run any commands. Session marker: <a random trace-canary-* marker, different for each attempt>.",
+      "source": "the script that ran each attempt; the 2026-10-17 report's prompt"
+    },
+    "startingFiles": {
+      "value": "calc.py, as reproduced in the 2026-10-17 report's README.md, and opencode.json",
+      "source": "the script that ran each attempt"
+    }
+  },
+  "attempts": [
+    {
+      "name": "1",
+      "model": "qwen3.6-35b-a3b",
+      "clientEnvironment": "without the terminal integration",
+      "runtimeSlots": "1",
+      "from": "2026-10-19T20:18:42.001Z",
+      "until": "2026-10-19T20:19:07.358Z",
+      "clientExit": "0, after three agent steps",
+      "exchanges": [
+        "63661e2b-f25a-4fd7-a70a-d71fe3795616",
+        "cbe02b7b-d382-4c86-bb9d-03d59e305b9b",
+        "2fd2152b-e6b0-4fe8-b40c-c80df05d2967",
+        "fb4e6eaf-9484-4162-974a-0e823813750f"
+      ]
+    },
+    {
+      "name": "2",
+      "model": "qwen3-coder-30b-apex",
+      "clientEnvironment": "without the terminal integration",
+      "runtimeSlots": "4, sharing one KV cache",
+      "from": "2026-10-19T20:21:04.400Z",
+      "until": "2026-10-19T20:21:24.857Z",
+      "clientExit": "0, after six agent steps",
+      "exchanges": [
+        "07c33c53-a318-4618-a249-c42a4f4be7b2",
+        "c2ebe45c-b123-4e03-83ac-17eaf4b9f669",
+        "84071087-d16a-4d5e-b72f-d8dfff064cbd",
+        "050a11ba-6dee-410e-9769-dfb6a50f5971",
+        "5605e601-b722-4f53-879e-ea6edd55e8ef",
+        "3a035392-777c-4b8d-96a3-16cf6211e992",
+        "0a7d4c44-a83d-4c42-b0da-0a82e8a23df8"
+      ]
+    }
+  ]
+}
