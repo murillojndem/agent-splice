@@ -126,9 +126,11 @@ none, because the trace id was read from an exchange it does not have. The recor
 ### 11. `stream.client.bytes` counts what was handed to the client's connection
 
 It is recorded by whatever wrote the bytes and only when it did: absent when the client received an
-error envelope in place of the runtime's answer, and absent for a buffered answer the client left in
-the middle of, where the runtime's body length used to be reported as delivered. The count is taken
-when each write returned, which is when the server accepted the bytes; an abandoned response ends in a
+error envelope in place of the runtime's answer, and absent for a buffered answer whose write the
+server reported unfinished because the client had gone, where the runtime's body length used to be
+reported as delivered. The count is taken when each write returned, which is when the server accepted
+the bytes — for a buffered answer that can be all of it before the client reads any, so on that path it
+says what was handed to the connection, not what was read; an abandoned response ends in a
 reset, which can discard the last of them before they arrive, so for an abandoned response it is an
 upper bound.
 
@@ -157,8 +159,13 @@ Each was run against its reintroduced defect and failed; the changelog lists the
   `WebApplicationFactory.UseKestrel`, new in .NET 10: a stream that stalls before its first byte gets a
   `504` with its correlation headers, and one whose runtime drops gets a `502`, where the code before
   this decision left a reset; a successful stream is byte for byte; a mid-stream stall is still
-  abandoned and records no code; and a client that reads the status line of a 32 MiB buffered answer
-  and hangs up is recorded as cancelled, with no bytes claimed delivered.
+  abandoned and records no code. A fifth, in which a raw socket read the status line of a 32 MiB
+  buffered answer and hung up, was removed after CI: Kestrel takes such an answer into its own buffers
+  within milliseconds on Windows and on GitHub's Linux runners, so the write finished first unless the
+  client's reset happened to beat the copy, and the test proved nothing either way.
+- `ChatCompletionCancellationTests`: the gateway, composed as the host composes it, writing a buffered
+  answer to a client that took its status and was gone at its body, is recorded as cancelled, with no
+  `client_completed` and no bytes claimed delivered.
 - `ChatCompletionStreamFailureTests`: the same before-the-first-byte cases in process, with the record —
   the failure class, the stream termination, the phase or the lost connection, the code, and
   `client_completed` with `gateway_error`; abandoned streams record no code and

@@ -113,10 +113,14 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
     /// client. IsCanceled: the flush was cut short and these bytes are not known to have been
     /// delivered. Neither is an error, and both mean the same thing to the relay.
     ///
-    /// An aborted connection is checked as well. Once Kestrel has aborted a connection it completes
-    /// writes to it without sending them, and the flush can then report neither, so a client that hung
-    /// up just before a write began would be recorded as having received it. Bytes written as the
+    /// An aborted connection is checked as well. A server that has torn a connection down can complete
+    /// writes to it without sending them, and the flush then reports neither, so a client that hung up
+    /// just before a write began could be recorded as having received it. Bytes written as the
     /// connection went are not known to have arrived, so the answer counts as not delivered.
+    ///
+    /// Nothing here can see a client that leaves after a write returned. A write returns when the
+    /// server has taken the bytes, and Kestrel can take a whole buffered answer before the client reads
+    /// any of it, so "written" means handed to the client's connection (docs/OBSERVABILITY.md).
     /// </remarks>
     private ClientWriteResult Outcome(System.IO.Pipelines.FlushResult flush) =>
         flush.IsCanceled || flush.IsCompleted || context.RequestAborted.IsCancellationRequested

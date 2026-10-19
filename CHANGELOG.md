@@ -137,10 +137,13 @@ written.
   cleanly. A fault after a response started is abandoned and recorded as `internal_error` with no code,
   rather than writing a 500 over it and throwing; before it started, the 500 names the runtime when
   routing had resolved one.
-- A client that leaves during a buffered answer's write is recorded as cancelled, not completed, and no
-  bytes are claimed delivered — including one that hung up before the write began, which Kestrel
-  completes without sending. `stream.client.bytes` is recorded by whatever wrote the bytes, and is
-  absent when the client received an error envelope instead of the runtime's answer.
+- A buffered answer is recorded after its write returned, not before, so a client the server reports
+  gone during the write, or whose connection was already aborted, is recorded as cancelled with no bytes
+  claimed. A write returns once the server has taken the answer, and Kestrel took all of a 32 MiB answer
+  within milliseconds on Windows and on CI's Linux runners, so a client that leaves after that is
+  recorded as completed: on this path `client_completed` and `stream.client.bytes` say what was handed
+  to the client's connection, not what it read. `stream.client.bytes` is recorded by whatever wrote the
+  bytes, and is absent when the client received an error envelope instead of the runtime's answer.
 - Every failure of the request to the runtime reaches the timeline: `timeout_fired` with its
   `timeout.phase` wherever the timeout elapsed, now on the buffered path and before a stream's headers too, and the new
   `upstream_failed` with the failure's classification and the provider's bounded detail, such as

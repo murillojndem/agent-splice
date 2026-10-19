@@ -562,11 +562,15 @@ system picks, through `WebApplicationFactory.UseKestrel`, new in .NET 10, and `S
 factory's `CreateClient` then talks to it over a socket. It is the only place a test sees what the
 in-process host hides — that Kestrel sends a started response's headers with its first body write — and
 it shows a stream stalled or dropped before its first byte answered with a `504` or `502` and its
-correlation headers, a successful stream byte for byte, a mid-stream stall still abandoned, and a client
-that hangs up on a large buffered answer recorded as cancelled. That last one reads the status line
-through a raw socket with a 4 KiB receive window, and the listener's send buffer is bounded at 64 KiB:
-`HttpClient` reads ahead, and a kernel left to grow a socket's buffers holds all 32 MiB of the answer on
-the loopback — a CI runner's did — so the write finishes and the test tests nothing.
+correlation headers, a successful stream byte for byte, and a mid-stream stall still abandoned.
+
+A fifth wire test hung up a raw socket after the status line of a 32 MiB buffered answer and expected a
+cancellation. It was removed: Kestrel takes such an answer into its own buffers within milliseconds — a
+probe saw the whole write finish in 30 ms on Windows while the client read nothing, and CI's Linux
+runners recorded the exchange completed — so the test passed only when the client's reset beat the
+copy. What it meant to prove is held where it is certain: `ChatCompletionCancellationTests` hands the
+real gateway a client that takes the status and is gone at the body, and `ClientResponseSinkTests`
+scripts the pipe for a write on an aborted connection.
 
 The rest runs in process:
 

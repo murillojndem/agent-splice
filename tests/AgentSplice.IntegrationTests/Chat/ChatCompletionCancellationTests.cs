@@ -3,6 +3,7 @@ using AgentSplice.Application.Exchanges;
 using AgentSplice.Application.Runtimes;
 using AgentSplice.Domain.Exchanges;
 using AgentSplice.Domain.Identifiers;
+using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 using AgentSplice.IntegrationTests.Hosting;
 using AgentSplice.TestSupport.FakeUpstream;
@@ -88,6 +89,47 @@ public sealed class ChatCompletionCancellationTests
 
         // Half the drain the handler used to spend.
         await recorded.WaitForAbortAsync(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task A_client_gone_while_a_buffered_answer_is_written_is_recorded_as_cancelled()
+    {
+        // The buffered path recorded an exchange before writing a byte, so a client gone during the
+        // write was recorded as completed with the whole body "delivered". It is recorded after the
+        // write now. The write is scripted, because over a socket whether a client can still be seen
+        // leaving depends on how much of the answer the server buffers for it: on Windows and on CI's
+        // Linux runners Kestrel takes all of a 32 MiB answer within milliseconds, so a test that hung up
+        // a real socket passed only when its reset beat the copy.
+        var sink = new CapturingExchangeSink();
+
+        await using var fixture = await StartAsync(services => services.AddSingleton<IExchangeRecordSink>(sink));
+
+        fixture.Upstream.EnqueueFor(
+            "/v1/chat/completions",
+            UpstreamResponseScripts.Json("""{"id":"c1","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}"""));
+
+        var gateway = fixture.Services.GetRequiredService<ChatCompletionGateway>();
+        var client = new GoneAtTheBodySink();
+        var now = DateTimeOffset.UtcNow;
+
+        await gateway.CompleteAsync(
+            ChatCompletionRequest.Create(
+                Encoding.UTF8.GetBytes("""{"model":"m","messages":[{"role":"user","content":"hi"}]}"""),
+                PublicRequestId.New(),
+                now,
+                now),
+            client,
+            CancellationToken.None);
+
+        var record = await sink.WaitForRecordAsync(WaitBudget);
+        var types = record.Observations.Select(observation => observation.Type).ToList();
+
+        Assert.True(client.BodyWasOffered);
+        Assert.Equal(ExchangeStatus.Cancelled, record.Exchange!.Status);
+        Assert.Contains(ObservationType.ClientResponseStarted, types);
+        Assert.Contains(ObservationType.ClientCancelled, types);
+        Assert.DoesNotContain(ObservationType.ClientCompleted, types);
+        Assert.DoesNotContain(record.Measurements, measurement => measurement.Name == MeasurementNames.ClientResponseBytes);
     }
 
     [Fact]
@@ -210,4 +252,27 @@ public sealed class ChatCompletionCancellationTests
             cancellationToken);
     }
 
+    /// <summary>A client that took the response's status and was gone by the time its body was written.</summary>
+    private sealed class GoneAtTheBodySink : IClientResponseSink
+    {
+        public bool HasStarted { get; private set; }
+
+        public bool BodyWasOffered { get; private set; }
+
+        public ValueTask<ClientWriteResult> StartAsync(ClientResponseStart start, CancellationToken cancellationToken)
+        {
+            HasStarted = true;
+            return ValueTask.FromResult(ClientWriteResult.Written);
+        }
+
+        public ValueTask<ClientWriteResult> WriteAsync(ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken)
+        {
+            BodyWasOffered = true;
+            return ValueTask.FromResult(ClientWriteResult.ClientGone);
+        }
+
+        public void Abort()
+        {
+        }
+    }
 }

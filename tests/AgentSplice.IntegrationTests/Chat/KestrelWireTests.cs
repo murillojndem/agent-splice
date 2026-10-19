@@ -1,10 +1,7 @@
-using System.Globalization;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using AgentSplice.Application.Exchanges;
 using AgentSplice.Domain.Exchanges;
-using AgentSplice.Domain.Measurements;
 using AgentSplice.Domain.Observations;
 using AgentSplice.IntegrationTests.Hosting;
 using AgentSplice.TestSupport.FakeUpstream;
@@ -117,59 +114,6 @@ public sealed class KestrelWireTests
         Assert.Equal(StreamTermination.Timeout, record.Exchange!.StreamTermination);
         Assert.Null(record.Error);
         Assert.Contains(record.Observations, o => o.Type == ObservationType.ClientResponseAbandoned);
-    }
-
-    [Fact]
-    public async Task A_client_that_leaves_during_a_large_buffered_answer_is_recorded_as_cancelled()
-    {
-        // The buffered path recorded the exchange before writing a byte, so a client that read the
-        // status line of a 32 MiB answer and hung up was recorded as completed, with all 32 MiB
-        // "forwarded to the client". It is recorded after the write now, and the write failed.
-        //
-        // A raw socket with a small receive window, and a listener with a bounded send buffer, because
-        // the point is a write that cannot finish: HttpClient reads ahead, and a kernel left to grow a
-        // socket's buffers can hold all 32 MiB on the loopback, as a CI runner's did.
-        var sink = new CapturingExchangeSink();
-
-        await using var fixture = await StartAsync(
-            settings => settings["agentsplice:defaultRuntimeId"] = GatewayFixture.RuntimeId,
-            services => services.AddSingleton<IExchangeRecordSink>(sink));
-
-        var padding = new string('y', 32 * 1024 * 1024);
-
-        fixture.Upstream.EnqueueFor(
-            "/v1/chat/completions",
-            UpstreamResponseScripts.Json($$"""{"id":"c1","padding":"{{padding}}"}"""));
-
-        var port = fixture.Client.BaseAddress!.Port;
-
-        using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
-        {
-            socket.ReceiveBufferSize = 4096;
-            await socket.ConnectAsync(IPAddress.Loopback, port);
-
-            const string Body = """{"model":"m","messages":[{"role":"user","content":"hi"}]}""";
-
-            var request = string.Create(
-                CultureInfo.InvariantCulture,
-                $"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {Body.Length}\r\n\r\n{Body}");
-
-            await socket.SendAsync(Encoding.ASCII.GetBytes(request));
-
-            var first = new byte[64];
-            var read = await socket.ReceiveAsync(first);
-
-            Assert.StartsWith("HTTP/1.1 200", Encoding.ASCII.GetString(first, 0, read), StringComparison.Ordinal);
-
-            // Hang up hard, with the rest of the answer unread.
-            socket.LingerState = new LingerOption(enable: true, seconds: 0);
-        }
-
-        var record = await sink.WaitForRecordAsync(WaitBudget);
-
-        Assert.Equal(ExchangeStatus.Cancelled, record.Exchange!.Status);
-        Assert.DoesNotContain(record.Observations, o => o.Type == ObservationType.ClientCompleted);
-        Assert.DoesNotContain(record.Measurements, m => m.Name == MeasurementNames.ClientResponseBytes);
     }
 
     private static Task<GatewayFixture> StartAsync(

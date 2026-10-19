@@ -212,9 +212,11 @@ public sealed class ExchangeRecorder
 
     /// <summary>Records how many bytes of the runtime's answer were handed to the client's connection.</summary>
     /// <remarks>
-    /// Set by whatever wrote them, and only when it did. A buffered answer the client left in the
-    /// middle of, and an error envelope sent in place of the runtime's answer, record none: the
-    /// runtime's body length is a fact about the runtime, not about delivery.
+    /// Set by whatever wrote them, and only when it did. A buffered answer whose write the server
+    /// reported unfinished, and an error envelope sent in place of the runtime's answer, record none:
+    /// the runtime's body length is a fact about the runtime, not about delivery. A write returns when
+    /// the server has taken the bytes, so this is what was handed to the client's connection, an upper
+    /// bound on what it read.
     /// </remarks>
     public void RecordRelayedToClient(long bytes)
     {

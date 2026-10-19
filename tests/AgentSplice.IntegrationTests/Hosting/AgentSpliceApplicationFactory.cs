@@ -1,7 +1,6 @@
 using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,19 +28,8 @@ internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Prog
             ["agentsplice:persistence:connectionString"] = null,
         };
 
-    /// <summary>The send buffer of every connection a real listener accepts.</summary>
-    /// <remarks>
-    /// Bounded so that a write which cannot reach its client stays pending, wherever the tests run.
-    /// Left to the kernel, a socket's send buffer grows on its own, and a CI runner's grew far enough to
-    /// take all 32 MiB of an answer before the client hung up — the write then finished, honestly, and
-    /// a test of a client leaving mid-write tested nothing. Accepted connections inherit it from the
-    /// listening socket.
-    /// </remarks>
-    private const int ListenerSendBufferBytes = 64 * 1024;
-
     private readonly IReadOnlyDictionary<string, string?> overrides;
     private readonly Action<IServiceCollection>? configureServices;
-    private readonly bool kestrel;
 
     /// <param name="overrides">Configuration applied over the shipped settings.</param>
     /// <param name="configureServices">The few service substitutions a test genuinely needs.</param>
@@ -58,7 +46,6 @@ internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Prog
     {
         this.overrides = overrides ?? new Dictionary<string, string?>(StringComparer.Ordinal);
         this.configureServices = configureServices;
-        this.kestrel = kestrel;
 
         if (kestrel)
         {
@@ -71,17 +58,6 @@ internal sealed class AgentSpliceApplicationFactory : WebApplicationFactory<Prog
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.UseEnvironment("Test");
-
-        if (kestrel)
-        {
-            builder.UseSockets(sockets => sockets.CreateBoundListenSocket = endpoint =>
-            {
-                var socket = SocketTransportOptions.CreateDefaultBoundListenSocket(endpoint);
-                socket.SendBufferSize = ListenerSendBufferBytes;
-
-                return socket;
-            });
-        }
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
             // Applied under the caller's overrides, so a test that wants a store still gets one.
