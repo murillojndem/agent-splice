@@ -213,8 +213,8 @@ All four were met when 0.2.0-alpha was published.
 
 ### Stage 2A — Sanitized replay artifacts
 
-Status: in progress. The current stage since 0.2.0-alpha; nothing of it is implemented yet, and
-`CLAUDE.md` still confines implementation work to Stage 1 until it is updated to name this stage.
+Status: in progress. The current stage since 0.2.0-alpha, and the one `CLAUDE.md` names as the scope of
+implementation work; nothing of it is implemented yet.
 
 - sanitization pipeline;
 - immutable replay artifacts;

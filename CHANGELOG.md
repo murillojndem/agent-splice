@@ -8,7 +8,9 @@ All notable changes will be documented here.
 
 - Stage 1D is complete: [0.2.0-alpha](https://github.com/murillojndem/agent-splice/releases/tag/v0.2.0-alpha), the first public alpha, was published on
   2026-10-19. Stage 2A is now the stage `docs/ROADMAP.md` marks in progress, so `GET /api/v1/system`
-  reports `stage: "2A"`; nothing of Stage 2A is implemented yet.
+  reports `stage: "2A"`; nothing of Stage 2A is implemented yet. `CLAUDE.md` names Stage 2A as the
+  scope of implementation work, with what it includes and leaves to later stages, and the fixtures it
+  must add; Stage 1's guarantees and tests stay in force.
 - The installation guide and the README no longer describe the time before the first release, and a
   build of `main` that no release carries yet is still a CI run's artifact away. Verifying a release's
   attestation needs a recent GitHub CLI: 2.76 found no attestation for 0.2.0-alpha, and 2.102 verified

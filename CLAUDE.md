@@ -29,33 +29,28 @@ Read `docs/PRODUCT_POSITIONING.md` and ADR 0006 before proposing scope that cent
 
 ## Current implementation stage
 
-Unless a task explicitly states otherwise, work only within **Stage 1 — Transparent Trace Proxy**:
+**Stage 1 — Transparent Trace Proxy is complete.** 0.2.0-alpha, the first public alpha, shipped it (`docs/ROADMAP.md`). What it built stays in force: the transparent request path, streaming preservation, the exchange timeline, metadata-only capture by default, the administrative APIs, the dashboard, and every Stage 1 test. A change that weakens any of them needs its own ADR.
 
-- `GET /v1/models`;
-- `POST /v1/chat/completions`;
-- LM Studio upstream provider;
-- non-streaming and SSE streaming preservation;
-- request correlation;
-- timing boundaries and exchange timeline;
-- safe metadata capture;
-- OpenTelemetry traces and metrics;
-- SQLite local persistence;
-- runtime health and diagnostics;
-- minimal administrative APIs for traces/exchanges;
-- contract, integration, architecture, and unit tests;
-- optional minimal React dashboard only after the backend trace API is stable.
+Unless a task explicitly states otherwise, work only within **Stage 2A — Sanitized replay artifacts** (`docs/ROADMAP.md`, `docs/REPLAY.md`, FR-REPLAY-001 to FR-REPLAY-008, FR-DATA-004 to FR-DATA-010):
 
-Stage 1 does **not** include:
+- a deterministic, versioned sanitization pipeline that runs before anything is persisted or exported, with a report of what it removed, replaced, retained, and could not resolve that never contains an original value;
+- opt-in sanitized content capture as its own artifact class, independently retained and behind authorization. The slice that implements the sanitizer is the one that lifts the refusal of `agentsplice:capture:contentEnabled` and the contract test that forbids content endpoints, with an ADR; until then both stand;
+- immutable replay artifacts created from a stored exchange, with an integrity hash, the sanitizer's version, and an expiration policy;
+- credential stripping: no original credential, authorization header, environment secret, or unrestricted filesystem path in an artifact;
+- exact and adapted replay as distinct domain modes; an adapted replay records every changed target, field, or policy in its manifest and is never labeled exact;
+- replay of an artifact against a configured target only, with target allowlists, concurrency and rate limits, cancellation, timeouts, request size limits, and audit events;
+- the replay APIs — `POST /api/v1/replay-artifacts` and its reads, marked planned in the OpenAPI document until they are served — and the dashboard's replay flow;
+- contract, integration, architecture, and unit tests for all of it.
 
-- Laguna XML normalization;
-- generic text-to-tool recovery;
-- Anthropic protocol translation;
-- prompt/schema compaction;
-- cache-log parsing;
-- replay execution;
-- conformance orchestration beyond fixtures required to prove Stage 1 contracts;
-- agentic coding evaluation;
-- OpenCode or Cline plugins.
+Stage 2A does **not** include:
+
+- differential comparison across targets (Stage 2B);
+- protocol, streaming, or tool-call conformance suites (Stages 2C and 2D);
+- cache-evidence diagnostics or runtime-log parsing (Stage 2E);
+- agentic coding evaluation (Stage 3);
+- protocol translation, generic text-to-tool recovery, Laguna XML normalization, or prompt/schema compaction (Stage 4 adapters);
+- OpenCode or Cline plugins (Stage 5);
+- executing any tool a model or a client names, in replay or anywhere else (ADR 0003, FR-REPLAY-007).
 
 Interfaces may be prepared only where they simplify the current slice. Do not build speculative frameworks for later stages.
 
@@ -81,7 +76,7 @@ Interfaces may be prepared only where they simplify the current slice. Do not bu
 - Use `TimeProvider` for time-dependent logic.
 - Propagate `CancellationToken` through request and streaming paths.
 - Use `HttpCompletionOption.ResponseHeadersRead` for upstream streaming.
-- Do not buffer a complete streaming response in Stage 1.
+- Do not buffer a complete streaming response on the request path.
 - Do not write request or response bodies to default logs.
 - Content persistence must be opt-in, sanitized, and independently retained.
 - Use typed options with startup validation.
@@ -90,7 +85,7 @@ Interfaces may be prepared only where they simplify the current slice. Do not bu
 - Preserve unknown fields where safe and practical.
 - Emit provenance for every measured, reported, inferred, or estimated metric.
 - Avoid microservices. The initial product is a modular monolith.
-- Do not add a broker, Kubernetes, or distributed worker system in Stage 1.
+- Do not add a broker, Kubernetes, or a distributed worker system; replay runs inside the modular monolith.
 - Do not execute shell commands or model-generated tools in the gateway.
 
 ## Architecture boundaries
@@ -118,7 +113,7 @@ tests/
   AgentSplice.PerformanceTests/
 ```
 
-Later modules may include:
+Later modules may include — Stage 2A may add `AgentSplice.Replay`, depending inward like the rest:
 
 ```text
 AgentSplice.Replay
@@ -140,9 +135,9 @@ Domain -> no infrastructure dependencies
 
 The durable core must not reference Laguna, Qwen, OpenCode, LM Studio log formats, or any other vendor-specific type. Such behavior belongs in adapters.
 
-## Stage 1 request-path rule
+## Request-path rule
 
-The Stage 1 request path is transparent by default:
+The request path is transparent by default, as Stage 1 built it:
 
 1. assign correlation identifiers;
 2. validate the supported ingress envelope;
@@ -154,6 +149,8 @@ The Stage 1 request path is transparent by default:
 8. complete metadata persistence outside long-lived database transactions.
 
 Any changed field must be required for routing, security, or protocol correctness and must be represented by a traceable event.
+
+Replay is not the request path. It reads immutable sanitized artifacts, never live database rows (FR-REPLAY-001), sends only to allowlisted targets, and leaves the gateway's transparent forwarding unchanged.
 
 ## Definition of done for every feature
 
@@ -179,7 +176,7 @@ A feature is complete only when it has:
 - Preserve upstream status meaning when a stable client-facing equivalent exists.
 - Translate transport failures into stable gateway error types.
 - Keep raw credentials out of errors and traces.
-- Preserve valid native tool calls as data; do not reinterpret ordinary content in Stage 1.
+- Preserve valid native tool calls as data; do not reinterpret ordinary content outside a Stage 4 adapter.
 - Streaming output must remain valid SSE.
 - `[DONE]` handling must be protocol-aware.
 - Usage must retain provenance: client estimate, gateway estimate, upstream report, or runtime-log evidence.
@@ -232,7 +229,7 @@ Do not hard-code model-family behavior into generic request handling.
 
 ## Test expectations
 
-Stage 1 must include fixtures for:
+Stage 1's fixtures remain required:
 
 - minimal model discovery;
 - non-streaming chat;
@@ -249,6 +246,19 @@ Stage 1 must include fixtures for:
 - metadata persistence failure;
 - content-retention disabled by default;
 - no prompt/response leakage in logs.
+
+Stage 2A adds fixtures for:
+
+- a sanitizer that is deterministic: the same input and sanitizer version give the same artifact and integrity hash;
+- every credential pattern and authorization header the threat model names, removed;
+- a sanitizer report that never contains an original secret value;
+- an artifact that cannot change once written, and a tampered artifact that fails its integrity check;
+- expiration enforced by retention;
+- exact and adapted replay kept apart, and an adapted replay's manifest naming every change;
+- a replay target outside the allowlist refused before any request is sent;
+- replay cancellation, timeouts, and concurrency limits;
+- a replayed exchange whose model calls a tool, with the call returned as data and nothing executed;
+- content capture off by default, and nothing of a body in logs, traces, metrics, or exports.
 
 Use a deterministic fake upstream. Real LM Studio tests are optional local integration tests, never the only proof of behavior.
 
