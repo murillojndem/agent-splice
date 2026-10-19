@@ -65,6 +65,12 @@ All notable changes will be documented here.
     scripts were rehearsed with the macOS archive, without it, with one no artifact ID announced, and
     with an ID and no archive; the last two are refused. Only GitHub's macOS runner runs the macOS smoke
     test.
+  - Its first run there stopped at the quarantine check. Once the guide's command had cleared every
+    mark, `find` listed nothing, and a PowerShell function's empty output reaches its caller as `$null`,
+    which has no `Count` under strict mode; a single entry arrives as a string, with the same result.
+    Every call of the smoke test's two listing functions is now wrapped in `@()`. With stand-ins for
+    `find`, `xattr`, and `tar`, the check failed before the change and passes after it, with none, one,
+    and every entry marked. Nothing in the package changed.
   - Each new contract test was verified to fail against a deliberately reintroduced defect: `osx-arm64`
     dropped from the package script, or its profile without the content-root switch, fails
     `SelfContainedPackageContractTests`; the macOS job without `continue-on-error` or its timeout, its

@@ -281,9 +281,11 @@ try {
     if ($macos) {
         # The package is signed ad hoc and not notarized, so a browser's quarantine mark makes macOS refuse
         # to open it; the installation guide clears the mark after the digest check and before the first
-        # start, with this very command (ADR 0029). The entries a folder holds, the folder included:
-        function Get-Entries([string] $Path) { @(& find $Path) }
-        function Get-Quarantined([string] $Path) { @(& find $Path -xattrname com.apple.quarantine) }
+        # start, with this very command (ADR 0029). The entries a folder holds, the folder included. A
+        # function's output is unrolled, so no entry reaches the caller as $null and one as a string,
+        # neither of which has a Count under strict mode: every call below is wrapped in @().
+        function Get-Entries([string] $Path) { & find $Path }
+        function Get-Quarantined([string] $Path) { & find $Path -xattrname com.apple.quarantine }
         $mark = '0083;{0:x8};Safari;' -f [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 
         # A download made with curl, as the README's commands are, carries no mark: the command must
@@ -300,16 +302,16 @@ try {
         Copy-Item -Path $archivePath -Destination $marked
         & xattr -w com.apple.quarantine $mark $marked
         & tar -xzf $marked -C $probe
-        Write-Host "note  tar extracting a quarantined archive marked $((Get-Quarantined $probe).Count) of $((Get-Entries $probe).Count) entries"
+        Write-Host "note  tar extracting a quarantined archive marked $(@(Get-Quarantined $probe).Count) of $(@(Get-Entries $probe).Count) entries"
 
         # Finder's Archive Utility marks every file and folder it extracts from a quarantined archive.
         & xattr -r -w com.apple.quarantine $mark $package
-        $entries = (Get-Entries $package).Count
-        Check ((Get-Quarantined $package).Count -eq $entries) "every one of the package's $entries entries carries the quarantine mark, as Finder leaves a browser download"
+        $entries = @(Get-Entries $package).Count
+        Check (@(Get-Quarantined $package).Count -eq $entries) "every one of the package's $entries entries carries the quarantine mark, as Finder leaves a browser download"
 
         $said = @(& xattr -dr com.apple.quarantine $package 2>&1)
         $code = $LASTEXITCODE
-        $left = Get-Quarantined $package
+        $left = @(Get-Quarantined $package)
         Check ($code -eq 0 -and $left.Count -eq 0) "the guide's xattr command clears the mark from every file and folder (exit $code; $((@($said) + @($left)) -join '; '))"
 
         # Apple silicon runs no unsigned code. Every native file — found by its Mach-O magic, as the Linux
