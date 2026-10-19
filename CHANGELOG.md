@@ -22,6 +22,22 @@ All notable changes will be documented here.
   from `.env`, so both point at the `docker-compose.override.yml` that `docs/CLIENTS.md` shows, and the
   client guide now names the published image's way too: `--env` flags on its `docker run`. Nothing the
   gateway does changes.
+- **The README is rewritten for the project's first announcement.** It opens with what AgentSplice
+  records and three findings of the first trace report, each with where it comes from and what changed
+  since. Then come a quickstart for the Windows and Linux packages, the published image, macOS, and a
+  clone, with the release's own download addresses and its digest check; how long the gateway waits for
+  a runtime (ADR 0028) and how to raise it; how it works; what it does not do yet; which tools do other
+  jobs; the roadmap; and how it is built. The stage-by-stage history it carried is in `docs/ROADMAP.md`
+  and in this changelog.
+- The README's commands are held to the build as the installation guide's are.
+  `The_guides_name_the_version_the_build_carries` reads both documents, and a release's download
+  address, `releases/download/v<version>/`, as well as a package file name or an image tag;
+  `The_readme_runs_the_image_as_ci_does` holds the README's `docker run` to CI's, but for the image.
+  The release runbook says that both documents name the new version from its commit on, so a draft is
+  published without delay. Each was verified to fail against a deliberately reintroduced defect:
+  - a package file name in the README naming `0.2.0-alpha`, or a download address naming the tag
+    `v0.2.0-alpha`, fails `The_guides_name_the_version_the_build_carries`;
+  - the README's `docker run` without its `--volume` fails `The_readme_runs_the_image_as_ci_does`.
 
 ## 0.2.1-alpha — 2026-10-19
 

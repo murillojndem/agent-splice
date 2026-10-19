@@ -266,11 +266,14 @@ the draft pushes the image (ADR 0018, ADR 0022):
 
 1. Set the version in `Directory.Build.props` (`VersionPrefix` and `VersionSuffix`) and the same value
    in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ, and another if
-   `docs/INSTALLATION.md` names another. Move the `Unreleased` entries in `CHANGELOG.md` under a
-   heading for the version, `## <version> — <date>`; no test checks that move, so read the heading
-   against the tag. Leave the current stage `in progress` in `docs/ROADMAP.md`: the release is part of
-   the stage, `ImplementedStageContractTests` requires the stage the build reports to be the one the
-   roadmap marks in progress, and marking it complete is a commit of its own after the release.
+   `docs/INSTALLATION.md` or `README.md` names another. From the push of that commit until the release
+   is published, the download addresses and the image tag both documents give name a release that does
+   not exist yet, and the README is the repository's front page: publish the draft without delay. Move
+   the `Unreleased` entries in `CHANGELOG.md` under a heading for the version, `## <version> — <date>`;
+   no test checks that move, so read the heading against the tag. Leave the current stage `in progress`
+   in `docs/ROADMAP.md`: the release is part of the stage, `ImplementedStageContractTests` requires the
+   stage the build reports to be the one the roadmap marks in progress, and marking it complete is a
+   commit of its own after the release.
 2. Commit that on `main`, then tag the commit `v<version>` exactly, for example `v0.2.0-alpha`, and push
    the tag. Tag only a reviewed commit on `main`: a tag runs the workflows of the commit it names, as they
    are there, with whatever permissions they ask for. Release immutability is on, so a tag whose release

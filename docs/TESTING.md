@@ -690,6 +690,24 @@ A budget a test must not see fire is at least five times the wait it covers, and
 cut runs well past the budget the defect would apply, so a slow machine can hide a defect but cannot
 fail correct code. Each fails against its reintroduced defect, listed in the changelog.
 
+## After 0.2.1-alpha: the README's quickstart
+
+The README gives the commands a visitor copies first: a release's download addresses, its package file
+names, and the image's `docker run`. The two contract tests that held the installation guide to the
+build now hold the README too.
+
+- `ReleaseWorkflowContractTests.The_guides_name_the_version_the_build_carries` runs for
+  `docs/INSTALLATION.md` and for `README.md`: each must name a version, and only the build's, in a
+  package file name, an image tag, or a release's download address, `releases/download/v<version>/`,
+  which the pattern now reads as well.
+- `ImagePublicationContractTests.The_readme_runs_the_image_as_ci_does` holds every `docker run` in the
+  README to the one the `image-archive` job runs, word for word but for the image, which must be the
+  published one. The README must give at least one, so a command the extraction missed fails rather
+  than passing with nothing compared. The installation guide's test reads CI's command through the same
+  helper.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

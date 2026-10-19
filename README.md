@@ -1,39 +1,62 @@
 # AgentSplice
 
-**Local agent interoperability, observability, and evaluation.**
+**A local flight recorder for AI coding agents and LLM runtimes.**
 
-AgentSplice is a local-first platform for tracing the interactions between AI-agent clients and model runtimes, built to grow into replaying, comparing, and evaluating them. Tracing is what it does today.
+[![CI](https://github.com/murillojndem/agent-splice/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/murillojndem/agent-splice/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/murillojndem/agent-splice?include_prereleases&sort=semver)](https://github.com/murillojndem/agent-splice/releases)
+[![License](https://img.shields.io/github/license/murillojndem/agent-splice)](LICENSE)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 
-It sits between clients such as OpenCode, Cline, Aider, IDE extensions, test harnesses, and automation scripts, and a model runtime. LM Studio is the runtime this build supports; llama.cpp, Ollama, vLLM, SGLang, and other compatible services are planned.
+Your agent says `UnknownError`. The runtime says `200 OK`. AgentSplice sits between them and records
+what actually happened: where each request's time went, how its stream ended, and whether the runtime
+really succeeded — without storing a single prompt.
 
-```text
-Agent client
-  OpenCode / Cline / Aider / custom harness
-          |
-          | OpenAI-compatible request (Anthropic: planned)
-          v
-+------------------------------------------------+
-|                  AgentSplice                   |
-| trace capture and timeline reconstruction      |
-| OpenTelemetry export and local dashboard       |
-| protocol and tool-call conformance   (planned) |
-| sanitized replay and comparison      (planned) |
-| agent evaluation and regression      (planned) |
-| optional compatibility adapters      (planned) |
-+------------------------------------------------+
-          |
-          | transparent request (adapted: planned)
-          v
-Model runtime
-  LM Studio   (llama.cpp / Ollama / vLLM / SGLang: planned)
-```
+- **No SDK, no code changes.** Point an OpenAI-compatible client at `http://127.0.0.1:5280/v1`.
+- **Streams pass through as they arrive.** A stream's bytes are relayed verbatim and timed on the way:
+  first byte, first event, first output event, first flush to the client.
+- **Evidence, not guesses.** Every number says whether AgentSplice measured it, the runtime reported
+  it, or it was derived from both.
+- **Private by default.** Counts, shapes, and timings — never prompts, output, or tool arguments.
+- **Local-first.** One process on loopback, SQLite, a built-in dashboard, optional OpenTelemetry
+  export.
+
+![An exchange in the dashboard: completed, with the runtime's error reported beside it, and where the time went](docs/images/dashboard-exchange-runtime-error.png)
+
+The dashboard on a stream the runtime answered `200` and then failed, recorded as the runtime's failure
+rather than as a success. From synthetic data ([more screens](docs/images/README.md)).
+
+## What a real session showed
+
+On 2026-10-17, OpenCode 1.18.7 ran a small coding task through AgentSplice to LM Studio 0.4.20 on one
+Windows machine with a Radeon RX 7900 XT. The gateway was a CI build from before the first release.
+[The trace report](docs/reports/2026-10-17-opencode-lm-studio/README.md) has every exchange; three
+things stood out.
+
+1. **A `200` that was not a success.** LM Studio answered OpenCode's agent request `200`, sent a single
+   1,098-byte event, and closed the stream without `[DONE]`. OpenCode showed `UnknownError`. LM Studio's
+   own log named the cause: the model's chat template uses a `safe` filter that LM Studio's template
+   engine does not have (`Unknown StringValue filter: safe`). That build recorded an ordinary
+   completion; AgentSplice now records the runtime's failure
+   ([ADR 0026](docs/adr/0026-stage-1d-a-runtime-error-inside-a-success-is-the-runtimes-failure.md)).
+2. **Where the agent's first minute went.** OpenCode sent its session-title request beside its first
+   agent step, and LM Studio served one request at a time. The title came first and took 1,881 tokens
+   and 38.6 s, because the model reasons before it answers. AgentSplice's timeline showed the agent
+   step's headers within 6 ms and then a minute of silence; LM Studio's log showed why: the request
+   waited behind the title, then its long prompt was processed. At 60 s AgentSplice's own idle timeout
+   cut it, and OpenCode retried without a word in the session; the retry took 13.2 s. The wait before a
+   stream's first byte now has a budget of its own, 5 minutes
+   ([ADR 0028](docs/adr/0028-the-wait-for-a-streams-first-byte-has-its-own-budget.md)); by the recorded
+   timings that request would have finished, though the session was not run again.
+3. **What the recorder cost, and what it kept.** AgentSplice flushed each stream's first event to
+   OpenCode within 2 ms of receiving it, and within 0.25 ms for 6 of 7 streams. Random markers placed
+   in each prompt were found nowhere in its log, its SQLite store, or the evidence exported from its API.
+
+One machine, one task, one build: evidence of what happened, not a compatibility claim.
 
 ## Quickstart
 
-AgentSplice is an experimental alpha. Today it serves the OpenAI Chat Completions endpoints in front of
-an LM Studio runtime and records structural evidence of every exchange. Replay, conformance runs,
-evaluation, Anthropic ingress, other runtimes, and compatibility adapters are planned, not present
-([Status](#status)). No compatibility claim is made for any client, model, or runtime.
+About two minutes once LM Studio has a model. AgentSplice is an experimental alpha; see
+[what it is not, yet](#what-it-is-not-yet).
 
 1. **Start LM Studio's server and load a model** with room for an agent's prompt, in LM Studio's
    Developer tab or with its `lms` command:
@@ -43,13 +66,107 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
    lms load <model-id> --context-length 32768
    ```
 
-2. **Start AgentSplice.** [Installing AgentSplice](docs/INSTALLATION.md) covers Docker, the Windows and
-   Linux packages, and running from source, and the first three carry the dashboard. From a clone, with
-   the .NET 10 SDK:
+2. **Start AgentSplice**, whichever way suits you. Each listens on `http://127.0.0.1:5280`, and
+   [Installing AgentSplice](docs/INSTALLATION.md) covers every step in detail.
 
-   ```bash
-   dotnet run --project src/AgentSplice.Api
-   ```
+<details>
+<summary><b>Windows</b> (x64): a self-contained package, no .NET and no Docker</summary>
+
+In PowerShell, download the package and its checksums, and check the digest. The last line must print
+`True`:
+
+```powershell
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/agentsplice-0.2.1-alpha-win-x64.zip
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/SHA256SUMS
+$zip = 'agentsplice-0.2.1-alpha-win-x64.zip'
+$expected = ((Select-String -Path SHA256SUMS -SimpleMatch $zip).Line -split '\s+')[0]
+(Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() -eq $expected
+```
+
+Then extract it into a folder only your account can write, and start it:
+
+```powershell
+Unblock-File $zip
+Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\Programs\AgentSplice"
+& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.1-alpha-win-x64\AgentSplice.Api.exe"
+```
+
+The package is not code-signed. If **Windows protected your PC** appears, choose **More info**, then
+**Run anyway**.
+
+</details>
+
+<details>
+<summary><b>Linux</b> (x64): a self-contained package, no .NET and no Docker</summary>
+
+It needs a recent glibc-based distribution, not Alpine;
+[the requirements](docs/INSTALLATION.md#linux-package) name the oldest that work. Download the package
+and its checksums, and check the digest. The last line must print `…: OK`:
+
+```bash
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/agentsplice-0.2.1-alpha-linux-x64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/SHA256SUMS
+archive=agentsplice-0.2.1-alpha-linux-x64.tar.gz
+grep -F "  $archive" SHA256SUMS | sha256sum --check --strict -
+```
+
+Then extract it into a folder only your account can write, and start it:
+
+```bash
+mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
+tar -xzf "$archive" -C ~/.local/opt/agentsplice
+~/.local/opt/agentsplice/agentsplice-0.2.1-alpha-linux-x64/AgentSplice.Api
+```
+
+</details>
+
+<details>
+<summary><b>Docker</b>: the published image</summary>
+
+A container cannot tell that its port is published on loopback only, so there the gateway requires an
+administrative token for its stored evidence. Choose one, and start the image:
+
+```bash
+export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
+echo "$AGENTSPLICE_ADMIN_API_KEY"   # paste this into the dashboard's token field
+docker run --detach --name agentsplice \
+  --publish 127.0.0.1:5280:5280 \
+  --volume agentsplice-data:/data \
+  --add-host host.docker.internal:host-gateway \
+  --env 'AGENTSPLICE__PERSISTENCE__CONNECTIONSTRING=Data Source=/data/agentsplice.db' \
+  --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
+  --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
+  --env AGENTSPLICE_ADMIN_API_KEY \
+  ghcr.io/murillojndem/agent-splice:0.2.1-alpha
+```
+
+Docker Desktop forwards `host.docker.internal` to the host. On a Linux engine, LM Studio must listen on
+an address the container can reach, not on loopback alone. The same command in PowerShell, and Compose
+from a clone, are in [Installing AgentSplice](docs/INSTALLATION.md#docker).
+
+</details>
+
+<details>
+<summary><b>macOS</b>: no native package yet</summary>
+
+The image is built for `linux/amd64` only. On Apple silicon, Docker Desktop can run it under emulation,
+which has not been tested; or run AgentSplice from source, below.
+
+</details>
+
+<details>
+<summary><b>From source</b>: any platform with the .NET 10 SDK</summary>
+
+```bash
+git clone https://github.com/murillojndem/agent-splice.git
+cd agent-splice
+dotnet run --project src/AgentSplice.Api
+```
+
+A fresh clone has no dashboard build. The APIs work without one, and the
+[development guide](docs/DEVELOPMENT.md#the-dashboard) shows how to build it and point the gateway at it.
+
+</details>
 
 3. **Check that it sees the model.** The `id` values listed are the model names a client sends:
 
@@ -61,6 +178,8 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
    curl.exe -s http://127.0.0.1:5280/v1/models
    ```
 
+   Without LM Studio's server, this answers `502` `agentsplice_runtime_unavailable`.
+
 4. **Point a client at `http://127.0.0.1:5280/v1`**, with any placeholder as its API key:
 
    | Client | Configuration |
@@ -69,213 +188,142 @@ evaluation, Anthropic ingress, other runtimes, and compatibility adapters are pl
    | Cline | API Provider **OpenAI Compatible**, with the fields in [Cline](docs/CLIENTS.md#cline) |
    | Any client or SDK that speaks OpenAI Chat Completions | [Base URL, `curl`, PowerShell, and Python](docs/CLIENTS.md#any-openai-compatible-client) |
 
-5. **Open the exchange.** A completion response carries `x-agentsplice-exchange-id`. Open
-   `http://127.0.0.1:5280/dashboard/exchanges/<exchange-id>`, or the Exchanges list at
-   `http://127.0.0.1:5280/dashboard/exchanges`. Run from source, the gateway serves the dashboard only
-   once it is built and `--agentsplice:dashboard:rootPath` points at the build
-   ([Development guide](docs/DEVELOPMENT.md), "The dashboard"); the same evidence is at
-   `/api/v1/exchanges/<exchange-id>`.
+5. **Open the dashboard** at `http://127.0.0.1:5280/dashboard/`, where completions appear as exchanges;
+   a completion response's `x-agentsplice-exchange-id` names the one to open. Under Docker, paste the
+   token into the dashboard's token field first.
 
 [Pointing a client at AgentSplice](docs/CLIENTS.md) explains each setting and what to do when a request
 fails.
 
-![A streamed exchange in the dashboard: where the time went, tokens, and the provenance of each measurement](docs/images/dashboard-exchange-stream.png)
+### How long it waits
 
-The dashboard on a streamed exchange, from synthetic data ([more screens](docs/images/README.md)).
+A local runtime can take minutes before it sends anything: a request queued behind another, a long
+prompt being processed, reasoning it does not stream. AgentSplice waits up to 5 minutes for the
+runtime's response headers and, on a stream, up to 5 more for its first byte; once bytes flow, up to 60
+seconds between reads; and 10 minutes for the whole request. A request that is not streamed has those
+first 5 minutes for the whole answer, because LM Studio 0.4.20 sends its headers only with the finished
+answer. When a budget runs out before anything has reached the client, the client receives a `504`
+`agentsplice_upstream_timeout`, and the exchange's timeline names the phase that fired. Once a stream
+has started, a stall ends it instead, and the exchange records that too.
 
-## Why this project exists
-
-Agent workflows fail across several independent boundaries: client schemas, provider adapters, prompt templates, streaming parsers, model behavior, tool-call representations, cache mechanisms, runtime versions, and hardware backends. The user interface often collapses all of those failures into “the model is slow” or “tools do not work.”
-
-AgentSplice provides evidence instead of guesswork. It is intended to answer:
-
-- What did the client actually send?
-- What did the runtime actually receive?
-- Which fields or events changed?
-- Where was wall-clock time spent?
-- Was a tool call structurally valid or merely printed as text?
-- Was prefix reuse probable, absent, or unknown?
-- Does the same request behave differently across models, runtimes, backends, or versions?
-- Did an update introduce a correctness or performance regression?
-- Can the behavior be replayed and attached to an upstream issue?
-
-## Durable core versus optional adapters
-
-The durable product core is:
-
-1. transparent trace capture;
-2. observability and timeline reconstruction;
-3. sanitized replay;
-4. protocol and behavioral conformance;
-5. agent-task evaluation and regression testing;
-6. portable evidence and OpenTelemetry export.
-
-Tool-call recovery, Qwen/Laguna-specific rules, OpenAI/Anthropic translation, prompt/schema compaction, cache-log parsers, and runtime workarounds are optional, versioned adapters. The project must remain useful when those defects are fixed upstream.
-
-See [Product positioning](docs/PRODUCT_POSITIONING.md) and [ADR 0006](docs/adr/0006-durable-core-and-adapter-lifecycle.md).
-
-## Status
-
-This repository is specification-first. Implementation is intentionally staged.
-
-**Stage 0 — Repository foundation is complete.** The .NET solution exists with enforced module
-boundaries, the domain model for exchanges and evidence, validated configuration, a deterministic
-fake upstream runtime, and CI on Windows and Ubuntu.
-
-**Stage 1A — Transparent request path is complete.** `GET /v1/models` and non-streaming
-`POST /v1/chat/completions` are served against an LM Studio runtime. Requests are forwarded without
-semantic rewriting, request correlation is returned on every response, latency boundaries are
-recorded where they were observed, and OpenTelemetry spans and metrics are emitted through
-`System.Diagnostics`.
-
-**Stage 1B — Streaming correctness and timeline is complete.** A `stream: true` request is relayed
-byte for byte as it arrives, with SSE framing observed rather than rebuilt, the first upstream byte,
-first decoded event, first semantic output event, and first client flush recorded as four separate
-boundaries, and every way a stream can end classified rather than collapsed. Ten correctness defects
-found in three review passes over 1A and 1B are corrected in
-[ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md),
-[ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md), and
-[ADR 0012](docs/adr/0012-classification-independent-of-relayability.md).
-
-**Stage 1C — Metadata persistence, administrative APIs, and the minimal dashboard is complete.**
-Exchanges are written to a local SQLite store through a bounded queue and a background writer, swept
-by retention, and served by the `/api/v1` surface and the dashboard that reads it — to every caller
-holding the administrative token once one is configured, and to loopback callers alone when none is;
-`agentsplice:persistence:mode: None` keeps purely ephemeral operation available.
-
-**Stage 1D — Local packaging and first public alpha is complete:
-[0.2.0-alpha](https://github.com/murillojndem/agent-splice/releases/tag/v0.2.0-alpha), the first public alpha, was published on 2026-10-19.** The OpenTelemetry SDK now
-subscribes to AgentSplice's spans and metrics, and `agentsplice:telemetry:otlp` exports them over OTLP
-— off by default, never pointed anywhere implicitly, and with an optional collector in the Compose
-file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). The gateway now serves the
-dashboard itself at `/dashboard/`, and the container image builds it in, so an installation needs no
-Node toolchain to open it ([ADR 0015](docs/adr/0015-stage-1d-gateway-serves-the-dashboard.md)).
-The image reports its own health: it carries a small probe that its `HEALTHCHECK` runs against
-`/health/live`, because the runtime base image has no HTTP client to run one with
-([ADR 0016](docs/adr/0016-stage-1d-the-image-reports-its-health.md)). A self-contained Windows
-package runs without Docker or a .NET installation, from any folder
-([ADR 0017](docs/adr/0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md)), and a version
-tag turns it into a draft pre-release for a maintainer to review and publish
-([ADR 0018](docs/adr/0018-stage-1d-tagged-releases-as-reviewed-drafts.md)). OpenCode, Cline, and any
-client that speaks OpenAI Chat Completions can be pointed at the gateway with the sample configuration
-and guide in [docs/CLIENTS.md](docs/CLIENTS.md); the address, headers, settings, and error codes they
-name are checked against the gateway's own
-([ADR 0019](docs/adr/0019-stage-1d-sample-client-configurations-and-a-quickstart.md)).
-AgentSplice is licensed under the Apache License 2.0, and every artifact carries the license and the
-notices of what it bundles ([ADR 0020](docs/adr/0020-stage-1d-the-project-is-licensed-under-apache-2.md)).
-A Linux package, the Windows package's twin for x64 distributions on glibc, ships beside it in every
-release, and CI assembles a release's assets on every change
-([ADR 0021](docs/adr/0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md)).
-A release carries the image as an archive, and publishing the release pushes exactly that image to
-GitHub Container Registry, never under `latest`
-([ADR 0022](docs/adr/0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md)). The
-first dated trace report records OpenCode sessions through the Windows package to LM Studio: what the
-gateway recorded, what that showed, and no compatibility claim
-([ADR 0023](docs/adr/0023-stage-1d-the-first-dated-trace-report.md),
-[docs/reports](docs/reports/README.md)).
-Every build, package, and image runs on .NET 10 LTS, supported until November 2028, rather than on
-.NET 8, whose support ends on November 10, 2026
-([ADR 0024](docs/adr/0024-stage-1d-dotnet-10-lts-before-the-first-alpha.md)).
-A stream's status is committed with the runtime's first byte, so a runtime that fails before it is
-answered with the gateway's `504` or `502` and every correlation header rather than a bare reset, and
-an exchange records an error code only when an envelope carrying it was written to the client
-([ADR 0025](docs/adr/0025-stage-1d-a-stream-commits-with-its-first-byte.md)). A runtime that reports
-an error inside a `200` — LM Studio does, for a chat template it cannot render — is relayed unchanged
-and recorded, counted, and shown as the runtime's failure rather than as a success
-([ADR 0026](docs/adr/0026-stage-1d-a-runtime-error-inside-a-success-is-the-runtimes-failure.md)).
-Before it was public, a gateway on this machine stopped answering pages on other sites and stopped
-claiming what it does not do: only the loopback host names are served, a completion must be declared
-as JSON, and a binding beyond loopback is announced at startup
-([ADR 0027](docs/adr/0027-stage-1d-what-a-local-gateway-exposes-is-closed-or-said.md)).
-
-**Stage 2A — Sanitized replay artifacts is next**, and nothing of it is implemented yet. Replay,
-conformance orchestration, evaluation, protocol translation, and compatibility adapters all belong to
-later milestones.
-
-No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
-compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
-
-See [Development guide](docs/DEVELOPMENT.md) to build and test.
-
-## Stack
-
-In use today: ASP.NET Core 10 and C# 12, System.Text.Json, Server-Sent Events, `System.Diagnostics`
-spans and metrics with the OpenTelemetry SDK and an opt-in OTLP exporter, SQLite, React, TypeScript,
-and Vite for the dashboard, and xUnit with architecture, contract, and integration suites. The rest is
-proposed and arrives with the stage that needs it.
-
-- ASP.NET Core 10 and C# 12
-- System.Text.Json
-- Server-Sent Events
-- OpenTelemetry
-- SQLite for local mode
-- PostgreSQL for shared/self-hosted mode
-- xUnit, architecture tests, integration tests, and Testcontainers
-- Docker and Docker Compose
-- React, TypeScript, and Vite for the optional local dashboard
-
-## Protocol endpoints
-
-Served today:
-
-```http
-GET  /v1/models
-POST /v1/chat/completions      # non-streaming and SSE
-```
-
-The administrative APIs under `/api/v1` expose health, exchanges, timeline metadata, and runtime diagnostics, and `/health/live` and `/health/ready` serve orchestrators ([API notes](docs/API.md)). Content retention remains disabled by default: what is stored is structural metadata — counts, shapes, timings, and field names — and never prompts, model output, tool arguments, or credentials.
-
-The dashboard is served by the gateway at `http://127.0.0.1:5280/dashboard/`, and `/` redirects there, whenever a build is present — always in the container image. With Docker:
-
-```bash
-cp .env.example .env
-export AGENTSPLICE_ADMIN_API_KEY="$(openssl rand -hex 32)"
-echo "AGENTSPLICE_ADMIN_API_KEY=$AGENTSPLICE_ADMIN_API_KEY" >> .env
-docker compose up --build --wait
-# open http://127.0.0.1:5280/ and paste the token into the dashboard's token field
-```
-
-The same in PowerShell:
+To wait longer, pass the phases on the command line. Here it is for the Windows package, from its
+folder; the Linux package, and `dotnet run --project src/AgentSplice.Api --`, take the same arguments:
 
 ```powershell
-Copy-Item .env.example .env
-$bytes = [byte[]]::new(32); [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-$env:AGENTSPLICE_ADMIN_API_KEY = ($bytes | ForEach-Object { $_.ToString('x2') }) -join ''
-Add-Content .env "AGENTSPLICE_ADMIN_API_KEY=$env:AGENTSPLICE_ADMIN_API_KEY"
-docker compose up --build --wait
+.\AgentSplice.Api.exe --agentsplice:runtimes:0:timeouts:responseHeaders=00:08:00 --agentsplice:runtimes:0:timeouts:firstByte=00:08:00
 ```
 
-`--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
-shows that status afterwards. A release's image needs no clone at all:
-`ghcr.io/murillojndem/agent-splice:<version>`, started with the `docker run` command in
-[Installing AgentSplice](docs/INSTALLATION.md).
+Each phase must stay within the total, 10 minutes by default
+(`--agentsplice:runtimes:0:timeouts:total`). [Troubleshooting](docs/CLIENTS.md#troubleshooting) covers
+every phase, and how to set them under Docker.
 
-Without Docker, the Windows and Linux packages need no .NET installation: download
-`agentsplice-<version>-win-x64.zip` or `agentsplice-<version>-linux-x64.tar.gz`, and `SHA256SUMS`, from
-the releases page, check the digest, extract it, and run `AgentSplice.Api.exe` or `AgentSplice.Api` from
-any folder. Each listens on loopback, carries the dashboard, and keeps its store beside the executable.
-[Installing AgentSplice](docs/INSTALLATION.md) covers every path — Docker, the two packages, and running
-from source — step by step.
+## How it works
 
-## Documentation
+```text
+  OpenCode, Cline, or any OpenAI Chat Completions client
+                          |
+                          |  http://127.0.0.1:5280/v1
+                          v
+  +-----------------------------------------------------------+
+  |                        AgentSplice                        |
+  |  forwards the request, relays the answer as it arrives    |
+  |  times each boundary, classifies how the exchange ended   |
+  |  keeps metadata only: SQLite, dashboard, OTLP (opt-in)    |
+  +-----------------------------------------------------------+
+                          |
+                          |  the request body, byte for byte
+                          v
+  LM Studio   (llama.cpp, Ollama, vLLM, SGLang: planned)
+```
 
-- [Installing AgentSplice](docs/INSTALLATION.md)
-- [Pointing a client at AgentSplice](docs/CLIENTS.md)
-- [Development guide](docs/DEVELOPMENT.md)
-- [Complete product and engineering specification](docs/SPECIFICATION.md)
-- [Product positioning](docs/PRODUCT_POSITIONING.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Conformance specification](docs/CONFORMANCE.md)
-- [Replay specification](docs/REPLAY.md)
-- [Benchmarking and evaluation](docs/BENCHMARKING.md)
-- [Observability](docs/OBSERVABILITY.md)
-- [API contract notes](docs/API.md)
-- [Claude implementation contract](CLAUDE.md)
-- [Threat model](docs/THREAT_MODEL.md)
-- [Portfolio brief](docs/PORTFOLIO_BRIEF.md)
+AgentSplice serves `GET /v1/models` and `POST /v1/chat/completions`, streamed or not. It forwards each
+request's body byte for byte — only an alias, if you configure one, renames the model — and relays the
+runtime's answer as it arrives: its status, its body, and an allowlist of its headers. For every
+exchange it records:
 
-## Design principles
+- **a timeline:** request accepted, validated, model resolved, request opened to the runtime, headers
+  received, first byte, first event, first output event, first event flushed to the client, completion,
+  and persistence, each read from AgentSplice's own clock;
+- **how it ended:** `[DONE]` received, the stream closing without it, the client or the runtime
+  cancelling, a timeout and its phase, a lost connection, a malformed event, a limit the gateway
+  enforces, or an error the runtime reported inside its answer;
+- **what the runtime said:** `success`, `error_status`, or `error_reported`, so a `200` that carried an
+  error counts as the runtime's failure;
+- **tool calls:** each native tool call the runtime emitted, counted and timed, never its arguments;
+- **usage:** the tokens the runtime reported, labelled as reported, and the throughput derived from them.
+
+Records go to a local SQLite store, kept for 30 days by default, and are served by the administrative
+API under `/api/v1` and the dashboard at `/dashboard/`. Spans and metrics can be exported over OTLP,
+which stays off until you turn it on ([Observability](docs/OBSERVABILITY.md)).
+
+## What it is not, yet
+
+- **An experimental alpha.** No compatibility claim is made for any client, model, or runtime: an HTTP
+  `200` is not evidence of compatibility, and a support claim needs a dated conformance report
+  ([Conformance](docs/CONFORMANCE.md)), of which none exists yet.
+- **One protocol in.** OpenAI Chat Completions only: no `/v1/responses`, no embeddings, and no Anthropic
+  Messages, so Claude Code cannot use it yet.
+- **One runtime with evidence.** LM Studio. Other servers with an OpenAI-compatible `/v1`, such as
+  llama.cpp's `llama-server`, Ollama, or vLLM, may work through the same provider, but nothing has been
+  recorded with them.
+- **No replay yet.** Replay, comparison across runtimes, conformance suites, and agent evaluation are the
+  [roadmap](#roadmap), not this build.
+- **No native macOS package.** The image is `linux/amd64` only.
+- **No authentication on `/v1`.** The gateway listens on loopback by default and refuses a binding beyond
+  it unless `/api/v1` has a token; `/v1` takes no credential either way. Without a token, the packages
+  serve `/api/v1` and its evidence to every account on the machine ([Security](docs/SECURITY.md)).
+- **Not a tool runner.** A tool call is recorded as data; AgentSplice never executes what a model asks
+  for.
+
+## When to use something else
+
+Different jobs:
+
+| You want to… | Look at |
+| --- | --- |
+| Route between cloud providers, with keys, budgets, retries, and fallbacks | LiteLLM, Portkey |
+| Trace an LLM application's prompts and outputs, and evaluate them | Langfuse, Arize Phoenix |
+| See raw HTTP as it crossed the wire | mitmproxy |
+| Know where an agent's request spent its time against a local runtime, how its stream ended, and whether the runtime really succeeded, without keeping what was said | AgentSplice |
+
+AgentSplice exports OpenTelemetry, so its spans and metrics can sit beside your other telemetry.
+
+## Roadmap
+
+| Stage | What it adds | Status |
+| --- | --- | --- |
+| 1 | The transparent trace proxy: this build | Released, 0.2.x |
+| 2A | Sanitized replay artifacts: capture an exchange once, replay it later | In progress |
+| 2B | Differential comparison: the same request against two runtimes, and what changed | Planned |
+| 2C, 2D | Protocol, streaming, and tool-call conformance suites, with dated results | Planned |
+| 2E | Cache evidence: whether a runtime reused the prompt prefix, and how sure that is | Planned |
+| 3 | Agent evaluation: the same coding task across agents, models, and runtimes | Planned |
+| 4 | Optional adapters, Anthropic Messages among them | Later |
+
+[The roadmap](docs/ROADMAP.md) has each stage's scope and exit criteria. To hear when a release ships,
+choose **Watch → Custom → Releases** at the top of this page. Which runtime or client should come next?
+Say so in [Discussions](https://github.com/murillojndem/agent-splice/discussions).
+
+## How it's built
+
+- **Specification first.** [The specification](docs/SPECIFICATION.md) sets the requirements, every
+  architectural decision is an [ADR](docs/adr/), and the [roadmap](docs/ROADMAP.md) ships one stage at
+  a time.
+- **Tests hold it to its documents.** Over 1,000 tests: unit tests, integration tests against a
+  deterministic fake runtime, architecture tests for the module boundaries, and contract tests that fail
+  when a document, this README included, names a setting, an error code, a header, or a command the code
+  does not have. CI runs them on Windows and Ubuntu.
+- **Reviewed against its own claims.** Three review passes over the request path and the streaming relay
+  found ten defects CI had passed, two of them because a test asserted the defect as the contract
+  ([ADR 0010](docs/adr/0010-correct-stream-boundary-and-termination-semantics.md),
+  [ADR 0011](docs/adr/0011-per-event-bounds-and-media-type-parsing.md),
+  [ADR 0012](docs/adr/0012-classification-independent-of-relayability.md)).
+- **Releases you can check.** CI builds each release from its tag. A published release is immutable, and
+  each of its assets is listed in `SHA256SUMS` and can be checked with `gh release verify-asset`.
+- **Stack.** .NET 10 and ASP.NET Core, System.Text.Json, SQLite through Entity Framework Core, the
+  OpenTelemetry SDK, and a React and TypeScript dashboard built with Vite.
+
+The principles it holds to:
 
 1. Evidence before workaround.
 2. Transparent capture before transformation.
@@ -288,12 +336,30 @@ from source — step by step.
 9. Treat AMD/ROCm and other non-CUDA environments as first-class evidence sources.
 10. Upstream fixes when a defect belongs in another project.
 
-## Product boundary
+## Documentation
 
-AgentSplice is not another chat, coding agent, model runtime, model downloader, general cloud billing router, or permanent workaround collection. It is an independent diagnostic and evaluation plane for agent/runtime interactions.
+- [Installing AgentSplice](docs/INSTALLATION.md): Docker, the Windows and Linux packages, and from source
+- [Pointing a client at AgentSplice](docs/CLIENTS.md): OpenCode, Cline, any OpenAI-compatible client, and
+  troubleshooting
+- [Observability](docs/OBSERVABILITY.md): the timeline, the metrics, and what each measurement means
+- [API contract notes](docs/API.md) and the [OpenAPI document](openapi/agentsplice-openapi.yaml)
+- [Security](docs/SECURITY.md) and the [threat model](docs/THREAT_MODEL.md)
+- [Trace reports](docs/reports/README.md) and the [compatibility matrix](docs/COMPATIBILITY_MATRIX.md)
+- [Product positioning](docs/PRODUCT_POSITIONING.md), [architecture](docs/ARCHITECTURE.md), the
+  [specification](docs/SPECIFICATION.md), and the [roadmap](docs/ROADMAP.md)
+- The [replay](docs/REPLAY.md), [conformance](docs/CONFORMANCE.md), and
+  [benchmarking](docs/BENCHMARKING.md) specifications
+- [Development guide](docs/DEVELOPMENT.md): building, testing, packaging, and releasing
+- [Changelog](CHANGELOG.md) and [portfolio brief](docs/PORTFOLIO_BRIEF.md)
 
-## License
+## Contributing, security, and license
 
-AgentSplice is licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). The software it bundles is
-listed with its licenses in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). Report vulnerabilities privately, as
-[SECURITY.md](SECURITY.md) describes.
+Bug reports, trace reports, and pull requests are welcome; [CONTRIBUTING.md](CONTRIBUTING.md) says what
+a useful one includes. Questions and ideas go to
+[Discussions](https://github.com/murillojndem/agent-splice/discussions). Report a vulnerability
+privately, as [SECURITY.md](SECURITY.md) describes, never in a public issue.
+
+AgentSplice is licensed under the [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). The software it
+bundles is listed with its licenses in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+If AgentSplice is useful to you, a GitHub star helps other developers find it.

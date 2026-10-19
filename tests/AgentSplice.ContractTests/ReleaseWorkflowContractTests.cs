@@ -311,13 +311,16 @@ public sealed partial class ReleaseWorkflowContractTests
         Assert.Contains("November 14, 2028", RepositoryPaths.ReadText(".github", "scripts", "package.ps1"), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void The_installation_guide_names_the_version_the_build_carries()
+    [Theory]
+    [InlineData("docs/INSTALLATION.md")]
+    [InlineData("README.md")]
+    public void The_guides_name_the_version_the_build_carries(string guide)
     {
-        // Each command names a package file or an image tag. A version bump the guide missed would hand
-        // out commands that download nothing, and nothing else would notice.
+        // Each command names a package file, an image tag, or a release's download address. A version
+        // bump a guide missed would hand out commands that download nothing, and nothing else would
+        // notice; the README's quickstart is the first of them a visitor copies.
         var named = GuideVersion()
-            .Matches(RepositoryPaths.ReadText("docs", "INSTALLATION.md"))
+            .Matches(RepositoryPaths.ReadText(guide.Split('/')))
             .Select(match => match.Groups["version"].Value)
             .ToArray();
 
@@ -388,7 +391,8 @@ public sealed partial class ReleaseWorkflowContractTests
     [GeneratedRegex(@"<VersionSuffix>(?<value>[^<]*)</VersionSuffix>")]
     private static partial Regex VersionSuffix();
 
-    // A package file name, agentsplice-<version>-<platform>-x64, or an image tag, agent-splice:<version>.
-    [GeneratedRegex(@"(?:agentsplice-|agent-splice:)(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=-(?:win|linux)-x64|[\s`'""]|$)", RegexOptions.Multiline)]
+    // A package file name, agentsplice-<version>-<platform>-x64; an image tag, agent-splice:<version>; or a
+    // release's download address, releases/download/v<version>/.
+    [GeneratedRegex(@"(?:agentsplice-|agent-splice:|releases/download/v)(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=-(?:win|linux)-x64|[\s`'""/]|$)", RegexOptions.Multiline)]
     private static partial Regex GuideVersion();
 }

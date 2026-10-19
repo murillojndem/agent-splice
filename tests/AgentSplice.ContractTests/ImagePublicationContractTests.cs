@@ -316,10 +316,7 @@ public sealed partial class ImagePublicationContractTests
     [Fact]
     public void The_installation_guide_runs_the_image_as_ci_does()
     {
-        var ci = Assert.Single(DockerCommands(
-            string.Join('\n', Steps(Jobs(Workflow("ci.yml")).Single(job => job.Name == "image-archive").Job).Select(Run)),
-            "\\"));
-        Assert.Equal("$REFERENCE", ci[^1]);
+        var ci = CiDockerRun();
 
         var guide = CodeBlocks(RepositoryPaths.ReadText("docs", "INSTALLATION.md"))
             .Select(block => (block.Language, Commands: DockerCommands(block.Body, Continuation(block.Language)).ToArray()))
@@ -332,6 +329,28 @@ public sealed partial class ImagePublicationContractTests
         foreach (var (_, commands) in guide)
         {
             var command = Assert.Single(commands);
+            Assert.Equal(ci[..^1], command[..^1]);
+            Assert.StartsWith(PublishedImage() + ":", command[^1], StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void The_readme_runs_the_image_as_ci_does()
+    {
+        // The quickstart repeats the guide's bash command so that a visitor need not leave the page. A flag
+        // dropped or changed there would start a container CI never ran: without the volume, a store that
+        // goes with the container; without the token, a gateway that exits at startup.
+        var ci = CiDockerRun();
+
+        var commands = CodeBlocks(RepositoryPaths.ReadText("README.md"))
+            .SelectMany(block => DockerCommands(block.Body, Continuation(block.Language)))
+            .ToArray();
+
+        // Not vacuous: a quickstart whose command the extraction missed would pass with nothing compared.
+        Assert.NotEmpty(commands);
+
+        foreach (var command in commands)
+        {
             Assert.Equal(ci[..^1], command[..^1]);
             Assert.StartsWith(PublishedImage() + ":", command[^1], StringComparison.Ordinal);
         }
@@ -466,6 +485,17 @@ public sealed partial class ImagePublicationContractTests
         }
 
         return bindings;
+    }
+
+    /// <summary>The arguments of the <c>docker run</c> the <c>image-archive</c> job starts the image with, the image last.</summary>
+    private static string[] CiDockerRun()
+    {
+        var ci = Assert.Single(DockerCommands(
+            string.Join('\n', Steps(Jobs(Workflow("ci.yml")).Single(job => job.Name == "image-archive").Job).Select(Run)),
+            "\\"));
+        Assert.Equal("$REFERENCE", ci[^1]);
+
+        return ci;
     }
 
     /// <summary>The arguments of each <c>docker run</c> and <c>docker create</c> in a script, its continued lines joined.</summary>
