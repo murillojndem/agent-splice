@@ -564,8 +564,9 @@ in-process host hides — that Kestrel sends a started response's headers with i
 it shows a stream stalled or dropped before its first byte answered with a `504` or `502` and its
 correlation headers, a successful stream byte for byte, a mid-stream stall still abandoned, and a client
 that hangs up on a large buffered answer recorded as cancelled. That last one reads the status line
-through a raw socket with a 4 KiB receive window: `HttpClient` reads ahead, and on the loopback the
-kernel's buffers hold all 32 MiB of the answer, so through it the write always finishes.
+through a raw socket with a 4 KiB receive window, and the listener's send buffer is bounded at 64 KiB:
+`HttpClient` reads ahead, and a kernel left to grow a socket's buffers holds all 32 MiB of the answer on
+the loopback — a CI runner's did — so the write finishes and the test tests nothing.
 
 The rest runs in process:
 

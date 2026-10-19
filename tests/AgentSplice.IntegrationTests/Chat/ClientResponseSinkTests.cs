@@ -75,8 +75,8 @@ public sealed class ClientResponseSinkTests
     {
         // Kestrel completes a write to an aborted connection without sending it, and its flush then says
         // neither cancelled nor completed. A client that read a buffered answer's status line and hung up
-        // before the body's write began was recorded as having received all of it; a Linux CI run under
-        // load caught it, because over a socket it is a race.
+        // before the body's write began would be recorded as having received all of it. Over a socket it
+        // is a race, so it is scripted here.
         using var aborted = new CancellationTokenSource();
         await aborted.CancelAsync();
 

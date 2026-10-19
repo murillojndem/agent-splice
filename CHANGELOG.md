@@ -139,7 +139,7 @@ written.
   routing had resolved one.
 - A client that leaves during a buffered answer's write is recorded as cancelled, not completed, and no
   bytes are claimed delivered — including one that hung up before the write began, which Kestrel
-  completes without sending and which a Linux CI run under load caught. `stream.client.bytes` is recorded by whatever wrote the bytes, and is
+  completes without sending. `stream.client.bytes` is recorded by whatever wrote the bytes, and is
   absent when the client received an error envelope instead of the runtime's answer.
 - Every failure of the request to the runtime reaches the timeline: `timeout_fired` with its
   `timeout.phase` wherever the timeout elapsed, now on the buffered path and before a stream's headers too, and the new

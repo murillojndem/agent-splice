@@ -126,8 +126,9 @@ public sealed class KestrelWireTests
         // status line of a 32 MiB answer and hung up was recorded as completed, with all 32 MiB
         // "forwarded to the client". It is recorded after the write now, and the write failed.
         //
-        // A raw socket with a small receive window, because the point is a write that cannot finish:
-        // HttpClient reads ahead, and on the loopback the kernel's buffers hold all 32 MiB.
+        // A raw socket with a small receive window, and a listener with a bounded send buffer, because
+        // the point is a write that cannot finish: HttpClient reads ahead, and a kernel left to grow a
+        // socket's buffers can hold all 32 MiB on the loopback, as a CI runner's did.
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(

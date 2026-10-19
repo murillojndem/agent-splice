@@ -115,9 +115,8 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
     ///
     /// An aborted connection is checked as well. Once Kestrel has aborted a connection it completes
     /// writes to it without sending them, and the flush can then report neither, so a client that hung
-    /// up in the middle of a large buffered answer was recorded as having received all of it — the
-    /// case a Linux CI run caught. Bytes written as the connection went are not known to have
-    /// arrived, so the answer counts as not delivered.
+    /// up just before a write began would be recorded as having received it. Bytes written as the
+    /// connection went are not known to have arrived, so the answer counts as not delivered.
     /// </remarks>
     private ClientWriteResult Outcome(System.IO.Pipelines.FlushResult flush) =>
         flush.IsCanceled || flush.IsCompleted || context.RequestAborted.IsCancellationRequested
