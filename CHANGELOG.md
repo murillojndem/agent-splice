@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## Unreleased
+## 0.2.0-alpha — 2026-10-18
 
 ### Stage 1D, part 15: what a local gateway exposes is closed, or said
 
