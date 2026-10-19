@@ -577,6 +577,9 @@ The rest runs in process:
   held open 300 ms first, because a reset hard on their heels can beat them to the gateway.
 - `FailureEvidenceTests`: the buffered path's phases, failures, and their details, the trace id of a
   request refused before its model was known, and a client that leaves during model discovery.
+- `ClientResponseSinkTests` scripts the HTTP sink's pipe, so what a socket reaches only by timing is
+  certain: a write to a connection already aborted reports the client gone, and starting a response
+  flushes it and so notices a client that already left.
 - `StreamRelayBoundaryTests` and `ExchangeRecorderTests`: when the response starts and the boundary that
   says so, what is left unstarted, and how each ending is recorded, and that a failure must
   name its class.

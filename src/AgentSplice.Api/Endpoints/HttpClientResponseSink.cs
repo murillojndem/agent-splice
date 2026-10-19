@@ -71,9 +71,7 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
             // its status, which is what the caller records it as (ADR 0025).
             var flush = await response.BodyWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
 
-            return flush.IsCanceled || flush.IsCompleted
-                ? ClientWriteResult.ClientGone
-                : ClientWriteResult.Written;
+            return Outcome(flush);
         }
         catch (Exception exception) when (exception is OperationCanceledException or IOException)
         {
@@ -98,12 +96,7 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
                 .WriteAsync(bytes, cancellationToken)
                 .ConfigureAwait(false);
 
-            // IsCompleted: the reader is finished with this pipe, so nothing written after it can
-            // reach the client. IsCanceled: the flush was cut short and these bytes are not known to
-            // have been delivered. Neither is an error, and both mean the same thing to the relay.
-            return flush.IsCanceled || flush.IsCompleted
-                ? ClientWriteResult.ClientGone
-                : ClientWriteResult.Written;
+            return Outcome(flush);
         }
         catch (Exception exception) when (exception is OperationCanceledException or IOException)
         {
@@ -113,6 +106,23 @@ internal sealed class HttpClientResponseSink : IClientResponseSink
 
     /// <inheritdoc />
     public void Abort() => context.Abort();
+
+    /// <summary>Whether a write that returned reached a client that is still there.</summary>
+    /// <remarks>
+    /// IsCompleted: the reader is finished with this pipe, so nothing written after it can reach the
+    /// client. IsCanceled: the flush was cut short and these bytes are not known to have been
+    /// delivered. Neither is an error, and both mean the same thing to the relay.
+    ///
+    /// An aborted connection is checked as well. Once Kestrel has aborted a connection it completes
+    /// writes to it without sending them, and the flush can then report neither, so a client that hung
+    /// up in the middle of a large buffered answer was recorded as having received all of it — the
+    /// case a Linux CI run caught. Bytes written as the connection went are not known to have
+    /// arrived, so the answer counts as not delivered.
+    /// </remarks>
+    private ClientWriteResult Outcome(System.IO.Pipelines.FlushResult flush) =>
+        flush.IsCanceled || flush.IsCompleted || context.RequestAborted.IsCancellationRequested
+            ? ClientWriteResult.ClientGone
+            : ClientWriteResult.Written;
 
     private void SetCorrelation(GatewayCorrelation correlation)
     {

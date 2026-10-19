@@ -2,6 +2,7 @@ using System.IO.Pipelines;
 using System.Text;
 using AgentSplice.Api.Endpoints;
 using AgentSplice.Application.Exchanges;
+using AgentSplice.Domain.Identifiers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Xunit;
@@ -69,9 +70,41 @@ public sealed class ClientResponseSinkTests
         Assert.Equal(ClientWriteResult.ClientGone, await sink.WriteAsync(Payload, CancellationToken.None));
     }
 
-    private static HttpClientResponseSink Sink(PipeWriter writer)
+    [Fact]
+    public async Task A_write_to_a_connection_already_aborted_reports_the_client_gone()
     {
-        var context = new DefaultHttpContext();
+        // Kestrel completes a write to an aborted connection without sending it, and its flush then says
+        // neither cancelled nor completed. A client that read a buffered answer's status line and hung up
+        // before the body's write began was recorded as having received all of it; a Linux CI run under
+        // load caught it, because over a socket it is a race.
+        using var aborted = new CancellationTokenSource();
+        await aborted.CancelAsync();
+
+        var sink = Sink(new ScriptedPipeWriter(new FlushResult(isCanceled: false, isCompleted: false)), aborted.Token);
+
+        Assert.Equal(ClientWriteResult.ClientGone, await sink.WriteAsync(Payload, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Starting_a_response_flushes_it_and_so_learns_the_client_is_gone()
+    {
+        // The status is recorded as sent when the start returns, so the start flushes (ADR 0025), and
+        // that flush is the first point at which a client that already left can be noticed.
+        var sink = Sink(new ScriptedPipeWriter(new FlushResult(isCanceled: false, isCompleted: true)));
+
+        var start = new ClientResponseStart(
+            200,
+            "application/json",
+            new GatewayCorrelation(PublicRequestId.New(), ExchangeId: null, TraceId: null, Runtime: null),
+            new Dictionary<string, string>(),
+            DisableCaching: false);
+
+        Assert.Equal(ClientWriteResult.ClientGone, await sink.StartAsync(start, CancellationToken.None));
+    }
+
+    private static HttpClientResponseSink Sink(PipeWriter writer, CancellationToken requestAborted = default)
+    {
+        var context = new DefaultHttpContext { RequestAborted = requestAborted };
 
         context.Features.Set<IHttpResponseBodyFeature>(new StubResponseBodyFeature(writer));
 
