@@ -15,6 +15,52 @@ All notable changes will be documented here.
   build of `main` that no release carries yet is still a CI run's artifact away. Verifying a release's
   attestation needs a recent GitHub CLI: 2.76 found no attestation for 0.2.0-alpha, and 2.102 verified
   the release and each of its assets.
+- **The wait for a stream's first byte has its own budget** (ADR 0028). The first trace report's
+  finding 2 was an OpenCode request that LM Studio queued and processed for a minute, cut by the
+  60-second `idleStream`, because that budget also covered the wait before a stream's first byte. A
+  new per-runtime setting, `timeouts:firstByte`, 5 minutes by default, bounds the wait from the
+  runtime's headers to its first byte; `idleStream`, still 60 seconds, bounds only the gaps between
+  reads after it. A first-byte timeout is recorded as `timeout.phase: FirstByte` and, coming before the
+  client's status is committed, is always the `504` envelope; an `IdleStream` timeout now always
+  abandons a started response. The classifier checks the latest phase first: client, total, idle,
+  first byte, response headers, connect.
+- `timeouts:responseHeaders` now defaults to 5 minutes rather than 30 seconds, for a runtime that sends
+  its headers only when it starts answering — Ollama's OpenAI-compatible server writes a stream's headers
+  with its first chunk, by its source — or, for a request that is not streamed, only when it has
+  finished, as LM Studio does. Model discovery shares that budget and inherits it.
+- **A configuration whose `total` is under 5 minutes, and which does not also set `responseHeaders` and
+  `firstByte`, no longer starts**: validation names each phase that exceeds the total. `firstByte` must
+  be greater than zero and no longer than `total`, like every phase.
+- `docs/CLIENTS.md`'s examples raise `responseHeaders` and `firstByte`, which the earlier `00:03:00`
+  values would now lower, and say to raise the client's own timeout too. FR-CHAT-007 names the
+  first-byte timeout, and `docs/OBSERVABILITY.md`, `docs/SECURITY.md`, `docs/THREAT_MODEL.md`, and ADRs
+  0009 and 0025 say what changed. The first trace report gains a dated note.
+- `UpstreamStreamBudgetTests` drives the provider with a scripted body whose reads end only when their
+  own token is cancelled, `ChatCompletionStreamBudgetTests` runs the waits through the host, and
+  `GatewayFixture.SetTimeouts` states all five phases for every test that shortens the total. Every new
+  guard was verified to fail against a deliberately reintroduced defect:
+  - the first read waiting on the idle budget fails
+    `Nothing_after_a_streams_headers_times_out_in_the_first_byte_phase`,
+    `A_stream_that_stalls_before_its_first_byte_is_answered_with_a_gateway_timeout`, and
+    `A_stream_that_waits_longer_than_the_idle_budget_for_its_first_byte_completes`;
+  - the first-byte budget never armed fails the first two of those;
+  - reads after the first byte still waiting on the first-byte budget fail
+    `A_stall_after_the_first_byte_times_out_in_the_idle_phase` and
+    `A_stalled_stream_fires_the_idle_phase_and_not_the_header_or_first_byte_phase`;
+  - the idle budget armed once rather than before every read fails
+    `A_stream_longer_than_the_idle_budget_completes_when_no_gap_between_reads_reaches_it`;
+  - a first-byte budget not linked to the client fails
+    `A_client_that_leaves_before_the_first_byte_is_a_cancellation` and
+    `A_client_that_leaves_while_a_stream_waits_for_its_first_byte_cancels_the_upstream_request`;
+  - the first-byte budget armed when the request is sent fails
+    `A_stream_whose_headers_and_first_byte_each_take_most_of_their_budgets_completes`;
+  - the classifier checking the first-byte budget before the total fails
+    `A_stream_whose_total_budget_elapses_before_its_first_byte_records_that_phase`, and before the idle
+    budget, `A_first_byte_that_arrives_as_its_budget_elapses_leaves_a_later_stall_in_the_idle_phase`;
+  - a missing `firstByte` check against `total` fails
+    `The_first_byte_budget_may_not_exceed_the_total_budget`, `>=` in place of `>` fails
+    `A_phase_as_long_as_the_total_is_accepted`, and a response-header default left at 30 seconds fails
+    `The_first_byte_and_response_header_budgets_default_to_five_minutes`.
 
 ## 0.2.0-alpha — 2026-10-18
 

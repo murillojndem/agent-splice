@@ -31,13 +31,16 @@ public sealed class KestrelWireTests
     public async Task A_stream_that_stalls_before_its_first_byte_gets_a_status_and_its_correlation_headers()
     {
         // The case the first trace report met: LM Studio sends a stream's headers at once and its
-        // first byte after the prompt is processed, and the idle budget elapses in between. The
-        // client used to receive nothing — no status line, no header — and then a reset.
-        await using var fixture = await StartAsync(settings =>
-        {
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.500";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-        });
+        // first byte after the prompt is processed, and a budget elapses in between — the idle one
+        // then, the first-byte one since ADR 0028. The client used to receive nothing — no status
+        // line, no header — and then a reset.
+        await using var fixture = await StartAsync(settings => GatewayFixture.SetTimeouts(
+            settings,
+            connect: "00:00:05",
+            responseHeaders: "00:00:30",
+            firstByte: "00:00:00.500",
+            idleStream: "00:00:30",
+            total: "00:00:30"));
 
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",
@@ -92,11 +95,13 @@ public sealed class KestrelWireTests
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.500";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            },
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:30",
+                firstByte: "00:00:30",
+                idleStream: "00:00:00.500",
+                total: "00:00:30"),
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(

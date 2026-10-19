@@ -64,14 +64,15 @@ public sealed class HostStartupTests
     }
 
     [Fact]
-    public void The_shipped_configuration_binds_all_four_timeout_phases()
+    public void The_shipped_configuration_binds_all_five_timeout_phases()
     {
         using var factory = new AgentSpliceApplicationFactory();
 
         var timeouts = Assert.Single(Resolve(factory).Runtimes).Timeouts;
 
         Assert.Equal(TimeSpan.FromSeconds(5), timeouts.Connect);
-        Assert.Equal(TimeSpan.FromSeconds(30), timeouts.ResponseHeaders);
+        Assert.Equal(TimeSpan.FromMinutes(5), timeouts.ResponseHeaders);
+        Assert.Equal(TimeSpan.FromMinutes(5), timeouts.FirstByte);
         Assert.Equal(TimeSpan.FromMinutes(1), timeouts.IdleStream);
         Assert.Equal(TimeSpan.FromMinutes(10), timeouts.Total);
     }

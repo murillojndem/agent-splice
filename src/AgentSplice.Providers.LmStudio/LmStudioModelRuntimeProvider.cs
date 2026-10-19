@@ -142,7 +142,7 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         var target = request.Target;
 
         // Not disposed here. On success the budgets outlive this method along with the response, and
-        // the returned stream owns all four; disposing them at the end of the call would cancel the
+        // the returned stream owns them all; disposing them at the end of the call would cancel the
         // stream the caller is about to read.
         var total = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         total.CancelAfter(target.Timeouts.Total);
@@ -150,11 +150,16 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         var responseHeaders = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
         responseHeaders.CancelAfter(target.Timeouts.ResponseHeaders);
 
+        // Linked to the total budget, and through it to the client: a read waits on this token alone
+        // until the first byte, so an unlinked source would hold the runtime's request open after the
+        // client had gone. Armed only once the headers arrive.
+        var firstByte = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
+
         var idle = CancellationTokenSource.CreateLinkedTokenSource(total.Token);
 
         try
         {
-            var result = await StreamCoreAsync(request, total, responseHeaders, idle, cancellationToken)
+            var result = await StreamCoreAsync(request, total, responseHeaders, firstByte, idle, cancellationToken)
                 .ConfigureAwait(false);
 
             // Only an opened stream takes ownership of the budgets; anything else leaves them here
@@ -185,6 +190,7 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         ProviderStreamResult Abandon(ProviderStreamResult failure)
         {
             idle.Dispose();
+            firstByte.Dispose();
             responseHeaders.Dispose();
             total.Dispose();
 
@@ -196,6 +202,7 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         ProviderCompletionRequest request,
         CancellationTokenSource total,
         CancellationTokenSource responseHeaders,
+        CancellationTokenSource firstByte,
         CancellationTokenSource idle,
         CancellationToken clientToken)
     {
@@ -226,6 +233,11 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
         // a runtime that was slow to respond.
         responseHeaders.CancelAfter(Timeout.InfiniteTimeSpan);
 
+        // The wait from here to the first byte is the runtime queueing the request and processing its
+        // prompt, which is waiting rather than stalling, so it has a budget of its own instead of the
+        // idle one (ADR 0028). The body disarms it with the first byte.
+        firstByte.CancelAfter(target.Timeouts.FirstByte);
+
         var metadata = UpstreamResponseMetadata.Create(
             (int)response.StatusCode,
             timeProvider.GetUtcNow(),
@@ -255,6 +267,7 @@ public sealed class LmStudioModelRuntimeProvider : IModelRuntimeProvider
                 body,
                 total,
                 responseHeaders,
+                firstByte,
                 idle,
                 target.Timeouts.IdleStream,
                 clientToken),

@@ -480,7 +480,7 @@ Requirement identifiers are stable references for issues, commits, tests, and pu
 
 **FR-CHAT-006** Forward client cancellation and disconnect to the upstream request.
 
-**FR-CHAT-007** Apply separate connect, response-header, idle-stream, and total-request timeouts.
+**FR-CHAT-007** Apply separate connect, response-header, first-byte, idle-stream, and total-request timeouts.
 
 **FR-CHAT-008** Identify timeout phase without exposing secrets or internal network details.
 

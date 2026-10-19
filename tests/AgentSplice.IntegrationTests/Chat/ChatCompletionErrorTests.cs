@@ -247,12 +247,13 @@ public sealed class ChatCompletionErrorTests
     [Fact]
     public async Task A_runtime_that_never_sends_headers_produces_a_gateway_timeout()
     {
-        await using var fixture = await StartAsync(settings =>
-        {
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.250";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.250";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-        });
+        await using var fixture = await StartAsync(settings => GatewayFixture.SetTimeouts(
+            settings,
+            connect: "00:00:05",
+            responseHeaders: "00:00:00.250",
+            firstByte: "00:00:00.250",
+            idleStream: "00:00:00.250",
+            total: "00:00:30"));
 
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",
@@ -269,13 +270,13 @@ public sealed class ChatCompletionErrorTests
     {
         // Validation guarantees responseHeaders never exceeds total, so the total budget can only
         // fire distinctly once headers have arrived and the body read is what stalls.
-        await using var fixture = await StartAsync(settings =>
-        {
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:connect")] = "00:00:00.500";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.500";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.500";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:00.500";
-        });
+        await using var fixture = await StartAsync(settings => GatewayFixture.SetTimeouts(
+            settings,
+            connect: "00:00:00.500",
+            responseHeaders: "00:00:00.500",
+            firstByte: "00:00:00.500",
+            idleStream: "00:00:00.500",
+            total: "00:00:00.500"));
 
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",
@@ -291,12 +292,13 @@ public sealed class ChatCompletionErrorTests
     {
         // A runtime that accepted the connection and then went quiet is a different defect from one
         // that refused it, and collapsing the two makes the real cause unattributable.
-        await using var fixture = await StartAsync(settings =>
-        {
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.250";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.250";
-            settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-        });
+        await using var fixture = await StartAsync(settings => GatewayFixture.SetTimeouts(
+            settings,
+            connect: "00:00:05",
+            responseHeaders: "00:00:00.250",
+            firstByte: "00:00:00.250",
+            idleStream: "00:00:00.250",
+            total: "00:00:30"));
 
         fixture.Upstream.EnqueueFor(
             "/v1/chat/completions",

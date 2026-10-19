@@ -260,11 +260,13 @@ public sealed class ChatCompletionStreamingTests
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:30";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            },
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:30",
+                firstByte: "00:00:30",
+                idleStream: "00:00:30",
+                total: "00:00:30"),
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(
@@ -592,12 +594,14 @@ public sealed class ChatCompletionStreamingTests
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(
-            settings =>
-            {
-                // Far above the read budget, so completion cannot come from a timeout.
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:30";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            },
+            // Far above the read budget, so completion cannot come from a timeout.
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:30",
+                firstByte: "00:00:30",
+                idleStream: "00:00:30",
+                total: "00:00:30"),
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(

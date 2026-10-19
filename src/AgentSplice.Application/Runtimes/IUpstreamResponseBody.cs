@@ -5,11 +5,11 @@ namespace AgentSplice.Application.Runtimes;
 /// </summary>
 /// <remarks>
 /// A raw <see cref="System.IO.Stream"/> would satisfy the module boundaries just as well, but it
-/// would move the wrong thing across them. The difference between a client disconnect, an
-/// idle-stream stall, and an expired total budget is <em>which</em> cancellation token fired, and
-/// those tokens exist only inside the provider. Returning a classified result keeps that attribution
-/// where the evidence is, and keeps the application free of both <c>System.Net.Http</c> and the
-/// transport exceptions it throws.
+/// would move the wrong thing across them. The difference between a client disconnect, a runtime
+/// that never sent its first byte, an idle-stream stall, and an expired total budget is
+/// <em>which</em> cancellation token fired, and those tokens exist only inside the provider.
+/// Returning a classified result keeps that attribution where the evidence is, and keeps the
+/// application free of both <c>System.Net.Http</c> and the transport exceptions it throws.
 ///
 /// The caller owns the buffer, so relaying a stream of any length allocates nothing per read.
 ///

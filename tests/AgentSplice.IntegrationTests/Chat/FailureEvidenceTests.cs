@@ -31,12 +31,13 @@ public sealed class FailureEvidenceTests
         var record = await FailAsync(
             UpstreamResponseScripts.StallBeforeHeaders(TimeSpan.FromSeconds(10)),
             HttpStatusCode.GatewayTimeout,
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.250";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:10";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            });
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:00.250",
+                firstByte: "00:00:10",
+                idleStream: "00:00:10",
+                total: "00:00:30"));
 
         Assert.Equal("ResponseHeaders", Phase(record));
         AssertDelivered(record, "agentsplice_upstream_timeout");
@@ -50,13 +51,13 @@ public sealed class FailureEvidenceTests
         var record = await FailAsync(
             UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(10)),
             HttpStatusCode.GatewayTimeout,
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:connect")] = "00:00:00.500";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.500";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.500";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:00.500";
-            });
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:00.500",
+                responseHeaders: "00:00:00.500",
+                firstByte: "00:00:00.500",
+                idleStream: "00:00:00.500",
+                total: "00:00:00.500"));
 
         Assert.Equal("Total", Phase(record));
         AssertDelivered(record, "agentsplice_upstream_timeout");

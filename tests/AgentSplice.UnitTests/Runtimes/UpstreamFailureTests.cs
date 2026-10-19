@@ -27,12 +27,23 @@ public sealed class UpstreamFailureTests
     }
 
     [Theory]
-    [InlineData(TimeoutPhase.Connect)]
-    [InlineData(TimeoutPhase.ResponseHeaders)]
-    [InlineData(TimeoutPhase.Total)]
+    [MemberData(nameof(Phases))]
     public void A_timeout_records_its_phase(TimeoutPhase phase)
     {
         Assert.Equal(phase, UpstreamFailure.Timeout(phase).Phase);
+    }
+
+    /// <summary>Every phase, so a phase added later is covered without anyone listing it here.</summary>
+    public static TheoryData<TimeoutPhase> Phases()
+    {
+        var phases = new TheoryData<TimeoutPhase>();
+
+        foreach (var phase in Enum.GetValues<TimeoutPhase>())
+        {
+            phases.Add(phase);
+        }
+
+        return phases;
     }
 
     [Theory]

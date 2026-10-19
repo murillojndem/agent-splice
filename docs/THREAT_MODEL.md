@@ -75,7 +75,7 @@ Mitigations: export off by default with no default destination; the standard `OT
 
 Threat: endless frames, giant events, malformed UTF-8/JSON, excessive nesting, duplicate terminals, or slowloris behavior.
 
-Mitigations: byte/time/depth limits, incremental parsing, idle timeout, cancellation, explicit malformed-stream termination.
+Mitigations: byte/time/depth limits, incremental parsing, a first-byte timeout before the stream's first byte and an idle timeout between reads after it (ADR 0028), cancellation, explicit malformed-stream termination.
 
 ### Tool-call false positive
 

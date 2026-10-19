@@ -61,6 +61,10 @@ event stream and the relay began, so such an exchange still records how the runt
 instead would have recorded `not_applicable` for both, against the same record's `upstream.streamed:
 true`.
 
+> **Refined by ADR 0028.** The budget that elapses before the first byte is now the first-byte one,
+> `timeouts:firstByte`; the idle budget applies only after that byte. A timeout in this window is
+> answered with the same `504` and recorded as `timeout.phase: FirstByte`.
+
 ### 3. The commit is a boundary, stamped when the headers were flushed
 
 `IClientResponseSink.StartAsync` now flushes the headers before it returns, and the new

@@ -209,6 +209,11 @@ Exit criteria:
 
 All four were met when 0.2.0-alpha was published.
 
+After the release, one change to Stage 1 behaviour: the wait for a stream's first byte has its own
+budget, `timeouts:firstByte`, and the response-header budget defaults to 5 minutes, so a long prompt on
+local hardware is no longer cut as a stalled stream (ADR 0028, from the first trace report's finding 2).
+Stage 2A stays the stage in progress.
+
 ## Stage 2 — Replay and Conformance
 
 ### Stage 2A — Sanitized replay artifacts

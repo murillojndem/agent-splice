@@ -64,7 +64,8 @@ public static class UpstreamResponseScripts
     };
 
     /// <summary>
-    /// Sends headers, then stalls without a body, so the client's idle-stream timeout fires.
+    /// Sends headers, then stalls without a body, so the client's first-byte timeout fires
+    /// (ADR 0028).
     /// </summary>
     public static UpstreamResponseScript StallAfterHeaders(TimeSpan duration) => new()
     {

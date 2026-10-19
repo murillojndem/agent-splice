@@ -152,14 +152,19 @@ public sealed class ChatCompletionStreamFailureTests
         // processed. A timeout in that window reached the client as a reset with no status and no
         // correlation header, because its status had been committed and was not yet sent (ADR 0019).
         // Committed at the first byte instead, the gateway can still say what happened (ADR 0025).
+        // The window has its own budget, so the phase named is the first byte's; the idle budget is
+        // the shorter of the two on purpose, so a first read that waited on it would report it
+        // instead (ADR 0028).
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.300";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            },
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:30",
+                firstByte: "00:00:00.300",
+                idleStream: "00:00:00.100",
+                total: "00:00:30"),
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(
@@ -186,24 +191,25 @@ public sealed class ChatCompletionStreamFailureTests
 
         AssertDelivered(record, "agentsplice_upstream_timeout");
         Assert.Equal(
-            nameof(TimeoutPhaseNames.IdleStream),
+            nameof(TimeoutPhaseNames.FirstByte),
             record.Observations.Single(o => o.Type == ObservationType.TimeoutFired).Details.Values["timeout.phase"]);
     }
 
     [Fact]
     public async Task A_stream_whose_total_budget_elapses_before_its_first_byte_records_that_phase()
     {
+        // No phase may exceed the total, so all of them are as short as it is. The total was armed
+        // when the request was sent; the headers arrive 200 ms later, and only then is the first-byte
+        // budget armed, so the total elapses well clear of it rather than within a timer tick of it.
         var record = await StreamAndRecordAsync(
-            UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(20)),
-            settings =>
-            {
-                // No phase may exceed the total, so all of them are as short as it is. The total was
-                // armed first, when the request was sent, so it is the one that elapses.
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:connect")] = "00:00:00.400";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.400";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.400";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:00.400";
-            });
+            UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(20)) with { HeaderDelay = TimeSpan.FromMilliseconds(200) },
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:00.400",
+                responseHeaders: "00:00:00.400",
+                firstByte: "00:00:00.400",
+                idleStream: "00:00:00.400",
+                total: "00:00:00.400"));
 
         AssertDelivered(record, "agentsplice_upstream_timeout");
         Assert.Equal(
@@ -346,22 +352,25 @@ public sealed class ChatCompletionStreamFailureTests
     }
 
     [Fact]
-    public async Task A_stalled_stream_fires_the_idle_phase_and_not_the_response_header_phase()
+    public async Task A_stalled_stream_fires_the_idle_phase_and_not_the_header_or_first_byte_phase()
     {
-        // The header budget is deliberately shorter than the stream. Left armed after headers
-        // arrive, its token is signalled during every long stream, and a classifier that consulted
-        // it would report each mid-stream stall as a runtime that was slow to answer — pointing an
-        // operator at prompt processing when the problem is generation.
+        // The header and first-byte budgets are deliberately shorter than the stream. Left armed
+        // after their phases end, their tokens are signalled during every long stream, and a
+        // classifier that consulted them first would report each mid-stream stall as a runtime that
+        // was slow to answer or slow to start — pointing an operator at prompt processing when the
+        // problem is generation. Reads after the first byte that kept waiting on the first-byte
+        // budget, disarmed with that byte, would never time out here at all.
         var gate = new UpstreamGate();
 
         var record = await StreamAndRecordAsync(
             SseScript.Create().Data(ContentChunk).Gate(gate).Data(ContentChunk).Build(),
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.300";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:00.500";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            });
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:00.300",
+                firstByte: "00:00:00.300",
+                idleStream: "00:00:00.500",
+                total: "00:00:30"));
 
         Assert.Equal(StreamTermination.Timeout, record.Exchange!.StreamTermination);
         Assert.Equal(FailureClass.UpstreamTimeout, record.Exchange.FailureClass);
@@ -382,12 +391,13 @@ public sealed class ChatCompletionStreamFailureTests
         var sink = new CapturingExchangeSink();
 
         await using var fixture = await StartAsync(
-            settings =>
-            {
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:00:00.300";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:00:10";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:00:30";
-            },
+            settings => GatewayFixture.SetTimeouts(
+                settings,
+                connect: "00:00:05",
+                responseHeaders: "00:00:00.300",
+                firstByte: "00:00:10",
+                idleStream: "00:00:10",
+                total: "00:00:30"),
             services => services.AddSingleton<IExchangeRecordSink>(sink));
 
         fixture.Upstream.EnqueueFor(
@@ -751,6 +761,7 @@ public sealed class ChatCompletionStreamFailureTests
     /// <summary>Names the timeout phases this suite asserts on, without reaching into the application.</summary>
     private static class TimeoutPhaseNames
     {
+        internal const string FirstByte = nameof(FirstByte);
         internal const string IdleStream = nameof(IdleStream);
         internal const string ResponseHeaders = nameof(ResponseHeaders);
         internal const string Total = nameof(Total);

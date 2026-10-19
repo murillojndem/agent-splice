@@ -211,23 +211,4 @@ public sealed class UpstreamFirstByteTests
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
-
-    /// <summary>An <see cref="IHttpClientFactory"/> that answers every request with one scripted response.</summary>
-    private sealed class StubHttpClientFactory(HttpResponseMessage response) : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name) => new(new StubHandler(response));
-
-        private sealed class StubHandler(HttpResponseMessage response) : HttpMessageHandler
-        {
-            protected override Task<HttpResponseMessage> SendAsync(
-                HttpRequestMessage request,
-                CancellationToken cancellationToken) =>
-                Task.FromResult(response);
-        }
-    }
-
-    private sealed class NoCredentialResolver : IRuntimeApiKeyResolver
-    {
-        public RuntimeCredential Resolve(RuntimeTarget target) => RuntimeCredential.None;
-    }
 }

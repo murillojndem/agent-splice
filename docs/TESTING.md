@@ -109,7 +109,7 @@ Capabilities:
 - `UpstreamResponseScripts` for JSON, status-only, malformed, and truncated responses;
 - `SseScript` for byte-exact event streams, with LF or CRLF endings, multiline `data`, comments and keepalives, named events, `retry` directives, and the `[DONE]` sentinel;
 - byte-level rechunking, including one byte at a time, so events split across arbitrary network and UTF-8 boundaries;
-- per-event delays, delayed headers, and trailing stalls for the response-header and idle-stream timeout phases;
+- per-event delays, delayed headers, and trailing stalls for the response-header, first-byte, and idle-stream timeout phases;
 - connection reset for premature EOF;
 - `ReceivedRequests` for exact-forwarding assertions;
 - `RecordedUpstreamRequest.WaitForAbortAsync` for upstream-side cancellation evidence.
@@ -653,6 +653,37 @@ Each fails against its reintroduced defect, listed in the changelog.
   `waterfall.test.tsx` hold the derived label and each phase's origin.
 
 Each fails against its reintroduced defect, listed in the changelog.
+
+## After 0.2.0-alpha: the wait for a stream's first byte
+
+ADR 0028 gives the wait between a stream's headers and its first byte a budget of its own, and leaves
+the idle budget the gaps after it.
+
+- `UpstreamStreamBudgetTests` drives the LM Studio provider's public `StreamAsync` with a scripted body
+  whose reads end only when the token they were given is cancelled, or, for one step, return bytes at
+  that moment. Which budget ended a read is then the code's decision, not a race with the script: a
+  first read with nothing to read times out as `FirstByte` even with a shorter idle budget, a stall
+  after the first byte as `IdleStream`, a first byte that arrives as its budget elapses leaves a later
+  stall in the idle phase, and a client that leaves before the first byte is a cancellation. Every read
+  is guarded, so a read on the wrong budget fails rather than hangs. The provider's stub transport,
+  `StubHttpClientFactory`, is shared with `UpstreamFirstByteTests`.
+- `ChatCompletionStreamBudgetTests` runs through the host against the fake upstream: a stream that
+  waits five idle budgets for its first byte completes; a stream longer than its idle budget, whose gaps
+  are shorter, completes — the first test to show the idle budget re-armed per read; a client that
+  leaves during the first-byte wait aborts the runtime's request within the wait budget, before anything
+  waits on the client's own call, whose outcome the in-process host decides; and a stream whose headers
+  and first byte each take most of their budgets completes, which a single budget from the request to
+  the first byte would not.
+- `ChatCompletionStreamFailureTests` now expects `FirstByte` for a stall before the first byte, and its
+  total-budget test delays the headers by 200 ms, so the total elapses well clear of the first-byte
+  budget armed with them rather than within a timer tick of it.
+- `GatewayFixture.SetTimeouts` sets all five phases, each argument required, for every test that
+  shortens the total: with two phases defaulting to five minutes, a total below that refuses to start
+  unless each phase is stated.
+
+A budget a test must not see fire is at least five times the wait it covers, and a wait a defect would
+cut runs well past the budget the defect would apply, so a slow machine can hide a defect but cannot
+fail correct code. Each fails against its reintroduced defect, listed in the changelog.
 
 ## Testcontainers
 

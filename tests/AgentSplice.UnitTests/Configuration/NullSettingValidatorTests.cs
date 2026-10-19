@@ -27,6 +27,7 @@ public sealed class NullSettingValidatorTests
     [InlineData("""{"agentsplice":{"diagnostics":{"storeHeaders":null}}}""", "agentsplice:diagnostics:storeHeaders")]
     [InlineData("""{"agentsplice":{"runtimes":[{"id":"lmstudio-local","enabled":null}]}}""", "agentsplice:runtimes:0:enabled")]
     [InlineData("""{"agentsplice":{"runtimes":[{"id":"lmstudio-local","timeouts":{"total":null}}]}}""", "agentsplice:runtimes:0:timeouts:total")]
+    [InlineData("""{"agentsplice":{"runtimes":[{"id":"lmstudio-local","timeouts":{"firstByte":null}}]}}""", "agentsplice:runtimes:0:timeouts:firstByte")]
     public void A_value_type_given_as_null_fails_startup_and_names_the_setting(string json, string path)
     {
         // Through the registration, so the guard is proved to be wired as well as right.

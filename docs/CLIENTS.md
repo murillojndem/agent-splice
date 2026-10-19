@@ -86,13 +86,15 @@ Why the file looks the way it does:
   first prompt one more, for the session's title.
 - **The title request comes first.** OpenCode sends it beside the session's first request. A model
   LM Studio serves one request at a time — loaded with `--parallel 1` — answers the title first and
-  processes the other request's prompt after it, sending nothing on that stream meanwhile. With a model
-  that reasons before it answers, that can outlast `idleStream`, and the gateway answers the stream with
-  a `504` before its first byte (see [Troubleshooting](#troubleshooting)). In the report the gateway
-  still reset the connection instead, and OpenCode retried, which its log records and its output does
-  not; the AI SDK it uses treats a `5xx` as retryable too, which was not tried against OpenCode itself. The first trace report shows it happening
+  processes the other request's prompt after it, sending nothing on that stream meanwhile. That wait
+  counts against `firstByte`, 5 minutes by default; a longer one is answered with a `504` before the
+  stream's first byte (see [Troubleshooting](#troubleshooting)). The first trace report shows the wait
   ([finding 2](reports/2026-10-17-opencode-lm-studio/README.md#2-a-request-that-waited-and-processed-for-a-minute-met-idlestream)):
-  load the model with more than one parallel slot, or raise `idleStream` as shown below.
+  the build it ran bounded it with the 60-second `idleStream`, which cut it, and reset the connection
+  instead of answering; OpenCode retried, which its log records and its output does not. The AI SDK it
+  uses treats a `5xx` as retryable too, which was not tried against OpenCode itself. ADR 0028 gave the
+  wait its own budget. If a long prompt still outlasts it, load the model with more than one parallel
+  slot, or raise `firstByte` as shown below.
 - **Other providers stay available.** Any other provider OpenCode is configured with remains in its
   model picker, and requests to it do not pass through AgentSplice.
 
@@ -141,7 +143,7 @@ curl -sN http://127.0.0.1:5280/v1/chat/completions \
 Add `-i` to see the response headers, among them `x-agentsplice-exchange-id`. Keep the `Content-Type`
 header: without it `curl` sends a form, which the gateway refuses with `415` (ADR 0027).
 
-A request that is not streamed has 30 seconds for the runtime's response headers, and LM Studio 0.4.20
+A request that is not streamed has 5 minutes for the runtime's response headers, and LM Studio 0.4.20
 sends them only with the finished answer, so a generation longer than that is a `504`. Stream it, or
 raise `timeouts:responseHeaders` as [Troubleshooting](#troubleshooting) shows.
 
@@ -241,9 +243,9 @@ whether it did.
 | `404` `agentsplice_model_not_found` | The model ID is not one `/v1/models` lists. Copy it exactly; a newly loaded model can take 30 seconds to appear. |
 | `404` with no body | The client called a path the gateway does not serve, such as `/v1/responses`. Configure it for Chat Completions. |
 | `502` `agentsplice_runtime_unavailable` | LM Studio's server is not running, or not where the gateway looks: `http://127.0.0.1:1234/v1` by default. From Docker, see "Reaching LM Studio" in `docs/INSTALLATION.md`. |
-| `504` `agentsplice_upstream_timeout` | The runtime did not answer in time while the gateway could still say so: on a request that is not streamed, connecting took over 5 seconds, the response headers over 30 seconds, or the whole request over 10 minutes; on a stream, the same phases until the runtime's first byte, and 60 seconds with nothing after its headers — LM Studio still processing a long prompt. A runtime that sends no headers until it has finished generating makes the 30-second response-header budget the limit for the whole completion. The `504`'s message is the same for each phase; the exchange's timeline names it, in a `timeout_fired` event whose `timeout.phase` is `Connect`, `ResponseHeaders`, `IdleStream`, or `Total`. Raise the phase that fired, as below. |
+| `504` `agentsplice_upstream_timeout` | The runtime did not answer in time while the gateway could still say so: on a request that is not streamed, connecting took over 5 seconds, the response headers over 5 minutes, or the whole request over 10 minutes; on a stream, the same phases until the runtime's first byte, and 5 minutes with nothing after its headers — LM Studio still queueing the request or processing a long prompt. A runtime that sends no headers until it has finished generating makes the 5-minute response-header budget the limit for the whole completion. The `504`'s message is the same for each phase; the exchange's timeline names it, in a `timeout_fired` event whose `timeout.phase` is `Connect`, `ResponseHeaders`, `FirstByte`, or `Total`. A stall after the first byte is never a `504`: see the next row. Raise the phase that fired, as below. |
 | `502` `agentsplice_invalid_upstream_response` | The runtime answered and then its answer could not be read: its connection dropped, or its body was cut off or over the gateway's limit — on a stream, before its first byte. The exchange's timeline has an `upstream_failed` event saying which, such as `upstream.stream: connection.lost`. |
-| A stream stops without finishing | Once the runtime's first byte has been relayed, the gateway has committed a `200`, so a later timeout or a dropped connection can only close the connection: the client sees a stream that stopped. Find the exchange in the dashboard's Exchanges list, where its status is `failed`, and open it. Its termination is `timeout` and its timeline has a `timeout_fired` event — `IdleStream` when the runtime sent nothing for 60 seconds, `Total` after 10 minutes — or its termination is `connection_lost` and its timeline has an `upstream_failed` event. Either way its client-side boundary is `client_response_abandoned`, and the exchange records no error code, because none reached the client. |
+| A stream stops without finishing | Once the runtime's first byte has been relayed, the gateway has committed a `200`, so a later timeout or a dropped connection can only close the connection: the client sees a stream that stopped. Find the exchange in the dashboard's Exchanges list, where its status is `failed`, and open it. Its termination is `timeout` and its timeline has a `timeout_fired` event — `IdleStream` when the runtime sent nothing between two reads for 60 seconds, `Total` after 10 minutes — or its termination is `connection_lost` and its timeline has an `upstream_failed` event. Either way its client-side boundary is `client_response_abandoned`, and the exchange records no error code, because none reached the client. |
 | The model ignores the conversation, or LM Studio reports a context error | The prompt does not fit the loaded context. For a stream, LM Studio 0.4.20 reports that inside a `200` response, as an event carrying an `error`, and the gateway relays it unchanged. The exchange is `completed`, because the gateway did not fail, and the runtime's failure is recorded beside it: the Exchanges list shows `error reported` under "Runtime said", its termination is `upstream_error`, and its timeline has an `upstream_error_reported` event. Load the model with a larger `--context-length`, and match the client's context setting to it. |
 | `413` | The request body is over 4 MiB, the gateway's limit. |
 | `415` `agentsplice_invalid_request` | The request was not sent with `Content-Type: application/json`. Every SDK sends it; `curl -d` without `-H "Content-Type: application/json"` does not. |
@@ -252,19 +254,22 @@ whether it did.
 
 Which budget a slow request meets depends on when the runtime sends its headers. LM Studio 0.4.20 sends
 them with the finished answer for a non-streaming request, so `responseHeaders` bounds the whole
-generation, and at once for a stream, so a long prompt is processed against `idleStream` instead.
+generation, and at once for a stream, so the time a long prompt waits and is processed counts against
+`firstByte` instead. A runtime that sends a stream's headers only with its first byte spends that time
+against `responseHeaders`. Both are 5 minutes by default; `idleStream`, 60 seconds, bounds only the
+gaps between reads once a stream has started (ADR 0028).
 
-Each timeout phase is a setting of the runtime, and each must stay no longer than `total`. On the
-Windows package's command line, for example — the Linux package's takes the same arguments, and from
-source they follow
-`dotnet run --project src/AgentSplice.Api --`:
+Each timeout phase is a setting of the runtime, and each must stay no longer than `total`, 10 minutes
+by default: a value below a default lowers it, and a wait longer than 10 minutes needs `total` raised
+too. On the Windows package's command line, for example — the Linux package's takes the same
+arguments, and from source they follow `dotnet run --project src/AgentSplice.Api --`:
 
 ```powershell
-.\AgentSplice.Api.exe --agentsplice:runtimes:0:timeouts:responseHeaders=00:03:00 --agentsplice:runtimes:0:timeouts:idleStream=00:03:00
+.\AgentSplice.Api.exe --agentsplice:runtimes:0:timeouts:responseHeaders=00:08:00 --agentsplice:runtimes:0:timeouts:firstByte=00:08:00
 ```
 
 or as the environment variables `AGENTSPLICE__RUNTIMES__0__TIMEOUTS__RESPONSEHEADERS` and
-`AGENTSPLICE__RUNTIMES__0__TIMEOUTS__IDLESTREAM`. Under Docker, a line in `.env` reaches the container
+`AGENTSPLICE__RUNTIMES__0__TIMEOUTS__FIRSTBYTE`. Under Docker, a line in `.env` reaches the container
 only if `docker-compose.yml` passes that variable through, and it does not pass these. Put them in a
 `docker-compose.override.yml` beside it instead, which Compose merges by itself:
 
@@ -272,6 +277,10 @@ only if `docker-compose.yml` passes that variable through, and it does not pass 
 services:
   agentsplice:
     environment:
-      AGENTSPLICE__RUNTIMES__0__TIMEOUTS__RESPONSEHEADERS: "00:03:00"
-      AGENTSPLICE__RUNTIMES__0__TIMEOUTS__IDLESTREAM: "00:03:00"
+      AGENTSPLICE__RUNTIMES__0__TIMEOUTS__RESPONSEHEADERS: "00:08:00"
+      AGENTSPLICE__RUNTIMES__0__TIMEOUTS__FIRSTBYTE: "00:08:00"
 ```
+
+A client has a timeout of its own, and while a runtime processes a long prompt the gateway has not sent
+the client even its status, which goes with the first byte (ADR 0025). Raise the client's along with
+the gateway's.

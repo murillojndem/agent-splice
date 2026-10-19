@@ -296,7 +296,7 @@ public sealed class FakeUpstreamServer : IAsyncDisposable
 
         // StartAsync commits the headers but does not guarantee they reach the socket. A script that
         // sends headers and then stalls exists precisely to let a client's response-header phase
-        // succeed and its idle-stream phase fire, so the headers must be on the wire now.
+        // succeed and its first-byte phase fire (ADR 0028), so the headers must be on the wire now.
         await context.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
 
         if (script.Body is { } body)

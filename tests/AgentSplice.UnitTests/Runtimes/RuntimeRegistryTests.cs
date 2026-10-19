@@ -94,16 +94,25 @@ public sealed class RuntimeRegistryTests
     [Fact]
     public void Discovery_and_timeout_policy_are_projected_from_configuration()
     {
+        // Every phase distinct, so a budget passed to the wrong phase cannot match by coincidence.
         var runtime = Runtime("first");
         runtime.Discovery.CacheDuration = TimeSpan.FromSeconds(90);
         runtime.Discovery.ServeStaleOnFailure = false;
         runtime.Timeouts.Connect = TimeSpan.FromSeconds(3);
+        runtime.Timeouts.ResponseHeaders = TimeSpan.FromSeconds(40);
+        runtime.Timeouts.FirstByte = TimeSpan.FromSeconds(50);
+        runtime.Timeouts.IdleStream = TimeSpan.FromSeconds(20);
+        runtime.Timeouts.Total = TimeSpan.FromSeconds(70);
 
         var target = Registry(runtime).All.Single();
 
         Assert.Equal(TimeSpan.FromSeconds(90), target.Discovery.CacheDuration);
         Assert.False(target.Discovery.ServeStaleOnFailure);
         Assert.Equal(TimeSpan.FromSeconds(3), target.Timeouts.Connect);
+        Assert.Equal(TimeSpan.FromSeconds(40), target.Timeouts.ResponseHeaders);
+        Assert.Equal(TimeSpan.FromSeconds(50), target.Timeouts.FirstByte);
+        Assert.Equal(TimeSpan.FromSeconds(20), target.Timeouts.IdleStream);
+        Assert.Equal(TimeSpan.FromSeconds(70), target.Timeouts.Total);
     }
 
     [Fact]

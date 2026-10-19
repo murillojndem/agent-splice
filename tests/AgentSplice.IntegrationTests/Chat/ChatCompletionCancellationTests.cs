@@ -233,9 +233,13 @@ public sealed class ChatCompletionCancellationTests
                 settings[GatewayFixture.RuntimeKey(0, "discovery:enabled")] = "false";
 
                 // Generous, so the test provokes a disconnect rather than racing a timeout.
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:responseHeaders")] = "00:01:00";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:idleStream")] = "00:01:00";
-                settings[GatewayFixture.RuntimeKey(0, "timeouts:total")] = "00:05:00";
+                GatewayFixture.SetTimeouts(
+                    settings,
+                    connect: "00:00:05",
+                    responseHeaders: "00:01:00",
+                    firstByte: "00:01:00",
+                    idleStream: "00:01:00",
+                    total: "00:05:00");
             },
             configureServices);
 

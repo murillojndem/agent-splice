@@ -88,10 +88,11 @@ public sealed class RuntimeRegistry
                 runtime.Discovery.ServeStaleOnFailure,
                 runtime.Discovery.CapabilityProbingEnabled),
             RuntimeTimeouts.Create(
-                runtime.Timeouts.Connect,
-                runtime.Timeouts.ResponseHeaders,
-                runtime.Timeouts.IdleStream,
-                runtime.Timeouts.Total),
+                connect: runtime.Timeouts.Connect,
+                responseHeaders: runtime.Timeouts.ResponseHeaders,
+                firstByte: runtime.Timeouts.FirstByte,
+                idleStream: runtime.Timeouts.IdleStream,
+                total: runtime.Timeouts.Total),
             ordinal,
             runtime.Enabled,
             runtime.ApiKeyEnvironmentVariable);

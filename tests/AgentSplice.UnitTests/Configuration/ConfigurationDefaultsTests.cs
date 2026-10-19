@@ -73,6 +73,7 @@ public sealed class ConfigurationDefaultsTests
 
         Assert.True(timeouts.Connect > TimeSpan.Zero);
         Assert.True(timeouts.ResponseHeaders > TimeSpan.Zero);
+        Assert.True(timeouts.FirstByte > TimeSpan.Zero);
         Assert.True(timeouts.IdleStream > TimeSpan.Zero);
         Assert.True(timeouts.Total > TimeSpan.Zero);
     }
@@ -84,7 +85,20 @@ public sealed class ConfigurationDefaultsTests
 
         Assert.True(timeouts.Connect <= timeouts.Total);
         Assert.True(timeouts.ResponseHeaders <= timeouts.Total);
+        Assert.True(timeouts.FirstByte <= timeouts.Total);
         Assert.True(timeouts.IdleStream <= timeouts.Total);
+    }
+
+    [Fact]
+    public void The_first_byte_and_response_header_budgets_default_to_five_minutes()
+    {
+        // A local runtime can spend minutes before it starts answering: queueing the request,
+        // loading the model, processing the prompt, or generating a whole answer that is not
+        // streamed. The first trace report met a 60-second budget cutting exactly that wait (ADR 0028).
+        var timeouts = new TimeoutOptions();
+
+        Assert.Equal(TimeSpan.FromMinutes(5), timeouts.ResponseHeaders);
+        Assert.Equal(TimeSpan.FromMinutes(5), timeouts.FirstByte);
     }
 
     [Fact]

@@ -107,7 +107,12 @@ runtime's first body byte, not with the runtime's headers, so a runtime that fai
 still answered with an error envelope.
 
 Every failure of the request the gateway sent to the runtime is on the timeline. A timeout is `timeout_fired` with its `timeout.phase` —
-`Connect`, `ResponseHeaders`, `IdleStream`, or `Total` — wherever it elapsed. Any other failure is
+`Connect`, `ResponseHeaders`, `FirstByte`, `IdleStream`, or `Total` — wherever it elapsed. `FirstByte`
+is a stream whose runtime sent its headers and then no byte of its body in time; it always happens
+before the client's status is committed, so it is always answered with a `504`. `IdleStream` is a gap
+between two reads after the first byte, so it always abandons a response that had started
+(ADR 0028). A record made before ADR 0028 names `IdleStream` for the wait before the first byte too;
+its timeline has no `first_upstream_byte`. Any other failure is
 `upstream_failed`, whose `upstream.failure` is the classification (`Unreachable`,
 `AuthenticationRejected`, `InvalidResponse`, or `ResponseTooLarge`) and whose other details are the
 provider's own bounded tokens, such as `upstream.stream: connection.lost`,

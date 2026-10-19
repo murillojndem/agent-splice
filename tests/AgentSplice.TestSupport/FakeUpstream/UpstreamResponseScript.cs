@@ -38,7 +38,8 @@ public sealed record UpstreamResponseScript
     public IReadOnlyList<UpstreamChunk> Chunks { get; init; } = ReadOnlyCollection<UpstreamChunk>.Empty;
 
     /// <summary>
-    /// Delay after the last byte and before the response completes, for idle-stream timeout tests.
+    /// Delay after the last byte and before the response completes, for first-byte and idle-stream
+    /// timeout tests.
     /// </summary>
     public TimeSpan TrailingDelay { get; init; }
 

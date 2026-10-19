@@ -174,8 +174,8 @@ public interface IModelRuntimeProvider
 public interface IUpstreamResponseBody : IAsyncDisposable
 {
     // Classified rather than thrown: which cancellation token fired is what separates a client
-    // disconnect from an idle stall from an expired total budget, and those tokens exist only
-    // inside the provider.
+    // disconnect from a stream that never started, an idle stall, and an expired total budget, and
+    // those tokens exist only inside the provider.
     ValueTask<UpstreamReadResult> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken);
 }
 ```

@@ -304,3 +304,12 @@ records `contentRetentionState: metadata_only`.
   The records here keep `normal_completion` and no outcome, as the build that ran wrote them, and a
   later build listing such a row from its store gives it no outcome either: the row predates the fact,
   and a success would be a claim it cannot support.
+- **2026-10-19.** The cut in finding 2 no longer happens with the shipped settings (ADR 0028). The wait
+  between a stream's headers and its first byte has its own budget now, `firstByte`, 5 minutes by
+  default, and `idleStream` bounds only the gaps between reads after the first byte; `responseHeaders`
+  defaults to 5 minutes as well. By the timings recorded here — about 38 seconds queued behind the
+  title, then prompt processing that had reached 8,192 of the 9,828 prompt tokens the retry reported
+  when the cut came at 60 seconds — exchange `d8f5a743`'s first byte would have come about a minute in,
+  well inside 5 minutes. That is an inference from this report's times and LM Studio's log, not a
+  session run again. The records here keep `timeout.phase: IdleStream`, as the build this report ran
+  wrote them.

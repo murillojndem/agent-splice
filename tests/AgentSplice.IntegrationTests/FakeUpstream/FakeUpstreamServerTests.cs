@@ -176,7 +176,7 @@ public sealed class FakeUpstreamServerTests
     }
 
     [Fact]
-    public async Task Headers_can_arrive_before_a_stall_so_an_idle_stream_timeout_can_be_provoked()
+    public async Task Headers_can_arrive_before_a_stall_so_a_first_byte_timeout_can_be_provoked()
     {
         await using var upstream = await FakeUpstreamServer.StartAsync();
         upstream.SetDefault(UpstreamResponseScripts.StallAfterHeaders(TimeSpan.FromSeconds(30)));

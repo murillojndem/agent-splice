@@ -18,10 +18,12 @@
 - Apply request-body, header, event, stream-duration, and concurrency limits. The request body
   (4 MiB), the upstream completion body (64 MiB), and the upstream model catalogue (4 MiB) are all
   bounded, and reading stops at the bound plus one byte. A single streamed event is bounded by
-  `limits:maxStreamEventBytes` (1 MiB), stream duration by the runtime's `timeouts:total` and
-  `timeouts:idleStream`, and concurrency by `limits:maxConcurrentCompletions` (64), which refuses
-  with `429` rather than queueing — a queue converts an overload into unbounded latency, which an
-  agent loop cannot act on.
+  `limits:maxStreamEventBytes` (1 MiB), stream duration by the runtime's `timeouts:total`,
+  `timeouts:firstByte`, and `timeouts:idleStream`, and concurrency by
+  `limits:maxConcurrentCompletions` (64), which refuses with `429` rather than queueing — a queue
+  converts an overload into unbounded latency, which an agent loop cannot act on. A slot can be held for
+  up to `timeouts:firstByte` (5 minutes) while a runtime that sent its headers has yet to send a byte,
+  still within `timeouts:total`; a client that leaves frees it at once (ADR 0028).
 
   A streamed exchange retains a 16 KiB read buffer plus the event it is currently assembling, and
   nothing else: bytes reach the client and are released. The streaming path's memory ceiling is

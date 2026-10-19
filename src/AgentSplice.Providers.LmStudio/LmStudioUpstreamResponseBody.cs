@@ -11,9 +11,12 @@ namespace AgentSplice.Providers.LmStudio;
 /// exists: a <c>using</c> scope inside the provider would close the connection at the moment the
 /// relay was about to start reading from it.
 ///
-/// The idle budget is re-armed per read rather than allocated per read. <c>CancelAfter</c> creates
-/// its timer once and reschedules it thereafter, so a stream of any length costs one timer and no
-/// allocations on the read path.
+/// Two read budgets are used, one at a time. Until the first byte, a read waits on the first-byte
+/// budget, armed when the headers arrived: that wait is the runtime queueing the request and
+/// processing its prompt, which is waiting rather than stalling (ADR 0028). From the first byte on, a
+/// read waits on the idle budget, re-armed per read rather than allocated per read. <c>CancelAfter</c>
+/// creates its timer once and reschedules it thereafter, so a stream of any length costs one timer and
+/// no allocations on the read path.
 /// </remarks>
 internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
 {
@@ -21,10 +24,12 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
     private readonly Stream body;
     private readonly CancellationTokenSource total;
     private readonly CancellationTokenSource responseHeaders;
+    private readonly CancellationTokenSource firstByte;
     private readonly CancellationTokenSource idle;
     private readonly TimeSpan idleBudget;
     private readonly CancellationToken clientToken;
 
+    private bool receivedFirstByte;
     private bool disposed;
 
     internal LmStudioUpstreamResponseBody(
@@ -32,6 +37,7 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
         Stream body,
         CancellationTokenSource total,
         CancellationTokenSource responseHeaders,
+        CancellationTokenSource firstByte,
         CancellationTokenSource idle,
         TimeSpan idleBudget,
         CancellationToken clientToken)
@@ -40,6 +46,7 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
         this.body = body;
         this.total = total;
         this.responseHeaders = responseHeaders;
+        this.firstByte = firstByte;
         this.idle = idle;
         this.idleBudget = idleBudget;
         this.clientToken = clientToken;
@@ -52,16 +59,35 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
     {
         ObjectDisposedException.ThrowIf(disposed, this);
 
-        // Re-armed before every read, so the budget measures the gap between bytes rather than the
-        // life of the stream. A long generation is not a stalled one, and a single budget covering
-        // both would have to be set so loosely that it caught nothing.
-        idle.CancelAfter(idleBudget);
+        // Re-armed before every read after the first byte, so the budget measures the gap between
+        // bytes rather than the life of the stream. A long generation is not a stalled one, and a
+        // single budget covering both would have to be set so loosely that it caught nothing. Before
+        // the first byte the idle budget is not armed at all: the first-byte budget bounds that wait.
+        if (receivedFirstByte)
+        {
+            idle.CancelAfter(idleBudget);
+        }
 
         try
         {
-            var read = await body.ReadAsync(buffer, idle.Token).ConfigureAwait(false);
+            var read = await body.ReadAsync(buffer, receivedFirstByte ? idle.Token : firstByte.Token)
+                .ConfigureAwait(false);
 
-            return read > 0 ? UpstreamReadResult.Bytes(read) : UpstreamReadResult.Completed;
+            if (read == 0)
+            {
+                return UpstreamReadResult.Completed;
+            }
+
+            if (!receivedFirstByte)
+            {
+                // Disarmed with the first byte, as the header budget is with the headers. A timer that
+                // fired in the same instant stays signalled, which is why the classifier checks the
+                // idle budget before this one.
+                receivedFirstByte = true;
+                firstByte.CancelAfter(Timeout.InfiniteTimeSpan);
+            }
+
+            return UpstreamReadResult.Bytes(read);
         }
         catch (OperationCanceledException)
         {
@@ -69,7 +95,8 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
                 cancellationToken.IsCancellationRequested ? cancellationToken : clientToken,
                 total.Token,
                 responseHeaders.Token,
-                idle.Token));
+                idleStreamToken: idle.Token,
+                firstByteToken: firstByte.Token));
         }
         catch (Exception exception) when (exception is IOException or HttpRequestException)
         {
@@ -96,6 +123,7 @@ internal sealed class LmStudioUpstreamResponseBody : IUpstreamResponseBody
 
         response.Dispose();
         idle.Dispose();
+        firstByte.Dispose();
         responseHeaders.Dispose();
         total.Dispose();
     }

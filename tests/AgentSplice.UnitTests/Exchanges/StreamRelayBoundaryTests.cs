@@ -369,7 +369,7 @@ public sealed class StreamRelayBoundaryTests
         // it here is what left a client a reset with no status at all (ADR 0019, ADR 0025).
         var clock = Clock();
         var sink = Sink(clock);
-        var body = new ScriptedUpstreamBody(clock, [Timeout(after: Stall)]);
+        var body = new ScriptedUpstreamBody(clock, [Timeout(after: Stall, phase: TimeoutPhase.FirstByte)]);
 
         var recorder = Recorder(clock);
         var outcome = await RelayAsync(clock, recorder, body, sink);
@@ -385,7 +385,7 @@ public sealed class StreamRelayBoundaryTests
         var record = recorder.ToRecord();
         var timeout = record.Observations.Single(observation => observation.Type == ObservationType.TimeoutFired);
 
-        Assert.Equal("IdleStream", timeout.Details.Values["timeout.phase"]);
+        Assert.Equal("FirstByte", timeout.Details.Values["timeout.phase"]);
         Assert.DoesNotContain(ObservationType.ClientResponseStarted, Types(record));
     }
 
@@ -594,10 +594,14 @@ public sealed class StreamRelayBoundaryTests
 
     private static UpstreamStep End() => new(Bytes: null, Failure: null, TimeSpan.Zero);
 
-    private static UpstreamStep Timeout(TimeSpan after) =>
+    /// <summary>
+    /// A budget elapsing, as the provider classifies it: before the first byte that is the first-byte
+    /// budget, after it the idle one (ADR 0028).
+    /// </summary>
+    private static UpstreamStep Timeout(TimeSpan after, TimeoutPhase phase = TimeoutPhase.IdleStream) =>
         new(
             Bytes: null,
-            UpstreamFailure.Create(UpstreamFailureReason.Timeout, phase: TimeoutPhase.IdleStream),
+            UpstreamFailure.Create(UpstreamFailureReason.Timeout, phase: phase),
             after);
 
     /// <summary>The runtime's connection dropping, as the provider classifies it.</summary>

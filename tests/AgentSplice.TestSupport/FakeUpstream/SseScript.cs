@@ -178,7 +178,10 @@ public sealed class SseScript
         return this;
     }
 
-    /// <summary>Stalls after the last byte without completing, for idle-stream timeout fixtures.</summary>
+    /// <summary>
+    /// Stalls after the last byte without completing, for first-byte timeout fixtures when nothing
+    /// was sent before it and idle-stream ones when something was.
+    /// </summary>
     public SseScript WithTrailingDelay(TimeSpan delay)
     {
         trailingDelay = delay;

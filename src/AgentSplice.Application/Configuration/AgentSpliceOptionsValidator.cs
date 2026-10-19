@@ -496,6 +496,7 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
         {
             ("connect", timeouts.Connect),
             ("responseHeaders", timeouts.ResponseHeaders),
+            ("firstByte", timeouts.FirstByte),
             ("idleStream", timeouts.IdleStream),
             ("total", timeouts.Total),
         };
@@ -525,6 +526,13 @@ public sealed class AgentSpliceOptionsValidator : IValidateOptions<AgentSpliceOp
                 failures.Add(
                     FormattableString.Invariant(
                         $"{prefix}:timeouts:responseHeaders must not exceed timeouts:total."));
+            }
+
+            if (timeouts.FirstByte > timeouts.Total)
+            {
+                failures.Add(
+                    FormattableString.Invariant(
+                        $"{prefix}:timeouts:firstByte must not exceed timeouts:total."));
             }
 
             if (timeouts.IdleStream > timeouts.Total)

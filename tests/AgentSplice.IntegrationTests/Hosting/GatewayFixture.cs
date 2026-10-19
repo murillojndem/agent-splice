@@ -70,6 +70,30 @@ internal sealed class GatewayFixture : IAsyncDisposable
     internal static string RuntimeKey(int index, string property) =>
         string.Format(CultureInfo.InvariantCulture, "agentsplice:runtimes:{0}:{1}", index, property);
 
+    /// <summary>
+    /// Sets every timeout phase of the first runtime, for a test that shortens the total budget.
+    /// </summary>
+    /// <remarks>
+    /// No phase may exceed the total, or the host refuses to start, so a test that shortens the total
+    /// states every phase rather than inheriting a default it would have to know. Each argument is
+    /// required: a phase added later stops every call here from compiling until its test decides the
+    /// value.
+    /// </remarks>
+    internal static void SetTimeouts(
+        Dictionary<string, string?> settings,
+        string connect,
+        string responseHeaders,
+        string firstByte,
+        string idleStream,
+        string total)
+    {
+        settings[RuntimeKey(0, "timeouts:connect")] = connect;
+        settings[RuntimeKey(0, "timeouts:responseHeaders")] = responseHeaders;
+        settings[RuntimeKey(0, "timeouts:firstByte")] = firstByte;
+        settings[RuntimeKey(0, "timeouts:idleStream")] = idleStream;
+        settings[RuntimeKey(0, "timeouts:total")] = total;
+    }
+
     /// <summary>Configuration key for a property of the alias at a given index.</summary>
     internal static string AliasKey(int index, string property) =>
         string.Format(CultureInfo.InvariantCulture, "agentsplice:aliases:{0}:{1}", index, property);

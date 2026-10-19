@@ -1,6 +1,6 @@
 # ADR 0009 — Stage 1B streaming relay and timeline
 
-- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md), for decision 12 by [ADR 0013](0013-stage-1c-metadata-store.md), and for decision 4's commit point by [ADR 0025](0025-stage-1d-a-stream-commits-with-its-first-byte.md)
+- Status: Accepted, partly superseded by [ADR 0010](0010-correct-stream-boundary-and-termination-semantics.md), for decision 12 by [ADR 0013](0013-stage-1c-metadata-store.md), for decision 4's commit point by [ADR 0025](0025-stage-1d-a-stream-commits-with-its-first-byte.md), and for decision 8's idle budget before the first byte and its classifier order by [ADR 0028](0028-the-wait-for-a-streams-first-byte-has-its-own-budget.md)
 - Date: 2026-07-30
 - Related: ADR 0006 (durable core), ADR 0007 (Stage 0 toolchain), ADR 0008 (Stage 1A transparent request path)
 
@@ -147,6 +147,12 @@ The response-header budget is disarmed the moment headers arrive. Left armed, it
 during every stream that outlives it, and a classifier consulting it would report each mid-stream
 stall as a runtime that was slow to answer — pointing an operator at prompt processing when the
 problem is generation. The classifier's order is now client, total, idle, headers, connect.
+
+> **Superseded in part by ADR 0028.** The idle budget no longer covers the wait from the runtime's
+> headers to its first byte: that wait — queueing and prompt processing, minutes on local hardware —
+> has its own budget, `timeouts:firstByte`, armed with the headers and disarmed by the first read that
+> returns bytes, and the idle budget is armed before each read after it. The classifier's order is now
+> client, total, idle, first byte, headers, connect. The header budget's disarm stands.
 
 ### 9. Refuse rather than queue at the concurrency limit
 
@@ -296,7 +302,7 @@ and a test:
 | malformed JSON | classified, relayed, recorded; never thrown | — |
 | excessive nesting | the reader's own depth limit surfaces as a malformed event | `Utf8JsonReader` max depth |
 | duplicate terminals | the first terminator ends the response; a later one is never read (ADR 0010) | — |
-| slowloris | per-read budget, re-armed between reads | `timeouts:idleStream` |
+| slowloris | per-read budget, re-armed between reads; before the first byte, a budget of its own (ADR 0028) | `timeouts:idleStream`, `timeouts:firstByte` |
 
 Excessive nesting deserves its own note: an unbounded recursive parser is a stack overflow, and no
 catch block contains one — the process dies, taking every other in-flight exchange with it. The depth

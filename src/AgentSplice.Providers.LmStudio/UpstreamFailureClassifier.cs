@@ -19,20 +19,25 @@ internal static class UpstreamFailureClassifier
     /// Classifies a cancellation by asking which budget actually elapsed.
     /// </summary>
     /// <remarks>
-    /// Order matters and is now four deep. The client token is checked first, because a disconnect is
+    /// Order matters and is now five deep. The client token is checked first, because a disconnect is
     /// not a runtime defect and must never be reported as one. The total budget comes next because
     /// every other source is linked to it and is therefore signalled together with it; checking any
     /// of them first would misreport every total-budget expiry as something narrower.
     ///
-    /// The idle budget is checked before the response-header budget because a stream that outlives
-    /// its header budget is entirely normal — headers arrived long ago — and checking headers first
-    /// would report every mid-stream stall as a runtime that was slow to answer.
+    /// The phase budgets follow, latest phase first: idle, then first byte, then response headers. A
+    /// budget whose timer elapses in the instant its phase ends — headers, or a first byte, arriving
+    /// just as time ran out — stays signalled into the next phase, because disarming a source that
+    /// has already fired does nothing. Only the budget of the phase in progress can have ended the
+    /// read, and it is the latest one signalled, so checking an earlier phase first would report a
+    /// mid-stream stall as a runtime that was slow to answer or slow to start (ADR 0009 decision 8,
+    /// ADR 0028).
     /// </remarks>
     internal static UpstreamFailure ClassifyCancellation(
         CancellationToken clientToken,
         CancellationToken totalToken,
         CancellationToken responseHeadersToken,
-        CancellationToken idleStreamToken = default)
+        CancellationToken idleStreamToken = default,
+        CancellationToken firstByteToken = default)
     {
         if (clientToken.IsCancellationRequested)
         {
@@ -47,6 +52,11 @@ internal static class UpstreamFailureClassifier
         if (idleStreamToken.IsCancellationRequested)
         {
             return UpstreamFailure.Timeout(TimeoutPhase.IdleStream);
+        }
+
+        if (firstByteToken.IsCancellationRequested)
+        {
+            return UpstreamFailure.Timeout(TimeoutPhase.FirstByte);
         }
 
         return responseHeadersToken.IsCancellationRequested

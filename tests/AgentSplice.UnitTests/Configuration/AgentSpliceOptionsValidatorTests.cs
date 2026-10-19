@@ -154,6 +154,7 @@ public sealed class AgentSpliceOptionsValidatorTests
     [Theory]
     [InlineData("connect")]
     [InlineData("responseHeaders")]
+    [InlineData("firstByte")]
     [InlineData("idleStream")]
     [InlineData("total")]
     public void Every_timeout_phase_must_be_positive(string phase)
@@ -168,6 +169,9 @@ public sealed class AgentSpliceOptionsValidatorTests
                 break;
             case "responseHeaders":
                 timeouts.ResponseHeaders = TimeSpan.Zero;
+                break;
+            case "firstByte":
+                timeouts.FirstByte = TimeSpan.Zero;
                 break;
             case "idleStream":
                 timeouts.IdleStream = TimeSpan.Zero;
@@ -188,6 +192,55 @@ public sealed class AgentSpliceOptionsValidatorTests
         options.Runtimes[0].Timeouts.ResponseHeaders = TimeSpan.FromSeconds(30);
 
         AssertFailure(options, "responseHeaders must not exceed timeouts:total");
+    }
+
+    [Fact]
+    public void The_first_byte_budget_may_not_exceed_the_total_budget()
+    {
+        // A first-byte budget past the total could never be the one that fired, so the phase
+        // reported for a stream that never started would always be the total (FR-CHAT-008).
+        var options = Valid();
+        options.Runtimes[0].Timeouts.Total = TimeSpan.FromSeconds(10);
+        options.Runtimes[0].Timeouts.ResponseHeaders = TimeSpan.FromSeconds(10);
+        options.Runtimes[0].Timeouts.FirstByte = TimeSpan.FromSeconds(11);
+
+        AssertFailure(options, "agentsplice:runtimes[0]:timeouts:firstByte must not exceed timeouts:total.");
+    }
+
+    [Theory]
+    [InlineData("connect")]
+    [InlineData("responseHeaders")]
+    [InlineData("firstByte")]
+    [InlineData("idleStream")]
+    public void A_phase_as_long_as_the_total_is_accepted(string phase)
+    {
+        // Equal is allowed: the shipped defaults put two phases at five minutes inside a ten-minute
+        // total, and a deployment that shortens the total to five minutes must still start.
+        var options = Valid();
+        var timeouts = options.Runtimes[0].Timeouts;
+        timeouts.Total = TimeSpan.FromMinutes(5);
+        timeouts.Connect = TimeSpan.FromSeconds(5);
+        timeouts.ResponseHeaders = TimeSpan.FromMinutes(1);
+        timeouts.FirstByte = TimeSpan.FromMinutes(1);
+        timeouts.IdleStream = TimeSpan.FromMinutes(1);
+
+        switch (phase)
+        {
+            case "connect":
+                timeouts.Connect = timeouts.Total;
+                break;
+            case "responseHeaders":
+                timeouts.ResponseHeaders = timeouts.Total;
+                break;
+            case "firstByte":
+                timeouts.FirstByte = timeouts.Total;
+                break;
+            default:
+                timeouts.IdleStream = timeouts.Total;
+                break;
+        }
+
+        Assert.True(Validate(options).Succeeded);
     }
 
     [Fact]

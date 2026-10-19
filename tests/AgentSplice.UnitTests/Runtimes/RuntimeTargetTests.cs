@@ -83,13 +83,14 @@ public sealed class RuntimeTargetTests
         int ordinal = 0,
         bool enabled = true,
         string? apiKeyEnvironmentVariable = null,
-        RuntimeDiscoveryPolicy? discovery = null) =>
+        RuntimeDiscoveryPolicy? discovery = null,
+        RuntimeTimeouts? timeouts = null) =>
         RuntimeTarget.Create(
             RuntimeEndpointId.Create(id),
             "lmstudio",
             new Uri(baseUrl, UriKind.Absolute),
             discovery ?? Discovery(),
-            Timeouts(),
+            timeouts ?? Timeouts(),
             ordinal,
             enabled,
             apiKeyEnvironmentVariable);
@@ -103,9 +104,14 @@ public sealed class RuntimeTargetTests
             cacheDuration ?? TimeSpan.FromSeconds(30),
             serveStaleOnFailure);
 
-    internal static RuntimeTimeouts Timeouts() => RuntimeTimeouts.Create(
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(30),
-        TimeSpan.FromSeconds(60),
-        TimeSpan.FromMinutes(10));
+    /// <summary>The shipped budgets, with the stream's read budgets overridable.</summary>
+    internal static RuntimeTimeouts Timeouts(
+        TimeSpan? firstByte = null,
+        TimeSpan? idleStream = null,
+        TimeSpan? total = null) => RuntimeTimeouts.Create(
+        connect: TimeSpan.FromSeconds(5),
+        responseHeaders: TimeSpan.FromMinutes(5),
+        firstByte: firstByte ?? TimeSpan.FromMinutes(5),
+        idleStream: idleStream ?? TimeSpan.FromSeconds(60),
+        total: total ?? TimeSpan.FromMinutes(10));
 }
