@@ -143,7 +143,8 @@ by retention, and served by the `/api/v1` surface and the dashboard that reads i
 holding the administrative token once one is configured, and to loopback callers alone when none is;
 `agentsplice:persistence:mode: None` keeps purely ephemeral operation available.
 
-**Stage 1D — Local packaging and first public alpha is in progress.** The OpenTelemetry SDK now
+**Stage 1D — Local packaging and first public alpha is complete:
+[0.2.0-alpha](https://github.com/murillojndem/agent-splice/releases/tag/v0.2.0-alpha), the first public alpha, was published on 2026-10-19.** The OpenTelemetry SDK now
 subscribes to AgentSplice's spans and metrics, and `agentsplice:telemetry:otlp` exports them over OTLP
 — off by default, never pointed anywhere implicitly, and with an optional collector in the Compose
 file ([ADR 0014](docs/adr/0014-stage-1d-opentelemetry-export.md)). The gateway now serves the
@@ -182,8 +183,14 @@ an exchange records an error code only when an envelope carrying it was written 
 an error inside a `200` — LM Studio does, for a chat template it cannot render — is relayed unchanged
 and recorded, counted, and shown as the runtime's failure rather than as a success
 ([ADR 0026](docs/adr/0026-stage-1d-a-runtime-error-inside-a-success-is-the-runtimes-failure.md)).
-Replay, conformance orchestration, evaluation, protocol translation, and compatibility adapters all
-belong to later milestones.
+Before it was public, a gateway on this machine stopped answering pages on other sites and stopped
+claiming what it does not do: only the loopback host names are served, a completion must be declared
+as JSON, and a binding beyond loopback is announced at startup
+([ADR 0027](docs/adr/0027-stage-1d-what-a-local-gateway-exposes-is-closed-or-said.md)).
+
+**Stage 2A — Sanitized replay artifacts is next**, and nothing of it is implemented yet. Replay,
+conformance orchestration, evaluation, protocol translation, and compatibility adapters all belong to
+later milestones.
 
 No compatibility claim is made for any client, model, or runtime. An HTTP 200 is not evidence of
 compatibility, and support claims require a dated conformance report (`docs/CONFORMANCE.md`).
@@ -239,7 +246,7 @@ docker compose up --build --wait
 ```
 
 `--wait` returns once the image's health check reports the gateway healthy, and `docker compose ps`
-shows that status afterwards. Once a release is published, its image needs no clone at all:
+shows that status afterwards. A release's image needs no clone at all:
 `ghcr.io/murillojndem/agent-splice:<version>`, started with the `docker run` command in
 [Installing AgentSplice](docs/INSTALLATION.md).
 

@@ -31,7 +31,7 @@ public sealed class DiagnosticsService
     /// literal in the response, it stayed at "1C" through every Stage 1D change, and the first trace
     /// report is what noticed (ADR 0023).
     /// </remarks>
-    public const string ImplementedStage = "1D";
+    public const string ImplementedStage = "2A";
 
     private readonly Runtimes.RuntimeRegistry runtimes;
     private readonly ModelCatalogueService catalogue;

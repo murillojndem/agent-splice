@@ -35,10 +35,8 @@ cannot tell that the port is published on loopback only, so the gateway refuses 
 ### Published image
 
 The image is `ghcr.io/murillojndem/agent-splice`, tagged with each release's version — never `latest` —
-and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation. Until
-the first release is published there is no package at all, so a pull fails — `denied`, or `403 Forbidden`
-while fetching a token — and signing in to the registry does not help: use Compose from a clone instead.
-After that, `manifest unknown` means that the version you named has no image.
+and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation. It is
+public, so no sign-in is needed, and `manifest unknown` means that the version you named has no image.
 
 Choose a token, then start it:
 
@@ -99,7 +97,8 @@ tag up again. The notes stay editable after publication, so their digest is a co
 change is the release's own copy of the image, `agentsplice-<version>-image-linux-amd64.tar.gz`, which is
 also the way in for a machine without registry access. Check it with
 `gh release verify-asset v<version> agentsplice-<version>-image-linux-amd64.tar.gz`, or against its line
-in `SHA256SUMS` as for the packages, then `docker load --input` it.
+in `SHA256SUMS` as for the packages, then `docker load --input` it. Verifying with `gh` needs a recent
+GitHub CLI: 2.76 found no attestation for 0.2.0-alpha, and 2.102 verified it.
 
 **Data.** As with Compose below, but with `docker stop agentsplice`, `docker cp
 agentsplice:/data/agentsplice.db ./agentsplice-backup.db`, and `docker start agentsplice`.
@@ -166,10 +165,10 @@ dashboard, so nothing needs to be installed first.
 
 Download `agentsplice-<version>-win-x64.zip` and `SHA256SUMS` from the repository's GitHub Releases
 page. Every release so far is a pre-release, built by CI from its tag and published only after a
-maintainer reviewed it (ADR 0018). Until the first one is published, the `agentsplice-win-x64` artifact
-of a CI run for a push to `main` holds the same two files, which a signed-in GitHub user can download —
-only such a run: a run for a pull request builds code nobody has reviewed yet, and its artifacts pass
-the same digest check.
+maintainer reviewed it (ADR 0018). To try a commit on `main` that no release carries yet, the
+`agentsplice-win-x64` artifact of a CI run for a push to `main` holds the same two files, which a
+signed-in GitHub user can download — only such a run: a run for a pull request builds code nobody has
+reviewed yet, and its artifacts pass the same digest check.
 
 ```powershell
 gh run list --repo murillojndem/agent-splice --workflow CI --branch main --event push --limit 1
@@ -309,10 +308,10 @@ runtime itself needs only glibc 2.27, and the .NET 8 package needed glibc 2.28 (
 ### Download and verify
 
 Download `agentsplice-<version>-linux-x64.tar.gz` and `SHA256SUMS` from the repository's GitHub Releases
-page into one folder. As for Windows, every release is a pre-release that a maintainer reviewed, and
-until the first one is published the `agentsplice-linux-x64` artifact of a CI run for a push to `main` —
-never one for a pull request — holds the same two files (`gh run download <run-id> --name
-agentsplice-linux-x64`, as shown for Windows). Check the archive against its own line in `SHA256SUMS`,
+page into one folder. As for Windows, every release is a pre-release that a maintainer reviewed, and a
+commit on `main` that no release carries yet is in the `agentsplice-linux-x64` artifact of a CI run for a
+push to `main` — never one for a pull request — with the same two files (`gh run download <run-id>
+--name agentsplice-linux-x64`, as shown for Windows). Check the archive against its own line in `SHA256SUMS`,
 which lists every asset of the release:
 
 ```bash

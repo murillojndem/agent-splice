@@ -128,7 +128,9 @@ Exit criteria:
 
 ### Stage 1D — Local packaging and first public alpha
 
-Status: in progress. Done so far:
+Status: complete. `v0.2.0-alpha`, the first public alpha, was tagged on 2026-10-18 and published on
+2026-10-19 as an immutable pre-release, with its image at `ghcr.io/murillojndem/agent-splice:0.2.0-alpha`.
+It delivered:
 
 - the OpenTelemetry SDK and opt-in OTLP export of traces and metrics, with an optional Compose
   collector (ADR 0014);
@@ -168,14 +170,14 @@ Status: in progress. Done so far:
 - dashboard screenshots taken from the real gateway against a synthetic runtime, and the script that
   takes them (`docs/images/`).
 
-The rest of the list below is not done.
+The stage's original list, every item of it done:
 
 - OpenTelemetry SDK and OTLP exporter, off by default (done);
 - the gateway serves the built dashboard at `/dashboard/`, built into the Docker image and checked in
   CI, so an installation needs no Node toolchain to open it (done);
 - Docker image with a health check that needs no HTTP client in the base image (done);
 - Docker image published to a registry: pushed to GitHub Container Registry when a release is published
-  (pipeline done, ADR 0022; the first push comes with the first release);
+  (done, ADR 0022; first pushed with 0.2.0-alpha);
 - Compose example using `host.docker.internal` for LM Studio (done);
 - direct-process setup: from source anywhere, and self-contained Windows and Linux packages (done);
 - loopback-only defaults, checked against the running package as well as the host (done);
@@ -205,9 +207,14 @@ Exit criteria:
 - one real client/runtime interaction is captured without semantic normalization;
 - first public alpha is clearly labeled experimental.
 
+All four were met when 0.2.0-alpha was published.
+
 ## Stage 2 — Replay and Conformance
 
 ### Stage 2A — Sanitized replay artifacts
+
+Status: in progress. The current stage since 0.2.0-alpha; nothing of it is implemented yet, and
+`CLAUDE.md` still confines implementation work to Stage 1 until it is updated to name this stage.
 
 - sanitization pipeline;
 - immutable replay artifacts;

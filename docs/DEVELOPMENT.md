@@ -292,7 +292,8 @@ the draft pushes the image (ADR 0018, ADR 0022):
    - `docker pull ghcr.io/<owner>/<repository>@sha256:<digest>`, the reference the notes now end with,
      works without signing in;
    - `gh release verify v<version>` and `gh release verify-asset v<version> <file>` accept the release
-     and its assets.
+     and its assets. This needs a recent GitHub CLI: 2.76 found no attestation for 0.2.0-alpha, and 2.102
+     verified it.
 
 If `publish-image.yml` fails, its log names the check that stopped it; nothing is pushed until the
 release and its archive have passed theirs.
