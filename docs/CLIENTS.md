@@ -269,8 +269,9 @@ arguments, and from source they follow `dotnet run --project src/AgentSplice.Api
 ```
 
 or as the environment variables `AGENTSPLICE__RUNTIMES__0__TIMEOUTS__RESPONSEHEADERS` and
-`AGENTSPLICE__RUNTIMES__0__TIMEOUTS__FIRSTBYTE`. Under Docker, a line in `.env` reaches the container
-only if `docker-compose.yml` passes that variable through, and it does not pass these. Put them in a
+`AGENTSPLICE__RUNTIMES__0__TIMEOUTS__FIRSTBYTE`. The published image takes them as `--env` flags on its
+`docker run`, before the image's name. Under Compose, a line in `.env` reaches the container only if
+`docker-compose.yml` passes that variable through, and it does not pass these. Put them in a
 `docker-compose.override.yml` beside it instead, which Compose merges by itself:
 
 ```yaml

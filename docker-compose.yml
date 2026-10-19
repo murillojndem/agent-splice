@@ -24,6 +24,10 @@ services:
       # The gateway reads a key by variable name and never stores the value (FR-DATA-010).
       AGENTSPLICE__RUNTIMES__0__APIKEYENVIRONMENTVARIABLE: LM_STUDIO_API_KEY
       LM_STUDIO_API_KEY: ${LM_STUDIO_API_KEY:-}
+      # The runtime's timeouts are the shipped ones, and nothing here passes them through from .env:
+      # connect 5 seconds, responseHeaders and firstByte 5 minutes, idleStream 60 seconds, total 10
+      # minutes (ADR 0028). To change one, set it in a docker-compose.override.yml beside this file,
+      # which Compose merges by itself, as docs/CLIENTS.md shows under "Troubleshooting".
       AGENTSPLICE__CAPTURE__CONTENTENABLED: ${AGENTSPLICE__CAPTURE__CONTENTENABLED:-false}
       # The administrative API serves stored evidence, and a container binds every interface inside
       # itself — the process cannot see that the host published the port on loopback only. So the

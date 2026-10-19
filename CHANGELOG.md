@@ -17,6 +17,11 @@ All notable changes will be documented here.
     `Every_setting_in_the_shipped_settings_binds_to_a_real_setting` and
     `The_shipped_settings_state_every_timeout_phase`;
   - the shipped `firstByte` line removed, or a phase added to `TimeoutOptions` alone, fails the second.
+- `.env.example` and `docker-compose.yml` say how long the gateway waits for the runtime, phase by
+  phase, and where those budgets are changed (ADR 0028). The Compose file passes no timeout through
+  from `.env`, so both point at the `docker-compose.override.yml` that `docs/CLIENTS.md` shows, and the
+  client guide now names the published image's way too: `--env` flags on its `docker run`. Nothing the
+  gateway does changes.
 
 ## 0.2.1-alpha — 2026-10-19
 
