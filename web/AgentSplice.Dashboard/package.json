@@ -1,6 +1,6 @@
 {
   "name": "agentsplice-dashboard",
-  "version": "0.2.0-alpha",
+  "version": "0.2.1-alpha",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",

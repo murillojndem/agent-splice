@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## Unreleased
+## 0.2.1-alpha — 2026-10-19
 
 ### After 0.2.0-alpha
 

@@ -51,7 +51,7 @@ docker run --detach --name agentsplice \
   --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
   --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
   --env AGENTSPLICE_ADMIN_API_KEY \
-  ghcr.io/murillojndem/agent-splice:0.2.0-alpha
+  ghcr.io/murillojndem/agent-splice:0.2.1-alpha
 ```
 
 In PowerShell:
@@ -68,7 +68,7 @@ docker run --detach --name agentsplice `
   --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 `
   --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY `
   --env AGENTSPLICE_ADMIN_API_KEY `
-  ghcr.io/murillojndem/agent-splice:0.2.0-alpha
+  ghcr.io/murillojndem/agent-splice:0.2.1-alpha
 ```
 
 Each flag matters, and CI runs this command, flag for flag, against the image a release carries:
@@ -178,7 +178,7 @@ gh run download <run-id> --repo murillojndem/agent-splice --name agentsplice-win
 Check the archive against its published digest before opening it:
 
 ```powershell
-$zip = 'agentsplice-0.2.0-alpha-win-x64.zip'   # the file you downloaded
+$zip = 'agentsplice-0.2.1-alpha-win-x64.zip'   # the file you downloaded
 $expected = ((Select-String -Path SHA256SUMS -SimpleMatch $zip).Line -split '\s+')[0]
 (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() -eq $expected   # must print True
 ```
@@ -208,7 +208,7 @@ directly under `C:\` is writable by every signed-in user (`docs/THREAT_MODEL.md`
 ### Run
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.0-alpha-win-x64\AgentSplice.Api.exe"
+& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.1-alpha-win-x64\AgentSplice.Api.exe"
 ```
 
 It can be started from any folder: it reads its settings and serves its dashboard from beside the
@@ -235,7 +235,7 @@ evidence to every program that does not hold it:
 ```powershell
 $env:AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE = 'AGENTSPLICE_ADMIN_API_KEY'
 $env:AGENTSPLICE_ADMIN_API_KEY = 'a long random value you choose'
-& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.0-alpha-win-x64\AgentSplice.Api.exe"
+& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.1-alpha-win-x64\AgentSplice.Api.exe"
 ```
 
 The gateway is told the variable's name and never stores its value. Paste the same value into the
@@ -315,11 +315,11 @@ push to `main` — never one for a pull request — with the same two files (`gh
 which lists every asset of the release:
 
 ```bash
-archive=agentsplice-0.2.0-alpha-linux-x64.tar.gz   # the file you downloaded
+archive=agentsplice-0.2.1-alpha-linux-x64.tar.gz   # the file you downloaded
 grep -F "  $archive" SHA256SUMS | sha256sum --check --strict -
 ```
 
-It must print `agentsplice-0.2.0-alpha-linux-x64.tar.gz: OK`; if the line is missing, `sha256sum` finds
+It must print `agentsplice-0.2.1-alpha-linux-x64.tar.gz: OK`; if the line is missing, `sha256sum` finds
 nothing to check and fails. GitHub also shows each asset's digest on the release page. The package is
 not signed (`docs/SECURITY.md`).
 
@@ -331,7 +331,7 @@ and the dashboard's script:
 
 ```bash
 mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
-tar -xzf agentsplice-0.2.0-alpha-linux-x64.tar.gz -C ~/.local/opt/agentsplice
+tar -xzf agentsplice-0.2.1-alpha-linux-x64.tar.gz -C ~/.local/opt/agentsplice
 ```
 
 `chmod` rather than `mkdir -m`, which leaves a folder that already exists as it was.
@@ -346,7 +346,7 @@ Token, configuration, and data below).
 ### Run
 
 ```bash
-~/.local/opt/agentsplice/agentsplice-0.2.0-alpha-linux-x64/AgentSplice.Api
+~/.local/opt/agentsplice/agentsplice-0.2.1-alpha-linux-x64/AgentSplice.Api
 ```
 
 As on Windows, it can be started from any folder, reads its settings and serves its dashboard from
