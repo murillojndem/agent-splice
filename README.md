@@ -263,10 +263,11 @@ which stays off until you turn it on ([Observability](docs/OBSERVABILITY.md)).
   ([Conformance](docs/CONFORMANCE.md)), of which none exists yet.
 - **One protocol in.** OpenAI Chat Completions only: no `/v1/responses`, no embeddings, and no Anthropic
   Messages, so Claude Code cannot use it yet.
-- **One runtime provider, two runtimes with evidence.** LM Studio, and llama.cpp's `llama-server`
-  through the same provider ([its trace report](docs/reports/2026-10-19-opencode-llama-server/README.md)).
-  Other servers with an OpenAI-compatible `/v1`, such as Ollama or vLLM, may work through it too, but
-  nothing has been recorded with them.
+- **One runtime provider, three runtimes with evidence.** LM Studio, and llama.cpp's `llama-server` and
+  Ollama through the same provider, each with a trace report
+  ([`llama-server`](docs/reports/2026-10-19-opencode-llama-server/README.md),
+  [Ollama](docs/reports/2026-10-19-opencode-ollama/README.md)). Other servers with an OpenAI-compatible
+  `/v1`, such as vLLM, may work through it too, but nothing has been recorded with them.
 - **No replay yet.** Replay, comparison across runtimes, conformance suites, and agent evaluation are the
   [roadmap](#roadmap), not this build.
 - **No native macOS package.** The image is `linux/amd64` only.

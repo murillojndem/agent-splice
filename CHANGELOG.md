@@ -98,6 +98,28 @@ All notable changes will be documented here.
     Vulkan's, where the first report's were ROCm's.
   - The report index, the README's limits, the compatibility matrix's evidence line, and the roadmap say
     what changed. No status of the matrix changes, and no runtime behaviour changes.
+- **A third dated trace report** (ADR 0023, launch decision D4): `docs/reports/2026-10-19-opencode-ollama/`.
+  OpenCode 1.18.7 ran the first report's task through the 0.2.1-alpha Windows package to Ollama 0.40.6,
+  with the same two model files, imported with `ollama create`, and no code change. The shipped
+  `lmstudio` provider was given Ollama's address with `runtimes:0:baseUrl` and a name with
+  `runtimes:0:id`.
+  - Ollama ran both files in llama.cpp's `llama-server` b11669, with the chat template each file
+    carries. Every stream it answered with `200` completed with `[DONE]` and every boundary, their usage
+    and tool calls agree with what OpenCode recorded, and OpenCode finished the task with both models.
+  - Ollama sends a stream's headers with its first byte, as ADR 0028 had read in its source, so a
+    request's time in the queue and in prompt processing fell on `responseHeaders`, none on `firstByte`.
+  - Ollama sends a tool call whole, once it is generated. For an answer that is only a tool call, the
+    generation falls before the headers too, and the generation throughput AgentSplice derives over the
+    stream's window of microseconds reads in the millions of tokens per second; the report says so and
+    does not use it.
+  - With four slots, Ollama gave each its own context of 32,768 tokens, and llama.cpp moved part of the
+    model to system memory.
+  - With Ollama's default context, 4,096 tokens on this GPU, the runtime refused every agent step with a
+    `400`, which AgentSplice relayed and recorded as `upstreamOutcome: error_status`. OpenCode alternated
+    its compaction agent with the refused step until the attempt was stopped by hand.
+  - No marker reached the gateway's log, store, or evidence.
+  - The report index, the README's limits, the compatibility matrix's evidence line, and the roadmap say
+    what changed. No status of the matrix changes, and no runtime behaviour changes.
 
 ## 0.2.1-alpha — 2026-10-19
 

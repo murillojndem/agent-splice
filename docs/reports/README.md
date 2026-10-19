@@ -9,6 +9,7 @@ a conformance report (`docs/CONFORMANCE.md`), and no conformance report exists y
 | --- | --- | --- | --- | --- |
 | 2026-10-17 | OpenCode 1.18.7 | LM Studio 0.4.20 | `qwen3-coder-30b-apex`, `qwen3.6-35b-a3b` | [OpenCode through AgentSplice to LM Studio](2026-10-17-opencode-lm-studio/README.md) |
 | 2026-10-19 | OpenCode 1.18.7 | llama-server b10662 | `qwen3.6-35b-a3b`, `qwen3-coder-30b-apex` | [OpenCode through AgentSplice to llama-server](2026-10-19-opencode-llama-server/README.md) |
+| 2026-10-19 | OpenCode 1.18.7 | Ollama 0.40.6 | `qwen3.6-35b-a3b:latest`, `qwen3-coder-30b-apex:latest` | [OpenCode through AgentSplice to Ollama](2026-10-19-opencode-ollama/README.md) |
 
 ## What a report holds
 

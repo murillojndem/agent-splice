@@ -1,0 +1,520 @@
+{
+  "report": "2026-10-19-opencode-ollama",
+  "capturedFrom": "2026-10-19T21:38:59.206Z",
+  "capturedUntil": "2026-10-19T21:46:02.069Z",
+  "environment": {
+    "agentsplice": {
+      "version": {
+        "value": "0.2.1-alpha+39dfc7819d195beb5288621ee84d76cb7e893c9c",
+        "source": "GET /api/v1/system"
+      },
+      "commit": {
+        "value": "39dfc7819d195beb5288621ee84d76cb7e893c9c",
+        "source": "the build metadata of the version, which is the commit the v0.2.1-alpha tag names"
+      },
+      "package": {
+        "value": "agentsplice-0.2.1-alpha-win-x64.zip",
+        "source": "the v0.2.1-alpha release, whose assets CI built in release workflow run 39214008235"
+      },
+      "packageSha256": {
+        "value": "78e10851497d450a97db1c4d34075dfc20a612d56b0d039a093c40fb445bec52",
+        "source": "the release's SHA256SUMS, checked with sha256sum --check --ignore-missing --strict before extracting; gh release verify-asset verified the asset against the release's attestation"
+      },
+      "dotnetRuntime": {
+        "value": "10.0.13",
+        "source": "README.txt in the package"
+      },
+      "configuration": {
+        "value": "appsettings.json as the package ships it, and three arguments: --agentsplice:administration:apiKeyEnvironmentVariable=AGENTSPLICE_ADMIN_API_KEY, naming a variable that held a token generated for these sessions; --agentsplice:runtimes:0:baseUrl=http://127.0.0.1:11435/v1, which points the shipped runtime, whose provider is lmstudio, at Ollama; and --agentsplice:runtimes:0:id=ollama-local, which names that runtime for the server it describes. LM_STUDIO_API_KEY, the variable the shipped settings name for a runtime key, was not set in the gateway's environment, so it sent Ollama no key. The package was extracted into a new folder, so its store began empty",
+        "source": "the command that started the gateway"
+      },
+      "contentCapture": {
+        "value": false,
+        "source": "GET /api/v1/system: contentRetentionEnabled; agentsplice:capture:contentEnabled is false in the shipped appsettings.json"
+      },
+      "timeouts": {
+        "value": {
+          "connect": "00:00:05",
+          "responseHeaders": "00:05:00",
+          "firstByte": "00:05:00",
+          "idleStream": "00:01:00",
+          "total": "00:10:00"
+        },
+        "source": "agentsplice:runtimes:0:timeouts in the shipped appsettings.json"
+      },
+      "listenAddress": {
+        "value": "http://127.0.0.1:5280",
+        "source": "the gateway's startup log"
+      }
+    },
+    "machine": {
+      "operatingSystem": {
+        "value": "Windows 11 Pro 10.0.26200, 64-bit",
+        "source": "Win32_OperatingSystem"
+      },
+      "cpu": {
+        "value": "AMD Ryzen 7 5800X3D, 8 cores, 16 threads",
+        "source": "Win32_Processor"
+      },
+      "memoryBytes": {
+        "value": 68626886656,
+        "source": "Win32_ComputerSystem.TotalPhysicalMemory"
+      },
+      "gpu": {
+        "value": "AMD Radeon RX 7900 XT",
+        "source": "Win32_VideoController"
+      },
+      "gpuMemory": {
+        "value": "19.98 GiB",
+        "source": "the display adapter's HardwareInformation.qwMemorySize registry value"
+      },
+      "gpuDriver": {
+        "value": "32.0.32015.2008",
+        "source": "Win32_VideoController.DriverVersion"
+      },
+      "vulkanLoader": {
+        "value": "1.4.350.0",
+        "source": "the file version of the system's vulkan-1.dll"
+      }
+    },
+    "runtime": {
+      "name": {
+        "value": "Ollama",
+        "source": "the server program of Ollama's release archive"
+      },
+      "version": {
+        "value": "0.40.6",
+        "source": "GET /api/version: 0.40.6; Ollama's log: Listening on 127.0.0.1:11435 (version 0.40.6)"
+      },
+      "commit": {
+        "value": "2476d5ead197abe04629651028f83d48dc75d2b2",
+        "source": "the commit Ollama's v0.40.6 tag names, a release published on 2026-10-16"
+      },
+      "engine": {
+        "value": "llama.cpp's llama-server, release b11669, which Ollama started for each model as its runner, on the ROCm backend that the ROCm archive carries (rocm_v7_1). Ollama's GPU discovery found the RX 7900 XT through ROCm as gfx1100, with 20.0 GiB in all and 19.8 GiB available; Vulkan was enabled, Ollama's default, and Ollama chose ROCm",
+        "source": "LLAMA_CPP_VERSION at the v0.40.6 tag: b11669; Ollama's log: inference compute library=ROCm compute=gfx1100, and using llama-server for model; the runner's log: build 1 (620d2225c), loaded ROCm backend from rocm_v7_1\\ggml-hip.dll"
+      },
+      "llamaCppCommit": {
+        "value": "620d2225cc436ab0b001e3200e590e3b286ef9ab",
+        "source": "the commit llama.cpp's b11669 release names, published on 2026-10-15; the runner's log reports 620d2225c"
+      },
+      "package": {
+        "value": "ollama-windows-amd64.zip and ollama-windows-amd64-rocm.zip from the v0.40.6 release, extracted into one new folder, as Ollama's Windows documentation says for an AMD GPU. The Ollama installed on the machine, 0.32.5, was not used",
+        "source": "the release's assets; docs/windows.mdx at the v0.40.6 tag"
+      },
+      "packageSha256": {
+        "value": "e359637575302f288d76c0007c408a4be9c7376d59c4f28684d63b232a44b427",
+        "source": "sha256sum of ollama-windows-amd64.zip, equal to the release's sha256sum.txt and to the digest GitHub publishes for the asset"
+      },
+      "rocmPackageSha256": {
+        "value": "bd978d0fb59c7d4a607d2fbd35f53b8c6141130f508fdaf7b578d17e8339914d",
+        "source": "sha256sum of ollama-windows-amd64-rocm.zip, equal to the release's sha256sum.txt and to the digest GitHub publishes for the asset"
+      },
+      "server": {
+        "value": "http://127.0.0.1:11435, started with ollama serve for each attempt with that attempt's settings and stopped after it. Another Ollama, inside WSL, held 127.0.0.1:11434 on this machine, so this one served on the next port; the port plays no part in what was measured",
+        "source": "OLLAMA_HOST in its environment; Ollama's log: Listening on 127.0.0.1:11435 (version 0.40.6)"
+      },
+      "processEnvironment": {
+        "value": {
+          "all attempts": "OLLAMA_HOST=127.0.0.1:11435, OLLAMA_MODELS=<a folder for the session>, OLLAMA_KEEP_ALIVE=30m, OLLAMA_FLASH_ATTENTION=1, OLLAMA_DEBUG_LOG_REQUESTS=1, and TMP and TEMP set to a folder for the session, where the request logs were written; OLLAMA_VULKAN=1 came from the account's environment and is Ollama's default; every other OLLAMA_ variable at Ollama's default",
+          "attempt 1": "OLLAMA_CONTEXT_LENGTH=262144, OLLAMA_NUM_PARALLEL=1, OLLAMA_KV_CACHE_TYPE=q8_0",
+          "attempt 2": "OLLAMA_CONTEXT_LENGTH=32768, OLLAMA_NUM_PARALLEL=4; OLLAMA_KV_CACHE_TYPE unset",
+          "attempt 3": "OLLAMA_NUM_PARALLEL=4; OLLAMA_CONTEXT_LENGTH and OLLAMA_KV_CACHE_TYPE unset"
+        },
+        "source": "the command that started ollama serve; Ollama's log: server config, which lists every OLLAMA_ variable with its value, among them OLLAMA_CONTEXT_LENGTH:262144, :32768, and :0 in the three attempts"
+      },
+      "defaultContext": {
+        "value": 4096,
+        "source": "Ollama's log, at every start: vram-based default context total_vram=\"20.0 GiB\" default_num_ctx=4096"
+      },
+      "templateHandling": {
+        "value": "For both files Ollama kept the chat template embedded in the file and assigned none of its own, so the runner rendered it with llama.cpp's Jinja engine, and Ollama took the models' capabilities from it",
+        "source": "ollama create printed no autodetected template; ollama show --modelfile: TEMPLATE {{ .Prompt }}, Ollama's placeholder; GET /api/show: template equal to the file's tokenizer.chat_template; Ollama's log: template selection selected=gguf_chat_template renderer=\"\" parser=\"\" go_template=null"
+      },
+      "modelImport": {
+        "value": "ollama create with one Modelfile per model, each file named by a relative path to a hard link, in a folder on the drive that holds the files. Named through the junction that links LM Studio's model folder to that drive, the same files reached Ollama's server as a model name, refused with 400 Bad Request: invalid model name; named by an absolute path on that drive, or through the hard links, they were sent as files. Ollama copied each file into its store under its SHA-256",
+        "source": "ollama create's output: using existing layer sha256:<the file's digest>, then success; the create request, captured from the CLI against a local stand-in server"
+      },
+      "logging": {
+        "value": "Ollama's log at its default level, INFO, which carries the runner's own log at its verbosity 4; and OLLAMA_DEBUG_LOG_REQUESTS=1, which writes each request body Ollama receives to a folder, as a control for the marker search. Ollama's log recorded no prompt",
+        "source": "the server config line; the marker search over Ollama's logs and the request logs"
+      }
+    },
+    "models": [
+      {
+        "id": {
+          "value": "qwen3.6-35b-a3b:latest",
+          "source": "ollama create qwen3.6-35b-a3b; GET /v1/models: data[].id"
+        },
+        "file": {
+          "value": "unsloth/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf",
+          "source": "the Modelfile's first FROM, a hard link to the file in LM Studio's model folder, where the 2026-10-17 report's LM Studio loaded the same file"
+        },
+        "bytes": {
+          "value": 13211155424,
+          "source": "the model file's size"
+        },
+        "sha256": {
+          "value": "9c964e657212fea1f24905dd7b0a89b82fd807d19fab0b41da14251b07b88fbe",
+          "source": "ollama create: using existing layer sha256 with this digest, the name of the file's copy in Ollama's store; the same digest as in the 2026-10-17 and 2026-10-19 reports"
+        },
+        "visionProjector": {
+          "value": "mmproj-F32.gguf, 1786305248 bytes, the Modelfile's second FROM, loaded with the model as the earlier reports loaded it",
+          "source": "ollama show: Projector, architecture clip; the runner's command line: --mmproj; its log: loaded multimodal model"
+        },
+        "visionProjectorSha256": {
+          "value": "0a1c1cd2772ae6de5e87e023cea454720924675f11fe2b0e7bb7648e48debdc0",
+          "source": "ollama create: using existing layer sha256 with this digest; the projector's digest in the 2026-10-19 report"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3.6-35B-A3B",
+          "source": "the GGUF header, as GET /api/show returns it: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen35moe, 40 blocks, 256 experts with 8 used",
+          "source": "the runner's log: print_info arch, n_layer, n_expert, n_expert_used"
+        },
+        "quantization": {
+          "value": "UD-IQ3_XXS, with an importance matrix; the runner reports the file type as IQ3_XXS - 3.0625 bpw, and Ollama lists it as IQ3_XXS",
+          "source": "the file name; the runner's log: print_info file type; ollama show: quantization"
+        },
+        "contextLength": {
+          "value": 262144,
+          "source": "OLLAMA_CONTEXT_LENGTH=262144; the runner's command line: -c 262144 -np 1; its log: n_ctx_seq = 262144; GET /api/ps: context_length"
+        },
+        "gpuOffload": {
+          "value": "all, 41 of 41 layers, 12,190.81 MiB of the model on the GPU; GET /api/ps reported 16,825,460,980 bytes, all in VRAM",
+          "source": "the runner's log: offloaded 41/41 layers to GPU, ROCm0 model buffer size; GET /api/ps: size and size_vram"
+        },
+        "parallel": {
+          "value": 1,
+          "source": "OLLAMA_NUM_PARALLEL=1; the runner's command line: -np 1; its log: n_slots = 1"
+        },
+        "flashAttention": {
+          "value": "on",
+          "source": "OLLAMA_FLASH_ATTENTION=1; the runner's command line: --flash-attn on; its log: flash_attn = enabled"
+        },
+        "kvCacheType": {
+          "value": "q8_0 for keys and values",
+          "source": "OLLAMA_KV_CACHE_TYPE=q8_0; the runner's command line: --cache-type-k q8_0 --cache-type-v q8_0; its log: K (q8_0), V (q8_0), 2,720 MiB"
+        },
+        "contextCheckpoints": {
+          "value": 32,
+          "source": "the runner's default, which Ollama does not set; its log: context checkpoints enabled, max = 32"
+        },
+        "promptCache": {
+          "value": "on, up to 8192 MiB in host memory, the runner's default",
+          "source": "the runner's log: prompt cache is enabled, size limit: 8192 MiB"
+        },
+        "chatTemplate": {
+          "value": "the template embedded in the file, unchanged: 8,057 characters with one tojson | safe, rendered by the runner's Jinja engine; it reports thinking = 1",
+          "source": "GET /api/show: template, equal to the GGUF header's tokenizer.chat_template; the runner's log: chat template, thinking = 1"
+        },
+        "capabilities": {
+          "value": "tools, thinking, completion, vision",
+          "source": "ollama show; GET /api/show: capabilities"
+        },
+        "speculativeDecoding": {
+          "value": "none",
+          "source": "no speculative or draft option on the runner's command line; its log: no implementations specified for speculative decoding"
+        },
+        "threads": {
+          "value": 6,
+          "source": "PARAMETER num_thread 6 in the Modelfile; the runner's command line: -t 6; its log: n_threads = 6"
+        },
+        "batch": {
+          "value": "-b 512 -ub 512, chosen by Ollama",
+          "source": "the runner's command line"
+        },
+        "contextShift": {
+          "value": "--context-shift --keep 4, set by Ollama",
+          "source": "the runner's command line"
+        },
+        "modelfile": {
+          "value": "FROM ./Qwen3.6-35B-A3B-UD-IQ3_XXS.gguf; FROM ./mmproj-F32.gguf; PARAMETER num_thread 6",
+          "source": "the Modelfile"
+        },
+        "runnerCommandLine": {
+          "value": "llama-server.exe in Ollama's lib\\ollama folder --model <Ollama's store>\\blobs\\sha256-9c964e657212fea1f24905dd7b0a89b82fd807d19fab0b41da14251b07b88fbe --port <a free port> --host 127.0.0.1 --no-webui --offline -c 262144 -np 1 --log-verbosity 4 --no-log-prefix --no-log-timestamps --mmproj <Ollama's store>\\blobs\\sha256-0a1c1cd2772ae6de5e87e023cea454720924675f11fe2b0e7bb7648e48debdc0 --cache-type-k q8_0 --cache-type-v q8_0 --flash-attn on -b 512 -ub 512 -t 6 --context-shift --keep 4",
+          "source": "Ollama's log: starting llama-server, attempt 1"
+        },
+        "load": {
+          "value": "before attempt 1, with POST /api/generate naming only the model; the runner started in 23.1 seconds",
+          "source": "Ollama's log: llama-server started in 23.08 seconds; the answer: done_reason load"
+        }
+      },
+      {
+        "id": {
+          "value": "qwen3-coder-30b-apex:latest",
+          "source": "ollama create qwen3-coder-30b-apex; GET /v1/models: data[].id"
+        },
+        "file": {
+          "value": "mudler/Qwen3-Coder-30B-APEX-GGUF/Qwen3-Coder-30B-APEX-I-Compact.gguf",
+          "source": "the Modelfile's FROM, a hard link to the file in LM Studio's model folder, where the 2026-10-17 report's LM Studio loaded the same file"
+        },
+        "bytes": {
+          "value": 14781815968,
+          "source": "the model file's size"
+        },
+        "sha256": {
+          "value": "e883cea614708d6f0ef26c1d7e6409c56b4a7182ad1e36b5fba3598e1bcf7788",
+          "source": "ollama create: using existing layer sha256 with this digest, the name of the file's copy in Ollama's store; the same digest as in the 2026-10-17 and 2026-10-19 reports"
+        },
+        "baseModel": {
+          "value": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
+          "source": "the GGUF header, as GET /api/show returns it: general.base_model.0.repo_url"
+        },
+        "architecture": {
+          "value": "qwen3moe, 48 blocks, 128 experts with 8 used",
+          "source": "the runner's log: print_info arch, n_layer, n_expert, n_expert_used"
+        },
+        "quantization": {
+          "value": "APEX I-Compact, with an importance matrix; the runner reports the file type as Q4_K - Medium, and Ollama lists it as Q4_K_M",
+          "source": "the file name; the runner's log: print_info file type; ollama show: quantization"
+        },
+        "contextLength": {
+          "value": {
+            "attempt 2": 32768,
+            "attempt 3": 4096
+          },
+          "source": "attempt 2: OLLAMA_CONTEXT_LENGTH=32768, the runner's command line -c 131072 -np 4, its log n_ctx_seq = 32768, GET /api/ps context_length 32768; attempt 3: OLLAMA_CONTEXT_LENGTH unset, Ollama's log vram-based default context default_num_ctx=4096, the runner's command line -c 16384 -np 4, its log n_ctx_seq = 4096, GET /api/ps context_length 4096"
+        },
+        "gpuOffload": {
+          "value": {
+            "attempt 2": "49 of 49 layers, with the expert tensors of 28 of them partly in system memory: 6,693.42 MiB of the model on the GPU and 7,397.92 MiB in host memory. GET /api/ps reported 20,165,091,654 of 20,331,123,177 bytes in VRAM",
+            "attempt 3": "all, 49 of 49 layers, 13,924.43 MiB of the model on the GPU; GET /api/ps reported 16,396,016,680 bytes, all in VRAM"
+          },
+          "source": "the runner's log: common_params_fit_impl, projected to use 26328 MiB of device memory vs. 20301 MiB of free device memory, then 49 layers (28 overflowing); ROCm0 and CPU_Mapped model buffer sizes; offloaded 49/49 layers to GPU; GET /api/ps: size and size_vram"
+        },
+        "parallel": {
+          "value": 4,
+          "source": "OLLAMA_NUM_PARALLEL=4 in both attempts; the runner's command line: -np 4; its log: n_slots = 4, kv_unified = false, so each slot held a context of its own"
+        },
+        "flashAttention": {
+          "value": "on",
+          "source": "OLLAMA_FLASH_ATTENTION=1; the runner's command line: --flash-attn on; its log: flash_attn = enabled"
+        },
+        "kvCacheType": {
+          "value": "f16 for keys and values, the default",
+          "source": "OLLAMA_KV_CACHE_TYPE unset; the runner's log: K (f16), V (f16), 12,288 MiB in attempt 2 and 1,536 MiB in attempt 3"
+        },
+        "contextCheckpoints": {
+          "value": 32,
+          "source": "the runner's default, which Ollama does not set; its log: context checkpoints enabled, max = 32"
+        },
+        "promptCache": {
+          "value": "on, up to 8192 MiB in host memory, the runner's default",
+          "source": "the runner's log: prompt cache is enabled, size limit: 8192 MiB"
+        },
+        "chatTemplate": {
+          "value": "the template embedded in the file, unchanged: 6,896 characters with two tojson | safe, rendered by the runner's Jinja engine; it reports thinking = 0",
+          "source": "GET /api/show: template, equal to the GGUF header's tokenizer.chat_template; the runner's log: chat template, thinking = 0"
+        },
+        "capabilities": {
+          "value": "tools, completion",
+          "source": "ollama show; GET /api/show: capabilities"
+        },
+        "speculativeDecoding": {
+          "value": "none",
+          "source": "no speculative or draft option on the runner's command line; its log: no implementations specified for speculative decoding"
+        },
+        "threads": {
+          "value": 6,
+          "source": "PARAMETER num_thread 6 in the Modelfile; the runner's command line: -t 6; its log: n_threads = 6"
+        },
+        "batch": {
+          "value": {
+            "attempt 2": "-b 512 -ub 512",
+            "attempt 3": "-b 1024 -ub 1024"
+          },
+          "source": "the runner's command lines, chosen by Ollama"
+        },
+        "contextShift": {
+          "value": "--context-shift --keep 4, set by Ollama",
+          "source": "the runner's command lines"
+        },
+        "modelfile": {
+          "value": "FROM ./Qwen3-Coder-30B-APEX-I-Compact.gguf; PARAMETER num_thread 6",
+          "source": "the Modelfile"
+        },
+        "runnerCommandLine": {
+          "value": {
+            "attempt 2": "llama-server.exe in Ollama's lib\\ollama folder --model <Ollama's store>\\blobs\\sha256-e883cea614708d6f0ef26c1d7e6409c56b4a7182ad1e36b5fba3598e1bcf7788 --port <a free port> --host 127.0.0.1 --no-webui --offline -c 131072 -np 4 --log-verbosity 4 --no-log-prefix --no-log-timestamps --flash-attn on -b 512 -ub 512 -t 6 --context-shift --keep 4",
+            "attempt 3": "llama-server.exe in Ollama's lib\\ollama folder --model <Ollama's store>\\blobs\\sha256-e883cea614708d6f0ef26c1d7e6409c56b4a7182ad1e36b5fba3598e1bcf7788 --port <a free port> --host 127.0.0.1 --no-webui --offline -c 16384 -np 4 --log-verbosity 4 --no-log-prefix --no-log-timestamps --flash-attn on -b 1024 -ub 1024 -t 6 --context-shift --keep 4"
+          },
+          "source": "Ollama's log: starting llama-server, attempts 2 and 3"
+        },
+        "load": {
+          "value": {
+            "attempt 2": "with POST /api/generate naming only the model; the runner started in 14.6 seconds",
+            "attempt 3": "with POST /api/generate naming only the model; the runner started in 12.8 seconds"
+          },
+          "source": "Ollama's log: llama-server started in 14.55 and 12.79 seconds; the answers: done_reason load"
+        }
+      }
+    ],
+    "client": {
+      "name": {
+        "value": "OpenCode",
+        "source": "opencode-ai, installed with npm"
+      },
+      "version": {
+        "value": "1.18.7",
+        "source": "opencode --version"
+      },
+      "invocation": {
+        "value": "opencode run --format json --model agentsplice/<model id> \"<prompt>\", with stdin closed, from a new directory holding calc.py and opencode.json, under a 15-minute cap",
+        "source": "the script that ran each attempt"
+      },
+      "configuration": {
+        "value": {
+          "$schema": "https://opencode.ai/config.json",
+          "provider": {
+            "agentsplice": {
+              "npm": "@ai-sdk/openai-compatible",
+              "name": "AgentSplice",
+              "options": {
+                "baseURL": "http://127.0.0.1:5280/v1"
+              },
+              "models": {
+                "<model id>": {
+                  "name": "<model id> through AgentSplice",
+                  "limit": {
+                    "context": "<262144 in attempt 1, 32768 in attempts 2 and 3>",
+                    "output": 8192
+                  }
+                }
+              }
+            }
+          },
+          "model": "agentsplice/<model id>",
+          "small_model": "agentsplice/<model id>",
+          "permission": {
+            "edit": "allow",
+            "bash": "deny",
+            "webfetch": "deny"
+          },
+          "share": "disabled",
+          "autoupdate": false
+        },
+        "source": "opencode.json in each attempt's directory, from examples/opencode/opencode.json, as in the earlier reports; attempt 3 kept attempt 2's context limit, so only Ollama changed between them; the account's global OpenCode configuration holds only $schema"
+      },
+      "environment": {
+        "value": "All three attempts ran with a terminal integration's variables, OPENCODE_CONFIG_DIR among them, unset. In each, OpenCode found 18 skills, and every agent request carried their list in its system message: 15,322 characters in attempt 1's requests and 15,806 in the others', between 34.3% and 39.5% of each agent request's body. The title and compaction requests carry none",
+        "source": "the script that ran each attempt; OpenCode's own log: init count=18 in every attempt; Ollama's request logs, read for their structure only"
+      }
+    }
+  },
+  "scenario": {
+    "prompt": {
+      "value": "calc.py's mean() returns the wrong result. Fix the bug, then add test_calc.py with unittest tests for mean() and clamp(). Do not run any commands. Session marker: <a random trace-canary-* marker, different for each attempt>.",
+      "source": "the script that ran each attempt; the 2026-10-17 report's prompt"
+    },
+    "startingFiles": {
+      "value": "calc.py, as reproduced in the 2026-10-17 report's README.md, and opencode.json",
+      "source": "the script that ran each attempt"
+    }
+  },
+  "attempts": [
+    {
+      "name": "1",
+      "model": "qwen3.6-35b-a3b:latest",
+      "clientEnvironment": "without the terminal integration",
+      "runtimeSlots": "1",
+      "runtimeContext": "262,144 per request",
+      "from": "2026-10-19T21:38:59.206Z",
+      "until": "2026-10-19T21:40:15.239Z",
+      "clientExit": "0, after five agent steps",
+      "exchanges": [
+        "89183415-089b-4a25-a246-23baceadccd1",
+        "47e6b923-0b64-4756-b924-cfc8f09bb76e",
+        "e1680459-a804-44b9-917b-be03f048105b",
+        "63961763-e7ae-4207-8895-c9c14873839b",
+        "96a09e50-31e4-4b7f-a07b-59905d9358e4",
+        "0f303f77-b1f9-4f52-836b-40c8e9603be8"
+      ]
+    },
+    {
+      "name": "2",
+      "model": "qwen3-coder-30b-apex:latest",
+      "clientEnvironment": "without the terminal integration",
+      "runtimeSlots": "4, each with a context of its own",
+      "runtimeContext": "32,768 per request",
+      "from": "2026-10-19T21:42:12.982Z",
+      "until": "2026-10-19T21:44:08.978Z",
+      "clientExit": "0, after seven agent steps",
+      "exchanges": [
+        "bb8c6565-3a26-4a15-957e-4cca95a8ef26",
+        "2c1c846d-5fb5-4782-88d1-2d7506a333b8",
+        "ebcfd2ee-0975-4eae-b22d-6d36e191feb5",
+        "edfbcb88-dfbf-4339-9210-0c7be26b80ec",
+        "2994b850-e944-4dc5-b707-30f42d1af68c",
+        "d87a676f-b33e-4efa-8083-7fe62f6f7fe7",
+        "99a482b0-eff6-48cd-be94-b617727a0725",
+        "fb527dd0-1c70-47a3-aac0-e69c9d3cf90d"
+      ]
+    },
+    {
+      "name": "3",
+      "model": "qwen3-coder-30b-apex:latest",
+      "clientEnvironment": "without the terminal integration",
+      "runtimeSlots": "4, each with a context of its own",
+      "runtimeContext": "4,096 per request, Ollama's default for this GPU",
+      "from": "2026-10-19T21:45:10.250Z",
+      "until": "2026-10-19T21:46:02.069Z",
+      "clientExit": "stopped by hand at 2026-10-19T21:46:01.771Z, while OpenCode alternated a compaction request with the refused agent step; its process exited with 1",
+      "exchanges": [
+        "5c436f7b-d3d1-461f-84a7-ed4375402cb0",
+        "c2033b8b-89d0-43fd-85b1-4e8a35ebabd9",
+        "179e0927-6b2a-4aa8-919f-29488326ccc2",
+        "1dac7d23-f913-40ad-9ad2-2c1bd4911f5e",
+        "a8d1a4db-3c9a-4f23-ae75-0eeaa4f4494a",
+        "e6c1ff32-ba20-4f5f-9abb-17a752665fdb",
+        "1acfa58f-68ac-4482-b1d6-62e3b8646c90",
+        "83e62f79-c876-49d6-a153-bd0d1518baba",
+        "a5e5fea0-1c3c-44c8-bcec-d5fefb643708",
+        "e7c22922-8b32-44b2-b563-547837736630",
+        "3f2f2648-2179-43da-aed0-076a44ce5c9c",
+        "e767829f-70fc-4da8-8218-38385e43a6e6",
+        "02c7cdbd-6de7-4f66-9502-bc55d0ff5ba6",
+        "14b7c2c1-8746-4183-b197-e702fd28c37f",
+        "8e61f37f-b6ab-46cc-bed6-7ae72cf5bfcf",
+        "483c2ad0-33c3-4b22-8d8a-6f79cecadaf2",
+        "e14bd498-b903-4a71-b3ba-557046d017b6",
+        "b27af594-c7bf-4d85-962b-a9329217a0a6",
+        "abcd450b-8a3f-4deb-a85a-4e14bb579d3d",
+        "4154c8a1-57c5-4b57-98d4-029889ef36e0",
+        "14661c7e-0745-47df-8060-709dd2f971fb",
+        "e0e21a3b-fb0f-4df7-96c8-1e62987753c0",
+        "a4e586a0-9dc9-407b-a035-fdfd029800dd",
+        "b3629216-93c1-4764-a905-a5a6c1f8c9d5",
+        "73f6fb18-6281-4eb1-90f3-caf5f3b35f01",
+        "458a41a0-3c6b-44a3-bab9-425e8171f143",
+        "0368cb26-48b4-4b4a-81b0-571b34dad98b",
+        "7df5d54f-e3bf-4310-bde8-754a26a738b0",
+        "0615d9c3-60c4-4acf-9d3e-fa2fa551c5f7",
+        "b36bf3f3-ff2d-4257-97eb-3c65f1824673",
+        "aa524499-4bf6-4f04-ae3b-9eb97216aa89",
+        "0d4615ca-b8c3-4223-8e19-ffcfa4fa9ac3",
+        "aabfca2e-1b36-4c08-8ad4-2c14c2a4562c",
+        "de748bb3-883c-4722-b14f-d5f500c3beac",
+        "f02010e1-726b-44c0-80fd-fec76f20a63a",
+        "c370751d-6d51-4764-b903-df6d4c393709",
+        "71ddb29f-0311-4845-ad39-eadd080de792",
+        "7636fce0-48c8-4375-8673-b6683d6a095b",
+        "fb98b2e3-e1ca-4200-bc78-6b4e738bf8a6",
+        "0ed79ac7-2033-4e58-ba62-e43b5ba56d7b",
+        "bef09d3a-802b-4856-b9a9-22899a106488",
+        "39e63594-1d41-4815-b512-ce7507239b0f",
+        "625b1959-99b1-4e0e-a519-fb99da669fa7",
+        "407f32a2-dc0e-4ded-9394-81144afdb651",
+        "5e5e3b99-62ce-4bdc-965a-67585348df05",
+        "52b7a0f1-d9dd-49b7-ab20-e218ad233257",
+        "951be062-293a-41e3-966a-ed56957af076",
+        "cfde7945-fab9-4ed1-95f4-8445b661d036",
+        "515d9382-92c0-42a1-9f0f-cf2d889469f0",
+        "51260ac1-75d0-4c03-bcb8-09475533c3da"
+      ]
+    }
+  ]
+}
