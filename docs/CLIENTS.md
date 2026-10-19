@@ -261,7 +261,7 @@ gaps between reads once a stream has started (ADR 0028).
 
 Each timeout phase is a setting of the runtime, and each must stay no longer than `total`, 10 minutes
 by default: a value below a default lowers it, and a wait longer than 10 minutes needs `total` raised
-too. On the Windows package's command line, for example — the Linux package's takes the same
+too. On the Windows package's command line, for example — the Linux and macOS packages' take the same
 arguments, and from source they follow `dotnet run --project src/AgentSplice.Api --`:
 
 ```powershell

@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
 # Smoke test for a running AgentSplice gateway with an administrative token configured: the container
-# image (ADR 0015) or a self-contained package, Windows or Linux (ADR 0017, ADR 0021).
+# image (ADR 0015) or a self-contained package, Windows, Linux, or macOS (ADR 0017, ADR 0021, ADR 0029).
 #
 # The integration tests prove the serving rules against a fixture build in an in-process server. This
 # proves what they cannot: that the artifact as built carries the dashboard it was built with, that
 # the shell names files the gateway actually serves, that real Kestrel path normalisation — on Linux
-# in the image and the Linux package, on Windows in the Windows package — keeps the build directory
-# closed, and that serving it changed nothing else.
+# in the image and the Linux package, on Windows in the Windows package, on macOS in the macOS
+# package — keeps the build directory closed, and that serving it changed nothing else.
 #
 # Usage: bash .github/scripts/smoke-gateway.sh <base-url> <admin-token>
 #   e.g. bash .github/scripts/smoke-gateway.sh http://127.0.0.1:5280 "$AGENTSPLICE_ADMIN_API_KEY"
 #
 # Every check runs and reports; the script exits non-zero if any failed.
+#
+# It runs under macOS's /bin/bash, which is Bash 3.2, and BSD grep, sed, cut, and mktemp: no mapfile,
+# no ${var,,}, no associative arrays, and no empty array expanded under set -u.
 
 set -euo pipefail
 

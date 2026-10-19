@@ -215,10 +215,13 @@ Spans arrive within about five seconds of an exchange and metrics within a minut
 ### Packaging
 
 The packages are self-contained, single-file builds with the dashboard beside them, for machines with
-no .NET installed: win-x64 for Windows and linux-x64 for x64 distributions on glibc (ADR 0017, ADR 0021;
-installing them is in `docs/INSTALLATION.md`). Building one needs the .NET 10 SDK, Node 22, pnpm 10, and
-PowerShell 7.4 or later, and the Linux package is built on Linux, whose smoke test also uses GNU tar,
-`ss` from iproute2, bash, and curl:
+no .NET installed: win-x64 for Windows, linux-x64 for x64 distributions on glibc, and osx-arm64 for Macs
+with Apple silicon (ADR 0017, ADR 0021, ADR 0029; installing them is in `docs/INSTALLATION.md`).
+Building one needs the .NET 10 SDK, Node 22, pnpm 10, and PowerShell 7.4 or later. A tar.gz is written
+on Linux or macOS with GNU tar — `tar` on Linux, `gtar` on macOS, from `brew install gnu-tar`. The
+Linux package's smoke test runs on Linux and also uses `ss` from iproute2, readelf, bash, and curl; the
+macOS package's runs on a Mac with Apple silicon and also uses `gtar`, `shasum`, `xattr`, `lsof`, and
+Xcode's command-line tools (`codesign`, `lipo`, `otool`):
 
 ```powershell
 # Windows
@@ -228,41 +231,56 @@ pwsh -File .github/scripts/smoke-package.ps1 -Archive (Get-Item artifacts/packag
 # Linux
 pwsh -File .github/scripts/package.ps1 -RuntimeIdentifier linux-x64 -OutputDirectory artifacts/package
 pwsh -File .github/scripts/smoke-package.ps1 -Archive (Get-Item artifacts/package/*.tar.gz).FullName
+
+# macOS (Apple silicon)
+pwsh -File .github/scripts/package.ps1 -RuntimeIdentifier osx-arm64 -OutputDirectory artifacts/package
+pwsh -File .github/scripts/smoke-package.ps1 -Archive (Get-Item artifacts/package/*.tar.gz).FullName -Bash /bin/bash
 ```
 
 The first script builds the dashboard, publishes the gateway with the profile named for the platform —
-`src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml` or `linux-x64.pubxml` — copies the
-dashboard to where the shipped `rootPath` looks, adds the license and the notices (ADR 0020), and writes
-`agentsplice-<version>-win-x64.zip` or `agentsplice-<version>-linux-x64.tar.gz`, and `SHA256SUMS`. The
-tar.gz records owner and group 0, the executable's execute bit, and modes nobody but the owner can
-write; it is written only on Linux, where the published executable has that bit. Everything specific to
+`src/AgentSplice.Api/Properties/PublishProfiles/win-x64.pubxml`, `linux-x64.pubxml`, or
+`osx-arm64.pubxml` — copies the dashboard to where the shipped `rootPath` looks, adds the license and
+the notices (ADR 0020), and writes `agentsplice-<version>-win-x64.zip`,
+`agentsplice-<version>-linux-x64.tar.gz`, or `agentsplice-<version>-osx-arm64.tar.gz`, and `SHA256SUMS`.
+A tar.gz records owner and group 0, the executable's execute bit, and modes nobody but the owner can
+write; it is never written on Windows, where the published executable has no such bit. The SDK signs the
+macOS executable ad hoc on any host, which Apple silicon requires, and nothing signs it with an
+identity. Everything specific to
 a package lives in its profile, never in the project file, and a contract test holds that line: a
 runtime identifier or `SelfContained` there would change the container publish and break the test
 projects. Each profile also sets the runtime switch that makes the executable's directory the content
 root, so a package finds its settings and dashboard wherever it is started from; no other build carries
 it, so `dotnet run` and the image behave exactly as before.
 
-The second script is what CI's `package-windows` and `package-linux` jobs run. It verifies the archive
-against `SHA256SUMS`, checks what the package contains — and on Linux what the archive's listing
-records — then starts it twice from an empty folder elsewhere: once with the shipped defaults, checking
-the dashboard, `/api/v1` without a token, an exchange read back from the store, the store beside the
-executable, nothing written to the working directory, and a listener on loopback only; and once with a
-token, running `smoke-gateway.sh` through Bash, which on Windows is Git Bash. Port 5280 must be free.
+The second script is what CI's `package-windows`, `package-linux`, and `package-macos` jobs run. It
+verifies the archive against `SHA256SUMS`, checks what the package contains — and outside Windows what
+the archive's listing records — then starts it twice from an empty folder elsewhere: once with the
+shipped defaults, checking the dashboard, `/api/v1` without a token, an exchange read back from the
+store, the store beside the executable, nothing written to the working directory, and a listener on
+loopback only; and once with a token, running `smoke-gateway.sh` through Bash, which on Windows is Git
+Bash and on macOS `/bin/bash`, Bash 3.2. On macOS it first runs the guide's `shasum` and `xattr`
+commands and checks that every native file is arm64, signed ad hoc, and asks for no macOS later than
+15.0. Port 5280 must be free.
+
+The macOS job runs on `macos-15`, the oldest macOS the guide names, and gates nothing (ADR 0029): when it
+fails, the run still passes. It uploads its package last, so the artifact exists only if every check
+passed.
 
 A package carries the .NET runtime of the SDK that built it, and nothing patches that runtime
 afterwards, so a package built locally with an old 10.0 SDK carries an old runtime. Releases are built
 by CI with the current 10.0 SDK, and `README.txt` in the package names the runtime version. Microsoft
 supports .NET 10 until November 14, 2028.
 
-CI's `release-assets` job then assembles what a release publishes from the two package artifacts and
-the image's archive: it verifies each, combines their digests into one `SHA256SUMS`, checks that the set
-is one archive per platform and the image's, all of one version, and uploads `agentsplice-release`. It
-runs on every change, so a defect in assembling a release fails a pull request.
+CI's `release-assets` job then assembles what a release publishes from the package artifacts and the
+image's archive: it verifies each, combines their digests into one `SHA256SUMS`, checks that the set is
+the Windows and Linux archives and the image's — and the macOS archive exactly when its job uploaded
+one, with a warning on the run when it did not — all of one version, and uploads `agentsplice-release`.
+It runs on every change, so a defect in assembling a release fails a pull request.
 
 ## Releasing
 
 A release is a tag, what the tag produces is a draft for a maintainer to review, and only publishing
-the draft pushes the image (ADR 0018, ADR 0022):
+the draft pushes the image (ADR 0018, ADR 0022, ADR 0029):
 
 1. Set the version in `Directory.Build.props` (`VersionPrefix` and `VersionSuffix`) and the same value
    in `web/AgentSplice.Dashboard/package.json`; a contract test fails if the two differ, and another if
@@ -278,15 +296,22 @@ the draft pushes the image (ADR 0018, ADR 0022):
    the tag. Tag only a reviewed commit on `main`: a tag runs the workflows of the commit it names, as they
    are there, with whatever permissions they ask for. Release immutability is on, so a tag whose release
    has been published can never be used again; until then, a draft and its tag can still be deleted and
-   made again.
+   made again. Before tagging, open the `package (osx-arm64)` job of that commit's CI run: it gates
+   nothing, so the run passes whether it did or not (ADR 0029). If it failed, fix it first, or release
+   without the macOS package and, in the release commit, take the macOS download out of the README and
+   say in the guide that this version has none: a published release can never gain an asset.
 3. `.github/workflows/release.yml` checks that the tag names the build's version and that `LICENSE`,
    `NOTICE`, and `THIRD-PARTY-NOTICES.md` exist (ADR 0020), runs the whole CI suite against the tag, and
    creates a **draft pre-release** from the `agentsplice-release` artifact that run assembled: the
-   Windows and Linux packages it built and smoke-tested, the image as the archive it built, ran, and
-   ran again from the archive, and one `SHA256SUMS` for all three (ADR 0021, ADR 0022). Nothing is
-   visible to anyone else yet, and nothing has reached the registry.
+   Windows and Linux packages it built and smoke-tested, the macOS package when its job passed, the image
+   as the archive it built, ran, and ran again from the archive, and one `SHA256SUMS` for all of them
+   (ADR 0021, ADR 0022, ADR 0029). Nothing is visible to anyone else yet, and nothing has reached the
+   registry.
 4. Review the draft — download the assets and check them against `SHA256SUMS`, read the notes — and
-   publish it on GitHub.
+   publish it on GitHub. The notes' **macOS** paragraph says whether the draft carries the macOS
+   package. A draft without it, from a job that passed on `main` and failed on the tag, can be deleted
+   with its tag and made again once the job passes, or published as it is, with the README and the guide
+   changed as in step 2 right after.
 5. Publishing starts `.github/workflows/publish-image.yml`. It pushes the archive the release carries to
    `ghcr.io/<owner>/<repository>:<version>`, never `latest`, and writes the registry's digest into the
    release notes. Check that run, then:

@@ -38,6 +38,49 @@ All notable changes will be documented here.
   - a package file name in the README naming `0.2.0-alpha`, or a download address naming the tag
     `v0.2.0-alpha`, fails `The_guides_name_the_version_the_build_carries`;
   - the README's `docker run` without its `--volume` fails `The_readme_runs_the_image_as_ci_does`.
+- **A macOS package for Apple silicon** (ADR 0029, launch decision D3).
+  `agentsplice-<version>-osx-arm64.tar.gz` is the Linux package's twin for Macs with Apple silicon on
+  macOS 15 or later: self-contained and single-file, with the dashboard beside it, from a new
+  `osx-arm64` publish profile. The SDK signs its executable ad hoc, as Apple silicon requires; nothing
+  signs it with an identity, and Apple does not notarize it, so a browser's download of it opens only
+  once `xattr -dr com.apple.quarantine` clears the quarantine mark from the extracted folder, after the
+  digest check. The installation guide gains a macOS section, and the package's README, the release
+  notes, `docs/SECURITY.md`, and `docs/THREAT_MODEL.md` say the same. The README's quickstart offers the
+  package from the first release that carries it.
+  - The package script writes a tar.gz on Linux or macOS with GNU tar, `gtar` on macOS, and refuses
+    only Windows. The smoke test takes the third platform: the guide's `shasum` command, which must
+    also fail for a file `SHA256SUMS` does not list; the listing read with `gtar`, with no `._` entries;
+    the quarantine command on an unmarked folder and on one whose every entry is marked; every Mach-O
+    file arm64, signed ad hoc, passing `codesign --verify --strict`, and asking for no macOS later than
+    15.0; the listener found with `lsof`; and the shared gateway smoke test under macOS's Bash 3.2.
+  - A `package-macos` CI job builds and smoke-tests it on `macos-15`, the oldest macOS Microsoft supports
+    .NET 10 on. It gates nothing: with `continue-on-error`, its failure leaves the run passing, and
+    `release-assets` takes its artifact, by ID, only when the job reported one — which it does only
+    after every check — and otherwise assembles the release without it and warns. The release accepts
+    the three required archives, or those and the macOS one, and its notes say which. The runbook has
+    the maintainer check the macOS job before tagging.
+  - The Windows and Linux packages were built and smoke-tested locally with the changed scripts, and the
+    macOS archive was written on Linux in a .NET 10 SDK container, where a script read both of its
+    Mach-O files and recomputed every page hash their signatures list. The assembly and publishing
+    scripts were rehearsed with the macOS archive, without it, with one no artifact ID announced, and
+    with an ID and no archive; the last two are refused. Only GitHub's macOS runner runs the macOS smoke
+    test.
+  - Each new contract test was verified to fail against a deliberately reintroduced defect: `osx-arm64`
+    dropped from the package script, or its profile without the content-root switch, fails
+    `SelfContainedPackageContractTests`; the macOS job without `continue-on-error` or its timeout, its
+    smoke test allowed to fail, `release-assets` not needing it, its download without its condition or
+    conditioned on the job's result, or the verification not told its ID fails
+    `Every_platform_the_package_script_builds_is_built_smoke_tested_and_uploaded_by_ci` or
+    `Ci_assembles_a_release_from_exactly_the_artifacts_it_built_and_checked`; the job on `macos-latest`,
+    the guide stating macOS 14, or the release notes stating no floor fails
+    `The_macOS_package_is_tested_on_the_oldest_macOS_its_documents_state`; the guide's command without
+    `-r`, or the package's README without it, fails
+    `Every_document_that_offers_the_macOS_package_says_how_to_clear_the_quarantine_mark`; the notes
+    without their line for a release with no macOS package fail
+    `The_draft_notes_list_known_limitations_and_when_the_runtime_stops_being_patched`; the release's
+    verification not naming the macOS archive fails `The_release_publishes_what_ci_assembled_and_nothing_else`;
+    and a macOS package name in the guide naming `0.2.0-alpha` fails
+    `The_guides_name_the_version_the_build_carries`.
 
 ## 0.2.1-alpha — 2026-10-19
 

@@ -27,6 +27,7 @@ body:
         - Docker Compose from a clone
         - Windows package
         - Linux package
+        - macOS package
         - From source
     validations:
       required: true

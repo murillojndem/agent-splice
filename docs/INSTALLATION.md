@@ -17,7 +17,8 @@ LM Studio's `http://127.0.0.1:1234/v1` by default. Point a client at `http://127
 | [Docker](#docker) | Docker; Compose v2 to build from a clone | Docker is already there: the published image needs nothing from the repository. The store lives in a volume, and an administrative token is required. |
 | [Windows package](#windows-package) | Windows 10 or 11, x64 | You want no Docker and no .NET installation: a folder you extract and run. |
 | [Linux package](#linux-package) | An x64 distribution based on glibc 2.34 or later, with OpenSSL 1.1.1 or later | The same on Linux: no Docker and no .NET installation. |
-| [From source](#from-source) | .NET 10 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on macOS or another platform without a package. |
+| [macOS package](#macos-package) | A Mac with Apple silicon, macOS 15 or later | The same on a Mac, when the release carries one. |
+| [From source](#from-source) | .NET 10 SDK; Node 22 and pnpm 10 for the dashboard | You are developing AgentSplice, or running it directly on an Intel Mac or another platform without a package. |
 
 ## Docker
 
@@ -35,8 +36,9 @@ cannot tell that the port is published on loopback only, so the gateway refuses 
 ### Published image
 
 The image is `ghcr.io/murillojndem/agent-splice`, tagged with each release's version — never `latest` —
-and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation. It is
-public, so no sign-in is needed, and `manifest unknown` means that the version you named has no image.
+and built for `linux/amd64` only; on an Apple silicon Mac, Docker Desktop runs it under emulation, and on
+an Intel Mac it runs natively. It is public, so no sign-in is needed, and `manifest unknown` means that
+the version you named has no image.
 
 Choose a token, then start it:
 
@@ -394,6 +396,87 @@ To uninstall, stop the gateway and delete its folder, `~/.local/share/agentsplic
 any `AGENTSPLICE__*` variables, and `AGENTSPLICE_ADMIN_API_KEY`, that you exported in your shell's
 startup files.
 
+## macOS package
+
+A self-contained build for Macs with Apple silicon, on macOS 15 or later (ADR 0029): the oldest version
+Microsoft supports .NET 10 on, and the one CI runs every build of the package on. It carries its own .NET
+runtime and the dashboard, so nothing needs to be installed first. There is none for Intel Macs, where
+the [published image](#published-image) runs natively, or AgentSplice runs [from source](#from-source).
+
+A release carries the macOS package when the CI job that builds and checks it passed. That job does not
+hold a release back, so a release can come without it; its notes say whether it has one.
+
+### Download and verify
+
+Download `agentsplice-<version>-osx-arm64.tar.gz` and `SHA256SUMS` into one folder, from a release that
+carries the package. A commit on `main` that no release carries yet is in the `agentsplice-osx-arm64`
+artifact of a CI run for a push to `main` — never one for a pull request — with the same two files
+(`gh run download <run-id> --name agentsplice-osx-arm64`, as shown for Windows). Check the archive
+against its own line in `SHA256SUMS`:
+
+```bash
+archive=agentsplice-0.2.1-alpha-osx-arm64.tar.gz   # the file you downloaded
+grep -F "  $archive" SHA256SUMS | shasum -a 256 --check --strict -
+```
+
+It must print `agentsplice-0.2.1-alpha-osx-arm64.tar.gz: OK`; if the line is missing, `shasum` finds
+nothing to check and fails.
+
+### Extract
+
+As on Linux, into a folder only your account can write, under your home folder but outside Desktop,
+Documents, and Downloads, which macOS may keep in iCloud or guard with a permission prompt:
+
+```bash
+mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
+tar -xzf agentsplice-0.2.1-alpha-osx-arm64.tar.gz -C ~/.local/opt/agentsplice
+```
+
+That gives `~/.local/opt/agentsplice/agentsplice-<version>-osx-arm64/`, which holds `AgentSplice.Api`,
+`libe_sqlite3.dylib`, `appsettings.json`, the `dashboard` folder, `README.txt`, and the license:
+`LICENSE`, `NOTICE`, `THIRD-PARTY-NOTICES.md`, and, in `licenses`, the licenses and notices of the .NET
+runtime and ASP.NET Core it bundles. Mode 700 matters for the reasons it does on Linux: SQLite creates
+the store readable by every account the umask allows, and whoever can write the folder can replace the
+executable and the dashboard's script.
+
+### If macOS refuses to open it
+
+Apple silicon runs no unsigned code, so the package's executable is signed ad hoc: a signature that
+names nobody. Apple has not notarized it. A file downloaded with a browser carries macOS's quarantine
+mark, and extracting it can copy the mark onto every file in the folder, as Finder does; macOS then
+refuses to open the executable, and SQLite's library, saying that Apple could not verify them. `curl`
+sets no mark, so a package downloaded with it opens as it is.
+
+Clear the mark from the extracted folder, and only once the archive has matched its line in
+`SHA256SUMS`: that check is what ties the files to the release, and clearing the mark skips the check
+macOS would otherwise make the first time it opens them.
+
+```bash
+xattr -dr com.apple.quarantine ~/.local/opt/agentsplice/agentsplice-0.2.1-alpha-osx-arm64
+```
+
+`-r` clears every file and folder in it, the library included. The command also succeeds, silently, on a
+folder that carries no mark. Instead, **Open Anyway** in System Settings → Privacy & Security allows the
+file macOS last refused, one file at a time.
+
+### Run
+
+```bash
+~/.local/opt/agentsplice/agentsplice-0.2.1-alpha-osx-arm64/AgentSplice.Api
+```
+
+As on Windows and Linux, it can be started from any folder, reads its settings and serves its dashboard
+from beside the executable, and writes nothing where it was started. Stop it with Ctrl+C.
+
+### Token, configuration, data, upgrade, and uninstall
+
+All of these work as for the [Linux package](#token-configuration-and-data), with the same commands in
+zsh, macOS's default shell, and the same two differences from Windows: environment variable names are
+case-sensitive, and `~` is not expanded inside a setting. The store can live in
+`~/.local/share/agentsplice`, set to mode 700, as there. Upgrading and uninstalling are as for Linux too:
+macOS updates never patch the .NET runtime the package carries, so upgrading AgentSplice is how it
+receives .NET security fixes, and `README.txt` names that runtime's version.
+
 ## From source
 
 With the .NET 10 SDK installed (`docs/DEVELOPMENT.md` lists the prerequisites), from the repository
@@ -472,6 +555,8 @@ curl.exe -i http://127.0.0.1:5280/health/live
 | Building from source fails with `NU1901` to `NU1904` | A security advisory was published, after the commit you are building, against a package it references. Build a newer commit, or use a release's package or image, which need no build. |
 | On Linux, startup fails with ``version `GLIBC_2.33' not found (required by …/libe_sqlite3.so)`` | The distribution's glibc is older than the SQLite library the package bundles needs. Use a distribution based on glibc 2.34 or later, or the Docker image. |
 | `Permission denied` starting `AgentSplice.Api` on Linux | The archive was extracted with a tool that dropped the execute bit. Extract it with `tar -xzf`, which keeps it, or run `chmod +x AgentSplice.Api`. |
+| On a Mac, "AgentSplice.Api" or "libe_sqlite3.dylib" cannot be opened, or Apple could not verify it | The files carry the quarantine mark of a browser's download. Once the archive has matched `SHA256SUMS`, clear the mark from the package folder with `xattr -dr com.apple.quarantine <folder>` ([If macOS refuses to open it](#if-macos-refuses-to-open-it)). |
+| `bad CPU type in executable` on a Mac | The Mac has an Intel processor, and the macOS package is for Apple silicon only. Use the [published image](#published-image), which runs natively there, or run from source. |
 | On Linux, `/api/v1` answers `401` with the token you set | The gateway did not see the variable: its name differs in case from the one `agentsplice:administration:apiKeyEnvironmentVariable` names, which on Linux must match exactly, or it was not exported in the shell that started the gateway. Export it, then start the gateway from that shell. |
 | `Failed to bind to address http://127.0.0.1:5280` | Something else is using the port. Stop it, or pass `--urls http://127.0.0.1:<another port>`. |
 | Startup refuses a binding beyond loopback | Serving stored evidence to a network requires an administrative token (`docs/SECURITY.md`). A `Kestrel:Endpoints` entry that is not loopback, a socket or pipe endpoint, and `FORWARDEDHEADERS_ENABLED` count as beyond loopback too. |

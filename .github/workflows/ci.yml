@@ -401,8 +401,8 @@ jobs:
           docker volume rm agentsplice-data || true
 
   package-windows:
-    # The Windows package is one of the two ways an alpha user installs AgentSplice without Docker or a
-    # .NET SDK (ADR 0017). Built and started here on every change, like the image, so a packaging defect
+    # The Windows package is one of the ways an alpha user installs AgentSplice without Docker or a .NET
+    # SDK (ADR 0017). Built and started here on every change, like the image, so a packaging defect
     # fails a pull request rather than a release. Windows, because the package is a Windows executable
     # and because only the Windows file system can prove the backslash traversal checks. The artifact it
     # uploads is what a tagged release publishes, through release-assets, which takes it by its ID.
@@ -507,6 +507,68 @@ jobs:
             artifacts/package/SHA256SUMS
           if-no-files-found: error
 
+  package-macos:
+    # The macOS package (ADR 0029): the Linux package's twin for Macs with Apple silicon, built and
+    # smoke-tested on macOS 15, the oldest macOS Microsoft supports .NET 10 on and the floor the
+    # installation guide states, so a package that runs here runs on every version the guide names.
+    #
+    # It does not gate anything (launch decision D3): when it fails, the run still passes, and
+    # release-assets assembles the release without it, with a warning, and the draft says so. Nothing
+    # else in it can be skipped or allowed to fail, and the upload is its last step, so its artifact —
+    # and the artifact ID release-assets decides by — exists only if every check passed. With
+    # continue-on-error a failure reads as success to the jobs that need this one, which is why they go
+    # by that ID. The timeout bounds how long release-assets, which waits for it, can be held.
+    name: package (osx-arm64)
+    runs-on: macos-15
+    continue-on-error: true
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # As for Windows: the package carries this SDK's runtime.
+          dotnet-version: '10.0.x'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+
+      - name: Set up Node
+        # No dependency cache, as for Windows.
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build the package
+        # With GNU tar, which this image carries as gtar beside macOS's own bsdtar.
+        run: ./.github/scripts/package.ps1 -RuntimeIdentifier osx-arm64 -OutputDirectory artifacts/package
+
+      - name: Smoke test the package
+        # macOS's own Bash, 3.2, as a Mac user has it.
+        run: |
+          $archive = Get-ChildItem artifacts/package -Filter 'agentsplice-*-osx-arm64.tar.gz' | Select-Object -First 1
+          ./.github/scripts/smoke-package.ps1 -Archive $archive.FullName -Bash /bin/bash
+
+      - name: Upload the package
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsplice-osx-arm64
+          path: |
+            artifacts/package/*.tar.gz
+            artifacts/package/SHA256SUMS
+          if-no-files-found: error
+
   release-assets:
     # What a release publishes, assembled from what the jobs it needs built and checked (ADR 0021): every
     # archive, verified against its own digest, with one SHA256SUMS for all of them. It runs on every
@@ -516,9 +578,13 @@ jobs:
     # an artifact under an existing name, archive and SHA256SUMS together, and a digest check against a
     # file that came in the same artifact would still pass. A re-uploaded artifact has another ID, so the
     # download fails instead. It checks nothing out and installs nothing.
+    #
+    # The macOS package is the one exception to "every archive" (ADR 0029): its job does not gate, so a
+    # release carries it exactly when that job reported an artifact ID, which it does only once every
+    # check in it passed; otherwise the release is assembled without it, and this job warns.
     name: release assets
     # The image archive only once image-archive has loaded and run it the way the guide does.
-    needs: [package-windows, package-linux, image, image-archive]
+    needs: [package-windows, package-linux, package-macos, image, image-archive]
     runs-on: ubuntu-24.04
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
@@ -536,6 +602,15 @@ jobs:
           artifact-ids: ${{ needs.package-linux.outputs.artifact-id }}
           path: artifacts/linux
 
+      - name: Download the macOS package
+        # Only when its job uploaded one: with no ID, download-artifact would take every artifact of the
+        # run instead.
+        if: needs.package-macos.outputs.artifact-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.package-macos.outputs.artifact-id }}
+          path: artifacts/macos
+
       - name: Download the image
         uses: actions/download-artifact@v4
         with:
@@ -543,6 +618,9 @@ jobs:
           path: artifacts/image
 
       - name: Verify each artifact and combine their digests
+        env:
+          # Empty when the macOS job did not upload a package.
+          MACOS_ARTIFACT_ID: ${{ needs.package-macos.outputs.artifact-id }}
         run: |
           mkdir release
           for download in artifacts/*/; do
@@ -566,11 +644,18 @@ jobs:
           done
           LC_ALL=C sort -k 2 "$RUNNER_TEMP/SHA256SUMS" > release/SHA256SUMS
 
-          # Exactly one archive per platform and the image's, all of one version, and nothing else.
+          # Exactly one archive per platform and the image's, all of one version, and nothing else; the
+          # macOS archive exactly when its job uploaded one (ADR 0029).
           version="$(ls release | sed -nE 's/^agentsplice-(.+)-win-x64\.zip$/\1/p')"
-          expected="$(printf '%s\n' SHA256SUMS "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          expected="$(printf '%s\n' SHA256SUMS "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip")"
+          if [ -n "$MACOS_ARTIFACT_ID" ]; then
+            expected="$(printf '%s\n' "$expected" "agentsplice-$version-osx-arm64.tar.gz")"
+          else
+            echo "::warning title=No macOS package::The package (osx-arm64) job uploaded no package, so these release assets carry none (ADR 0029). Its log says why."
+          fi
+          expected="$(LC_ALL=C sort <<< "$expected")"
           if [ -z "$version" ] || [ "$(ls release | LC_ALL=C sort)" != "$expected" ]; then
-            echo "The release assets are not the two packages and the image of one version:" >&2
+            echo "The release assets are not the packages and the image of one version:" >&2
             ls release >&2
             exit 1
           fi

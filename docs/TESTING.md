@@ -708,6 +708,47 @@ build now hold the README too.
 
 Each fails against its reintroduced defect, listed in the changelog.
 
+## After 0.2.1-alpha: a macOS package
+
+The macOS package is the Linux package's twin for Apple silicon, and it gates nothing: its CI job may
+fail without failing the run, and a release carries it only when the job passed (ADR 0029). The tests
+hold it to the same rules as the other packages, and hold the exception to exactly that.
+
+- `SelfContainedPackageContractTests`: the self-contained profiles are exactly `linux-x64`,
+  `osx-arm64`, and `win-x64`, so every theory over a profile — self-contained, single-file, untrimmed,
+  uncompressed, not ReadyToRun, native libraries beside the executable, no IIS assets, the content-root
+  switch, no development settings — now covers the macOS one, and the package script must accept it.
+- `ReleaseWorkflowContractTests`:
+  - every platform the package script accepts has a CI job that builds, smoke-tests, and uploads it and
+    reports the artifact's ID. The Windows and Linux jobs gate as before. The macOS job, the one platform
+    the test lists as optional, must have `continue-on-error: true` and a timeout of an hour or less, no
+    condition, no step that can be skipped or allowed to fail, and its upload last;
+  - `release-assets` needs every package job, and no step of it can be skipped but the download of the
+    optional artifact, whose condition must be exactly that its job reported an ID; its verification is
+    given that ID and names the macOS archive. Every other job it needs gates as before;
+  - the release notes say when a release has no macOS package;
+  - `The_macOS_package_is_tested_on_the_oldest_macOS_its_documents_state`: the smoke test's
+    `$macosFloor`, the "macOS N or later" in the installation guide, the package script's README, and
+    the release notes — and in the README once it offers the package — and the macOS job's runner label,
+    `macos-N`, are one version;
+  - `Every_document_that_offers_the_macOS_package_says_how_to_clear_the_quarantine_mark`: each of the
+    README, the installation guide, the package script, and the release workflow that names `osx-arm64`
+    gives `xattr -dr com.apple.quarantine`, and the smoke test runs it;
+  - `The_guides_name_the_version_the_build_carries` reads an `osx-arm64` package name too.
+
+What only a Mac can prove is the CI `package-macos` job, on `macos-15`. Beyond what the Linux job checks,
+it runs the guide's `shasum` command and checks that it fails for a file `SHA256SUMS` does not list; reads
+the listing with `gtar` and finds no `._` entries; runs the guide's `xattr` command on a folder with no
+mark, then on one whose every file and folder carries it, and finds none left; prints whether bsdtar
+carried a quarantined archive's mark onto what it extracted; and holds every Mach-O file to arm64,
+`codesign --verify --strict`, an ad-hoc signature, and a `minos` no later than 15.0. Before that job
+first ran, the package was also written on Linux in a .NET 10 SDK container: the archive's listing, and
+a script that read both Mach-O files and recomputed every page hash their signatures list, matched what
+the smoke test expects. The Windows and Linux packages were built and smoke-tested again with the
+changed scripts.
+
+Each fails against its reintroduced defect, listed in the changelog.
+
 ## Testcontainers
 
 Use PostgreSQL Testcontainers for persistence integration tests. SQLite tests remain required because behavior differs. Evaluation containers must use independent fixtures and explicit resource limits.

@@ -7,9 +7,9 @@ using Xunit;
 namespace AgentSplice.IntegrationTests.Hosting;
 
 /// <summary>
-/// Each self-contained package's publish profile builds what ADR 0017 and ADR 0021 describe, the package
-/// script builds exactly those packages, and nothing package-specific leaks into the builds everything
-/// else uses.
+/// Each self-contained package's publish profile builds what ADRs 0017, 0021, and 0029 describe, the
+/// package script builds exactly those packages, and nothing package-specific leaks into the builds
+/// everything else uses.
 /// </summary>
 /// <remarks>
 /// A file-reading test here rather than in the contract suite because the runtime switch's name is
@@ -25,7 +25,7 @@ public sealed partial class SelfContainedPackageContractTests
         ["RuntimeIdentifier", "RuntimeIdentifiers", "SelfContained", "PublishSingleFile", "PublishTrimmed", "PublishReadyToRun"];
 
     /// <summary>The platforms a package is built for, one publish profile each.</summary>
-    private static readonly string[] PlatformNames = ["linux-x64", "win-x64"];
+    private static readonly string[] PlatformNames = ["linux-x64", "osx-arm64", "win-x64"];
 
     public static TheoryData<string> Platforms()
     {

@@ -1,9 +1,11 @@
 name: Release
 
-# A tag v<version> becomes a draft pre-release carrying the Windows and Linux packages, the image as an
-# archive, and one SHA256SUMS for all three (ADR 0018, ADR 0021, ADR 0022). Nothing is published until a
-# maintainer reviews the draft and publishes it by hand. This workflow never reaches the registry:
-# publishing the draft starts publish-image.yml, which pushes exactly the archive the draft carries.
+# A tag v<version> becomes a draft pre-release carrying the Windows and Linux packages, the macOS package
+# when its CI job passed, the image as an archive, and one SHA256SUMS for all of them (ADR 0018, ADR 0021,
+# ADR 0022, ADR 0029). Nothing is published until a maintainer reviews the draft and publishes it by
+# hand; the draft's notes say whether it carries the macOS package. This workflow never reaches the
+# registry: publishing the draft starts publish-image.yml, which pushes exactly the archive the draft
+# carries.
 
 on:
   push:
@@ -62,8 +64,8 @@ jobs:
 
   ci:
     # The whole CI suite against the tagged commit: both platforms' tests, the dashboard, the image, and
-    # both packages, which this run builds, smoke-tests, and assembles with the image into the release's
-    # assets.
+    # the packages, which this run builds, smoke-tests, and assembles with the image into the release's
+    # assets — the macOS package only if its job passed, since it gates nothing (ADR 0029).
     name: ci
     needs: version
     uses: ./.github/workflows/ci.yml
@@ -101,8 +103,15 @@ jobs:
           sha256sum --check --strict SHA256SUMS
           # SHA256SUMS lists exactly this tag's archives, one per platform, and the folder holds nothing
           # else; the draft is then made of what it lists, so its assets and its digests cannot drift.
+          # The macOS archive is there only when its CI job passed (ADR 0029), and the notes say which.
           version="${GITHUB_REF_NAME#v}"
-          expected="$(printf '%s\n' "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip" | LC_ALL=C sort)"
+          macos="agentsplice-$version-osx-arm64.tar.gz"
+          expected="$(printf '%s\n' "agentsplice-$version-image-linux-amd64.tar.gz" "agentsplice-$version-linux-x64.tar.gz" "agentsplice-$version-win-x64.zip")"
+          if awk '{print $2}' SHA256SUMS | grep -Fxq -- "$macos"; then
+            expected="$(printf '%s\n' "$expected" "$macos")"
+            echo "MACOS=$macos" >> "$GITHUB_ENV"
+          fi
+          expected="$(LC_ALL=C sort <<< "$expected")"
           if [ "$(awk '{print $2}' SHA256SUMS | LC_ALL=C sort)" != "$expected" ] \
              || [ "$(ls -A | grep -vx SHA256SUMS | LC_ALL=C sort)" != "$expected" ]; then
             echo "The release assets are not exactly this tag's archives:" >&2
@@ -117,6 +126,14 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           mapfile -t assets < <(awk -v folder="$ASSETS" '{print folder "/" $2}' "$ASSETS/SHA256SUMS")
+          # Whether the macOS package is here, as the verification above found it (ADR 0029).
+          if [ -n "${MACOS:-}" ]; then
+            platforms='win-x64, linux-x64, and osx-arm64'
+            macos_notes="**macOS.** \`$MACOS\` runs on Macs with Apple silicon and macOS 15 or later, without Docker or a .NET installation. Its executable is signed ad hoc, as Apple silicon requires of anything it runs, which names nobody, and it is not notarized: downloaded with a browser, it carries the quarantine mark, and macOS refuses to open it until \`xattr -dr com.apple.quarantine\` clears the mark from the extracted folder, once the archive has matched its line in \`SHA256SUMS\`. See docs/INSTALLATION.md."
+          else
+            platforms='win-x64 and linux-x64'
+            macos_notes="**macOS.** This release has no macOS package: its CI job did not pass, and a release does not wait for it (ADR 0029). On a Mac, use the image or run from source; see docs/INSTALLATION.md."
+          fi
           cat > "$RUNNER_TEMP/notes.md" <<EOF
           An experimental alpha. No compatibility claim is made for any client, model, or runtime; support claims require a dated conformance report (docs/CONFORMANCE.md).
 
@@ -124,19 +141,21 @@ jobs:
 
           **Linux.** \`agentsplice-$version-linux-x64.tar.gz\` runs on x64 distributions based on glibc 2.34 or later, such as Ubuntu 22.04, Debian 12, or RHEL 9, with OpenSSL 1.1.1 or later, without Docker or a .NET installation. The package is not signed. See docs/INSTALLATION.md.
 
+          $macos_notes
+
           **Checking a download.** \`SHA256SUMS\` lists every asset's SHA-256 digest; check the one you downloaded against its line before extracting it, as docs/INSTALLATION.md shows. GitHub shows each asset's digest too.
 
           **Docker.** Publishing this release pushes the image to \`ghcr.io/${GITHUB_REPOSITORY,,}:$version\`, for linux/amd64, and adds its digest to these notes. \`agentsplice-$version-image-linux-amd64.tar.gz\` is the same image, for a machine without registry access: check it against \`SHA256SUMS\`, then \`docker load --input\` it. See docs/INSTALLATION.md.
 
-          **.NET.** The packages carry .NET 10, which Microsoft supports until November 14, 2028, and the image is built on it. Windows Update and .NET installers never patch a package: upgrading AgentSplice is how it receives .NET security fixes.
+          **.NET.** The packages carry .NET 10, which Microsoft supports until November 14, 2028, and the image is built on it. Neither an operating system's updates nor .NET installers patch a package: upgrading AgentSplice is how it receives .NET security fixes.
 
           **Known limitations.**
 
-          - Only \`GET /v1/models\` and \`POST /v1/chat/completions\` are served, and LM Studio is the only runtime provider. The image is linux/amd64 only; the packages are win-x64 and linux-x64.
+          - Only \`GET /v1/models\` and \`POST /v1/chat/completions\` are served, and LM Studio is the only runtime provider. The image is linux/amd64 only; the packages are $platforms.
           - \`/v1\` takes no credential. Any program on the machine can run completions through the gateway, and a gateway bound beyond loopback serves whoever reaches it; startup says so as event 1205. The administrative token protects \`/api/v1\` only.
           - The packages configure no administrative token, so every account on the machine can read the stored trace metadata through \`/api/v1\` until one is set (docs/INSTALLATION.md).
           - A client that reaches the gateway by a name other than \`localhost\`, \`127.0.0.1\`, or \`[::1]\` gets \`400\` until that name is in \`AllowedHosts\`.
-          - Nothing is signed. \`SHA256SUMS\` proves a download is intact, not who built it, and Smart App Control can block the Windows package with no way to allow it.
+          - Nothing is signed with a developer identity, and nothing is notarized. \`SHA256SUMS\` proves a download is intact, not who built it, and Smart App Control can block the Windows package with no way to allow it.
           - A failing OTLP export is not reported in the gateway's log (docs/OBSERVABILITY.md).
           - The dashboard keeps the administrative token in memory for one tab.
 

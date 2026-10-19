@@ -2,7 +2,7 @@ namespace AgentSplice.Api.Hosting;
 
 /// <summary>
 /// Decides the host's content root: the working directory, as ASP.NET Core chooses it, unless this
-/// build is a self-contained package, Windows or Linux (ADR 0017, ADR 0021).
+/// build is a self-contained package, Windows, Linux, or macOS (ADR 0017, ADR 0021, ADR 0029).
 /// </summary>
 /// <remarks>
 /// The content root is where <c>appsettings.json</c> is read from and what

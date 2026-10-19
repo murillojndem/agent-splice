@@ -1,8 +1,8 @@
 #Requires -Version 7.4
 <#
 .SYNOPSIS
-Smoke test for a self-contained package (ADR 0017, ADR 0021): it runs with no .NET SDK assumed, from any
-folder, on the platform it was built for.
+Smoke test for a self-contained package (ADR 0017, ADR 0021, ADR 0029): it runs with no .NET SDK
+assumed, from any folder, on the platform it was built for.
 
 .DESCRIPTION
 Verifies the archive against SHA256SUMS the way the installation guide tells a user to, extracts it,
@@ -16,19 +16,23 @@ elsewhere, so that a package which only works from its own directory fails here:
 2. With a token, running the shared gateway smoke test (smoke-gateway.sh), so the dashboard's serving
    rules and the traversal checks run under Kestrel on the package's own file system too.
 
-The package's name says which platform it is for, and the checks that differ between the two follow
-it: the archive format, the executable's and SQLite's file names, the executable's permission bits on
-Linux, and how the listener is found (Get-NetTCPConnection on Windows, ss on Linux).
+The package's name says which platform it is for, and the checks that differ between platforms follow
+it: the archive format, the installation guide's digest command, the executable's and SQLite's file
+names, the executable's permission bits outside Windows, the oldest glibc on Linux, and how the listener
+is found (Get-NetTCPConnection on Windows, ss on Linux, lsof on macOS). On macOS it also checks that
+every native file is arm64, signed ad hoc, and asks for no macOS later than the floor the documents
+state, and that the guide's command clears the quarantine mark a browser download carries, before it
+starts anything — the order the guide gives.
 
 Every check runs and reports; the script exits non-zero if any failed. Port 5280 must be free.
 
 .PARAMETER Archive
-The agentsplice-<version>-win-x64.zip or agentsplice-<version>-linux-x64.tar.gz that package.ps1
-wrote; SHA256SUMS beside it.
+The agentsplice-<version>-win-x64.zip, agentsplice-<version>-linux-x64.tar.gz, or
+agentsplice-<version>-osx-arm64.tar.gz that package.ps1 wrote; SHA256SUMS beside it.
 
 .PARAMETER Bash
 Bash, for the shared smoke test. On Windows, Git Bash: on a runner a bare `bash` can resolve to the WSL
-launcher.
+launcher. On macOS, /bin/bash, which is Bash 3.2.
 
 .EXAMPLE
 pwsh -File .github/scripts/smoke-package.ps1 -Archive artifacts/package/agentsplice-0.2.0-alpha-linux-x64.tar.gz
@@ -53,20 +57,28 @@ function Check([bool] $Condition, [string] $What) { if ($Condition) { Pass $What
 $archivePath = (Resolve-Path $Archive).Path
 $archiveName = Split-Path -Leaf $archivePath
 
-if ($archiveName -notmatch '^agentsplice-(?<version>.+)-(?<rid>win-x64\.zip|linux-x64\.tar\.gz)$') {
-    throw "'$archiveName' is not named like a Windows or a Linux package."
+if ($archiveName -notmatch '^agentsplice-(?<version>.+)-(?<rid>win-x64|linux-x64|osx-arm64)\.(?<format>zip|tar\.gz)$' -or
+    ($Matches.rid -eq 'win-x64') -ne ($Matches.format -eq 'zip')) {
+    throw "'$archiveName' is not named like a Windows, a Linux, or a macOS package."
 }
 
 $version = $Matches.version
-$windows = $Matches.rid -eq 'win-x64.zip'
-$rid = if ($windows) { 'win-x64' } else { 'linux-x64' }
+$rid = $Matches.rid
+$windows = $rid -eq 'win-x64'
+$linux = $rid -eq 'linux-x64'
+$macos = $rid -eq 'osx-arm64'
 
-if ($windows -ne [bool]$IsWindows) {
+# The macOS package is arm64 only; an Intel Mac would refuse it before any check could run.
+$native = if ($windows) { [bool]$IsWindows }
+elseif ($linux) { [bool]$IsLinux }
+else { [bool]$IsMacOS -and [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq [Runtime.InteropServices.Architecture]::Arm64 }
+
+if (-not $native) {
     throw "'$archiveName' is a $rid package; smoke-test it on the platform it runs on."
 }
 
 # The procedure the installation guide gives a user: the archive's own line in SHA256SUMS, by
-# Get-FileHash on Windows and sha256sum on Linux, which compute the same digest.
+# Get-FileHash on Windows, sha256sum on Linux, and shasum on macOS, which compute the same digest.
 $sums = Join-Path (Split-Path -Parent $archivePath) 'SHA256SUMS'
 $expected = Get-Content $sums |
     ForEach-Object { if ($_ -match "^(?<hash>[0-9a-f]{64})  $([regex]::Escape($archiveName))$") { $Matches.hash } } |
@@ -74,15 +86,26 @@ $expected = Get-Content $sums |
 $actual = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
 Check ($null -ne $expected -and $actual -eq $expected) "the archive matches its line in SHA256SUMS"
 
-if (-not $windows) {
+if ($linux) {
     # The very command the installation guide gives a Linux user, run where they would run it.
     $checked = @(& $Bash -c 'cd "$1" && grep -F "  $2" SHA256SUMS | sha256sum --check --strict -' bash (Split-Path -Parent $archivePath) $archiveName 2>&1)
     Check ($LASTEXITCODE -eq 0 -and ($checked -join "`n") -match "$([regex]::Escape($archiveName)): OK") "the installation guide's sha256sum check passes"
 }
 
+if ($macos) {
+    # The very command the installation guide gives a macOS user, run where they would run it. The guide
+    # also says it fails when SHA256SUMS has no line for the file, rather than checking nothing.
+    $command = 'cd "$1" && grep -F "  $2" SHA256SUMS | shasum -a 256 --check --strict -'
+    $checked = @(& $Bash -c $command bash (Split-Path -Parent $archivePath) $archiveName 2>&1)
+    Check ($LASTEXITCODE -eq 0 -and ($checked -join "`n") -match "$([regex]::Escape($archiveName)): OK") "the installation guide's shasum check passes"
+    & $Bash -c $command bash (Split-Path -Parent $archivePath) "agentsplice-$version-unlisted-osx-arm64.tar.gz" 2>&1 | Out-Null
+    Check ($LASTEXITCODE -ne 0) "the installation guide's shasum check fails for a file SHA256SUMS does not list"
+}
+
 # Under the repository's ignored artifacts directory rather than the temporary directory, whose path
 # on a hosted Windows runner can be an 8.3 short name (RUNNER~1) that the gateway would report in its
-# long form, failing the path comparisons below for no reason to do with the package.
+# long form, and on macOS lies under /var, a link to /private/var that the gateway would report
+# resolved, failing the path comparisons below for no reason to do with the package.
 $work = Join-Path $repository 'artifacts' ("smoke-$rid-" + [guid]::NewGuid().ToString('N'))
 $extracted = Join-Path $work 'extracted'
 $elsewhere = Join-Path $work 'elsewhere'
@@ -114,7 +137,7 @@ function Send([string] $Method, [string] $Path, [string] $Body = $null) {
     }
 }
 
-# Whether anything listens on port 5280, on either platform.
+# Whether anything listens on port 5280, on any platform.
 function Test-PortBusy {
     @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
             Where-Object { $_.Port -eq 5280 }).Count -gt 0
@@ -125,6 +148,14 @@ function Get-Listeners([Diagnostics.Process] $Process) {
     if ($windows) {
         return @(Get-NetTCPConnection -State Listen -OwningProcess $Process.Id -ErrorAction SilentlyContinue |
                 ForEach-Object { $_.LocalAddress })
+    }
+
+    if ($macos) {
+        # lsof -Fn: an "n<local address:port>" line for each listening socket of the process, after its
+        # "p" and "f" lines. It exits 1 when the process listens on nothing, which is an answer here.
+        $lines = @(& lsof -nP -a -p $Process.Id -iTCP -sTCP:LISTEN -Fn 2>$null)
+
+        return @($lines | Where-Object { $_.StartsWith('n') } | ForEach-Object { $_.Substring(1) -replace ':\d+$', '' })
     }
 
     # ss -H: no header. Each line is "LISTEN <recv-q> <send-q> <local address:port> <peer> users:((...))",
@@ -196,14 +227,20 @@ try {
     else {
         # What the archive records, before anything is extracted: every entry owned by 0:0, so it names no
         # account of the machine that built it, and nothing writable by group or others. The listing's
-        # first column is the mode, the second owner/group.
-        $listing = @(& tar --numeric-owner -tvzf $archivePath)
+        # first column is the mode, the second owner/group, in GNU tar's format, which is why macOS reads
+        # it with gtar: its own bsdtar lists owner and group as two columns.
+        $gnuTar = if ($macos) { 'gtar' } else { 'tar' }
+        $listing = @(& $gnuTar --numeric-owner -tvzf $archivePath)
 
         if ($LASTEXITCODE -ne 0) {
-            throw "tar could not list '$archiveName'."
+            throw "$gnuTar could not list '$archiveName'."
         }
 
         Check (-not ($listing | Where-Object { ($_ -split '\s+')[1] -ne '0/0' })) "every entry in the archive is owned by 0:0"
+
+        # No AppleDouble companions: bsdtar writes a ._ file for each file with extended attributes, which
+        # would extract on Linux as stray files and on a Mac as attributes the package never had.
+        Check (-not ($listing | Where-Object { ($_ -split '\s+')[-1] -match '(^|/)\._' })) "the archive holds no ._ (AppleDouble) entries"
 
         # Exactly the modes the package script sets: folders rwxr-xr-x, the executable rwxr-xr-x, and
         # every other file rw-r--r--, whatever modes the build machine left on them.
@@ -217,7 +254,8 @@ try {
         Check ($unexpected.Count -eq 0) "folders and the executable are rwxr-xr-x and every other file rw-r--r-- ($($unexpected -join '; '))"
         Check ([bool]($listing | Where-Object { $_ -match '^-rwxr-xr-x\s.*/AgentSplice\.Api$' })) "the archive records AgentSplice.Api as executable (rwxr-xr-x)"
 
-        # As the installation guide extracts it; tar restores the permission bits the archive records.
+        # As the installation guide extracts it, with the system's tar — bsdtar on macOS; tar restores the
+        # permission bits the archive records.
         & tar -xzf $archivePath -C $extracted
 
         if ($LASTEXITCODE -ne 0) {
@@ -230,7 +268,7 @@ try {
 
     $package = $top[0].FullName
     $executableName = if ($windows) { 'AgentSplice.Api.exe' } else { 'AgentSplice.Api' }
-    $sqlite = if ($windows) { 'e_sqlite3.dll' } else { 'libe_sqlite3.so' }
+    $sqlite = if ($windows) { 'e_sqlite3.dll' } elseif ($macos) { 'libe_sqlite3.dylib' } else { 'libe_sqlite3.so' }
     $exe = Join-Path $package $executableName
 
     Check (Test-Path $exe) "the package holds $executableName"
@@ -238,7 +276,71 @@ try {
     if (-not $windows) {
         $mode = [IO.File]::GetUnixFileMode($exe)
         Check ($mode.HasFlag([IO.UnixFileMode]::UserExecute)) "$executableName is executable once extracted ($mode)"
+    }
 
+    if ($macos) {
+        # The package is signed ad hoc and not notarized, so a browser's quarantine mark makes macOS refuse
+        # to open it; the installation guide clears the mark after the digest check and before the first
+        # start, with this very command (ADR 0029). The entries a folder holds, the folder included:
+        function Get-Entries([string] $Path) { @(& find $Path) }
+        function Get-Quarantined([string] $Path) { @(& find $Path -xattrname com.apple.quarantine) }
+        $mark = '0083;{0:x8};Safari;' -f [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+
+        # A download made with curl, as the README's commands are, carries no mark: the command must
+        # succeed on such a folder and say nothing.
+        $said = @(& xattr -dr com.apple.quarantine $package 2>&1)
+        $code = $LASTEXITCODE
+        Check ($code -eq 0 -and $said.Count -eq 0) "the guide's xattr command succeeds, and says nothing, on a folder with no quarantine mark (exit $code; $($said -join '; '))"
+
+        # Whether this macOS's tar carries an archive's mark onto what it extracts: recorded, not
+        # required, because the guide clears the folder either way.
+        $probe = Join-Path $work 'probe'
+        New-Item -ItemType Directory -Force -Path $probe | Out-Null
+        $marked = Join-Path $work $archiveName
+        Copy-Item -Path $archivePath -Destination $marked
+        & xattr -w com.apple.quarantine $mark $marked
+        & tar -xzf $marked -C $probe
+        Write-Host "note  tar extracting a quarantined archive marked $((Get-Quarantined $probe).Count) of $((Get-Entries $probe).Count) entries"
+
+        # Finder's Archive Utility marks every file and folder it extracts from a quarantined archive.
+        & xattr -r -w com.apple.quarantine $mark $package
+        $entries = (Get-Entries $package).Count
+        Check ((Get-Quarantined $package).Count -eq $entries) "every one of the package's $entries entries carries the quarantine mark, as Finder leaves a browser download"
+
+        $said = @(& xattr -dr com.apple.quarantine $package 2>&1)
+        $code = $LASTEXITCODE
+        $left = Get-Quarantined $package
+        Check ($code -eq 0 -and $left.Count -eq 0) "the guide's xattr command clears the mark from every file and folder (exit $code; $((@($said) + @($left)) -join '; '))"
+
+        # Apple silicon runs no unsigned code. Every native file — found by its Mach-O magic, as the Linux
+        # check finds ELF — is arm64 only, signed ad hoc, which names nobody, and asks for no macOS later
+        # than the floor the installation guide, the package's README, and the release notes state; a
+        # contract test holds them, and the macOS runner CI uses, to it. Today the newest any file asks
+        # for is the .NET runtime's 12.0, while Microsoft supports .NET 10 from macOS 15.
+        $macosFloor = [version]'15.0'
+        $machO = @(Get-ChildItem -Path $package -Recurse -File | Where-Object {
+                (@(Get-Content -Path $_.FullName -AsByteStream -TotalCount 4) -join ',') -in @('207,250,237,254', '202,254,186,190')
+            })
+        Check ($machO.Count -ge 2) "the package's native files are Mach-O ($(($machO | ForEach-Object Name) -join ', '))"
+
+        foreach ($file in $machO) {
+            $archs = "$(& lipo -archs $file.FullName 2>&1)".Trim()
+            Check ($archs -eq 'arm64') "$($file.Name) is arm64 only ($archs)"
+
+            $verified = @(& codesign --verify --strict $file.FullName 2>&1)
+            Check ($LASTEXITCODE -eq 0) "$($file.Name) has a valid signature ($($verified -join '; '))"
+
+            $signature = (@(& codesign -dv $file.FullName 2>&1) -join "`n")
+            Check ($signature -match '(?m)^Signature=adhoc$') "$($file.Name) is signed ad hoc"
+
+            $minimums = @(& otool -l $file.FullName |
+                    Select-String -Pattern '^\s*minos (\d+\.\d+(?:\.\d+)?)\s*$' |
+                    ForEach-Object { [version]$_.Matches[0].Groups[1].Value })
+            Check ($minimums.Count -ge 1 -and -not ($minimums | Where-Object { $_ -gt $macosFloor })) "$($file.Name) asks for macOS $($minimums -join ', '), no later than the $macosFloor its documents state"
+        }
+    }
+
+    if ($linux) {
         # The oldest glibc the package runs on is the newest any of its native files asks for. Today
         # that is the bundled SQLite library's, not the .NET runtime's, and nothing else would notice
         # it rising: this runner's glibc is newer than either. The installation guide, the package's
@@ -276,6 +378,10 @@ try {
         }
         else {
             Check (-not $readme.Contains("`r")) "README.txt has Unix line endings"
+        }
+
+        if ($macos) {
+            Check ($readme.Contains('xattr -dr com.apple.quarantine .')) "README.txt says how to clear the quarantine mark"
         }
     }
 

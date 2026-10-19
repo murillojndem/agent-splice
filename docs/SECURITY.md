@@ -63,32 +63,39 @@ The gateway serves the dashboard build at `/dashboard/` on its own origin (ADR 0
 
 ## Local installation
 
-The Windows and Linux packages (ADR 0017, ADR 0021, `docs/INSTALLATION.md`) run as the user who
-starts them, from a folder that user extracted:
+The Windows, Linux, and macOS packages (ADR 0017, ADR 0021, ADR 0029, `docs/INSTALLATION.md`) run as
+the user who starts them, from a folder that user extracted:
 
 - **The folder is trusted like `/app` in the image.** Whoever can write it can replace the executable,
   its settings, and the dashboard's script. Install it under the user's own profile
-  (`%LOCALAPPDATA%\Programs` on Windows, a folder set to mode 700 under the home directory on Linux),
-  not in a folder every user can write; a folder created directly under `C:\` inherits write access for
-  all authenticated users. The Linux archive records folders and the executable as `rwxr-xr-x` and every
-  other file as `rw-r--r--`.
+  (`%LOCALAPPDATA%\Programs` on Windows, a folder set to mode 700 under the home directory on Linux and
+  macOS), not in a folder every user can write; a folder created directly under `C:\` inherits write
+  access for all authenticated users. The Linux and macOS archives record folders and the executable as
+  `rwxr-xr-x` and every other file as `rw-r--r--`.
 - **The store holds evidence.** `agentsplice.db` beside the executable, or wherever
   `agentsplice:persistence:connectionString` points, holds the structural metadata and identifiers
   this document lists as retained, unencrypted. It is protected by the folder's permissions alone, and
-  so are copies of it. On Linux, SQLite creates the file readable by whomever the umask allows — usually
-  every account on the machine — so the guide sets the folders it suggests to mode 700. The folder
-  protects the file only; see the next point for what the gateway serves.
+  so are copies of it. On Linux and macOS, SQLite creates the file readable by whomever the umask allows
+  — usually every account on the machine — so the guide sets the folders it suggests to mode 700. The
+  folder protects the file only; see the next point for what the gateway serves.
 - **The default is loopback without a token,** which serves `/api/v1` to every local caller — every
   account on the machine, not only the one that started the gateway, while it runs. Setting a token is
   recommended even so, and on a machine with other accounts it is what keeps the evidence to its owner;
   the installation guide shows how, and the threat model records the browser-based read it also closes.
 - **The bundled runtime is not serviced.** A self-contained package carries the .NET runtime it was
-  built with, and neither Windows Update nor a Linux distribution's updates patch it. .NET security
-  fixes reach a package only through a new AgentSplice release; `README.txt` in each package names the
-  runtime version. Microsoft supports .NET 10 until November 14, 2028; after that date no .NET 10 build
-  receives runtime fixes.
-- **The packages are not signed.** Their integrity rests on the SHA-256 digests published beside them
-  and verified as the installation guide describes.
+  built with, and neither Windows Update, a Linux distribution's updates, nor macOS updates patch it.
+  .NET security fixes reach a package only through a new AgentSplice release; `README.txt` in each
+  package names the runtime version. Microsoft supports .NET 10 until November 14, 2028; after that date
+  no .NET 10 build receives runtime fixes.
+- **The packages are not signed with an identity.** Their integrity rests on the SHA-256 digests
+  published beside them and verified as the installation guide describes. The macOS executable carries
+  the ad-hoc signature Apple silicon requires of anything it runs, which shows a file has not changed
+  since it was signed but names nobody, and Apple has not notarized it.
+- **Clearing macOS's quarantine mark skips a check.** A browser's download of the macOS package carries
+  the mark, and macOS refuses to open it until `xattr -dr com.apple.quarantine` clears it from the
+  folder; Gatekeeper then makes no first-launch check of those files. The guide has the digest check
+  pass first, because after it nothing else on the machine stands between the download and its first
+  run.
 
 ## Authentication
 
@@ -220,9 +227,10 @@ What exists today:
 
 - **Releases are built by CI from the tag, never on a workstation** (ADR 0018). A `v<version>` tag that
   names the build's version runs the whole CI suite against the tagged commit. The Windows and Linux
-  packages that run builds and smoke-tests, and the image it builds and runs, saved as an archive and run
-  again from it, assembled into one artifact by a read-only job that checks nothing out (ADR 0021,
-  ADR 0022), are what the release carries; nothing is rebuilt for it. Each artifact is
+  packages that run builds and smoke-tests, the macOS package when its job passed every check, and the
+  image it builds and runs, saved as an archive and run again from it, assembled into one artifact by a
+  read-only job that checks nothing out (ADR 0021, ADR 0022, ADR 0029), are what the release carries;
+  nothing is rebuilt for it. Each artifact is
   taken by the ID the job that uploaded it reported, so one that another job of the run re-uploaded
   under the same name is refused rather than published. The package builds restore no dependency
   cache: what they bundle comes from the lockfile and the registry, never from a store another run

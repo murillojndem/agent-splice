@@ -2,7 +2,8 @@
 
 - Status: Accepted, decision 6 refined by [ADR 0020](0020-stage-1d-the-project-is-licensed-under-apache-2.md),
   decisions 2 and 5 extended by [ADR 0021](0021-stage-1d-a-linux-package-that-needs-no-dotnet-installation.md) (both packages, assembled in CI and taken by artifact ID; one `SHA256SUMS`, checked by the line for the file downloaded),
-  decision 7 superseded and decisions 2 and 4 extended by [ADR 0022](0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md) (the image pushed to GHCR when a release is published)
+  decision 7 superseded and decisions 2 and 4 extended by [ADR 0022](0022-stage-1d-the-image-is-pushed-to-ghcr-when-a-release-is-published.md) (the image pushed to GHCR when a release is published),
+  decisions 2 and 5 extended by [ADR 0029](0029-a-macos-package-for-apple-silicon.md) (a macOS package that a release carries when its CI job passed, checked with `shasum`)
 - Date: 2026-10-15
 - Related: [ADR 0007](0007-stage-0-build-and-test-toolchain.md) (Windows and Linux CI),
   [ADR 0016](0016-stage-1d-the-image-reports-its-health.md) (the image's health check),
@@ -43,6 +44,10 @@ its own concurrency group, because a reusable workflow that waits on its caller'
 > **Extended by ADR 0022.** The release also carries the image's archive, which the CI `image` job saves
 > and `image-archive` loads and runs before `release-assets` takes it.
 
+> **Extended by ADR 0029.** The release also carries the macOS package when the CI job that builds and
+> smoke-tests it passed. That job gates nothing, so a release can come without it, and the draft's notes
+> say which.
+
 ### 3. Drafts, published by a person
 
 The release is created with `gh release create --draft --prerelease --verify-tag`. Nobody else sees
@@ -69,6 +74,10 @@ attestation is a separate decision. Both are recorded as residuals rather than i
 
 > **Extended by ADR 0021.** One `SHA256SUMS` lists every asset, and the installation guide checks a
 > download by its own line: `Get-FileHash` on Windows, `sha256sum --check` on Linux.
+
+> **Extended by ADR 0029.** And `shasum -a 256 --check` on macOS. The macOS executable carries an
+> ad-hoc signature, which Apple silicon requires and which names nobody; nothing is signed with an
+> identity or notarized.
 
 ### 6. A license gates the release
 

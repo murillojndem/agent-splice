@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AgentSplice.TestSupport;
@@ -8,7 +9,7 @@ namespace AgentSplice.ContractTests;
 
 /// <summary>
 /// A tag becomes a reviewed draft, built and assembled by the full CI suite, published by the one job
-/// that may write (ADR 0018, ADR 0021).
+/// that may write (ADR 0018, ADR 0021, ADR 0029).
 /// </summary>
 /// <remarks>
 /// None of this runs until someone pushes a tag, and every way it can go wrong does so in public: a
@@ -23,6 +24,16 @@ public sealed partial class ReleaseWorkflowContractTests
 
     /// <summary>What a job that only handles artifacts, or that holds a write token, never runs.</summary>
     internal static readonly string[] InstallCommands = ["pnpm", "npm ", "npx ", "dotnet ", "apt-get", "pip "];
+
+    /// <summary>
+    /// The platforms whose package gates nothing: its job may fail without failing CI or holding a
+    /// release back, and a release carries its archive only when that job uploaded one (ADR 0029, launch
+    /// decision D3).
+    /// </summary>
+    private static readonly string[] OptionalPlatforms = ["osx-arm64"];
+
+    /// <summary>The command that clears macOS's quarantine mark from a whole folder.</summary>
+    private const string ClearQuarantine = "xattr -dr com.apple.quarantine";
 
     [Fact]
     public void A_release_is_only_ever_created_as_a_draft_pre_release()
@@ -90,11 +101,12 @@ public sealed partial class ReleaseWorkflowContractTests
 
         Assert.Contains("linux-x64", platforms);
         Assert.Contains("win-x64", platforms);
+        Assert.Contains("osx-arm64", platforms);
+        Assert.Subset(platforms.ToHashSet(StringComparer.Ordinal), OptionalPlatforms.ToHashSet(StringComparer.Ordinal));
 
         foreach (var platform in platforms)
         {
-            var job = Assert.Single(jobs, entry => Steps(entry.Job).Any(step =>
-                Run(step).Contains("package.ps1 -RuntimeIdentifier " + platform + " ", StringComparison.Ordinal))).Job;
+            var job = PackageJob(jobs, platform).Job;
 
             Assert.Single(Steps(job), step => Run(step).Contains("smoke-package.ps1", StringComparison.Ordinal));
 
@@ -104,8 +116,16 @@ public sealed partial class ReleaseWorkflowContractTests
             // The job reports the ID of what it uploaded, which is how release-assets takes it.
             AssertReportsTheArtifactItUploads(job, upload);
 
-            // Nothing that gates the release can be switched off or allowed to fail.
-            AssertGates(job);
+            // Nothing that gates the release can be switched off or allowed to fail; a package that gates
+            // nothing may fail, but never skip a check before its upload.
+            if (OptionalPlatforms.Contains(platform, StringComparer.Ordinal))
+            {
+                AssertMayFailButSkipsNoCheck(job);
+            }
+            else
+            {
+                AssertGates(job);
+            }
 
             // A release artifact is built from the lockfile alone, never from a dependency cache another
             // run could have written.
@@ -149,10 +169,22 @@ public sealed partial class ReleaseWorkflowContractTests
         Assert.All(built, upload => Assert.Contains(upload.Job, needs));
 
         // Every job the release waits for decides it: none can be switched off or allowed to fail,
-        // including the ones that only check what another built, such as image-archive.
+        // including the ones that only check what another built, such as image-archive. The one
+        // exception is the package of a platform that gates nothing, which may fail but skips no check.
+        var optional = OptionalPlatforms
+            .Select(platform => (Platform: platform, Job: PackageJob(Jobs(ci), platform).Name))
+            .ToArray();
+
         foreach (var gate in needs)
         {
-            AssertGates(jobs[gate!]);
+            if (optional.Any(entry => entry.Job == gate))
+            {
+                AssertMayFailButSkipsNoCheck(jobs[gate!]);
+            }
+            else
+            {
+                AssertGates(jobs[gate!]);
+            }
         }
 
         // It handles only what those jobs built: no action but the artifacts' own, nothing checked out,
@@ -170,8 +202,33 @@ public sealed partial class ReleaseWorkflowContractTests
             }
         }
 
-        AssertGates(assembly);
-        Assert.Contains(Steps(assembly), step => Run(step).Contains("sha256sum --check --strict", StringComparison.Ordinal));
+        // No step can be skipped or allowed to fail but the download of an optional package, which runs
+        // exactly when its job reported an ID: without one, download-artifact would take every artifact
+        // of the run. The verification is told that ID, so it expects that archive exactly when it came.
+        Assert.False(assembly.Children.ContainsKey(new YamlScalarNode("if")), "release-assets must not be conditional.");
+        Assert.False(assembly.Children.ContainsKey(new YamlScalarNode("continue-on-error")), "release-assets must not be allowed to fail.");
+
+        var verify = Assert.Single(Steps(assembly), step => Run(step).Contains("sha256sum --check --strict", StringComparison.Ordinal));
+
+        foreach (var step in Steps(assembly))
+        {
+            var reference = Uses(step).StartsWith("actions/download-artifact", StringComparison.Ordinal)
+                ? Scalar(Mapping(step, "with"), "artifact-ids")
+                : null;
+            var job = optional.SingleOrDefault(entry => reference == "${{ needs." + entry.Job + ".outputs.artifact-id }}").Job;
+            var condition = Scalar(step, "if");
+
+            Assert.True(
+                job is null ? condition is null or "always()" : condition == "needs." + job + ".outputs.artifact-id != ''",
+                FormattableString.Invariant($"The step '{Scalar(step, "name")}' of release-assets has the condition '{condition}'."));
+            Assert.False(step.Children.ContainsKey(new YamlScalarNode("continue-on-error")), FormattableString.Invariant($"The step '{Scalar(step, "name")}' gates the release and must not be allowed to fail."));
+        }
+
+        foreach (var (platform, job) in optional)
+        {
+            Assert.Contains("${{ needs." + job + ".outputs.artifact-id }}", Mapping(verify, "env").Children.Values.OfType<YamlScalarNode>().Select(value => value.Value));
+            Assert.Contains("agentsplice-$version-" + platform + ".tar.gz", Run(verify), StringComparison.Ordinal);
+        }
 
         var release = Assert.Single(Steps(assembly), step => Uses(step).StartsWith("actions/upload-artifact", StringComparison.Ordinal));
         Assert.Equal(ReleaseArtifact, Scalar(Mapping(release, "with"), "name"));
@@ -236,8 +293,30 @@ public sealed partial class ReleaseWorkflowContractTests
     /// </remarks>
     private static void AssertGates(YamlMappingNode job)
     {
-        Assert.False(job.Children.ContainsKey(new YamlScalarNode("if")), "A job that gates the release must not be conditional.");
         Assert.False(job.Children.ContainsKey(new YamlScalarNode("continue-on-error")), "A job that gates the release must not be allowed to fail.");
+        AssertRunsEveryStep(job);
+    }
+
+    /// <summary>
+    /// The job of a package that gates nothing (ADR 0029): the job itself may fail without failing the
+    /// run, and nothing else. It always runs; it has a timeout, because release-assets waits for it; and
+    /// no step of it can be skipped or allowed to fail, with the upload last, so its artifact — and the
+    /// ID release-assets decides by — exists only if every check passed.
+    /// </summary>
+    private static void AssertMayFailButSkipsNoCheck(YamlMappingNode job)
+    {
+        Assert.Equal("true", Scalar(job, "continue-on-error"));
+        Assert.True(
+            int.TryParse(Scalar(job, "timeout-minutes"), out var minutes) && minutes is > 0 and <= 60,
+            "A job the release's assembly waits for, without being gated by it, must have a timeout of an hour or less.");
+        AssertRunsEveryStep(job);
+        Assert.StartsWith("actions/upload-artifact", Uses(Steps(job).Last()), StringComparison.Ordinal);
+    }
+
+    /// <summary>The job always runs, and none of its steps can be skipped by a condition or allowed to fail.</summary>
+    private static void AssertRunsEveryStep(YamlMappingNode job)
+    {
+        Assert.False(job.Children.ContainsKey(new YamlScalarNode("if")), "A job that gates the release must not be conditional.");
 
         foreach (var step in Steps(job))
         {
@@ -307,6 +386,10 @@ public sealed partial class ReleaseWorkflowContractTests
 
         Assert.Contains("**Known limitations.**", notes, StringComparison.Ordinal);
         Assert.Contains("November 14, 2028", notes, StringComparison.Ordinal);
+
+        // A draft may lack the macOS package, which gates nothing (ADR 0029); whoever publishes it must be
+        // told, rather than find out from the assets.
+        Assert.Contains("This release has no macOS package", notes, StringComparison.Ordinal);
         Assert.Contains("November 14, 2028", RepositoryPaths.ReadText("docs", "INSTALLATION.md"), StringComparison.Ordinal);
         Assert.Contains("November 14, 2028", RepositoryPaths.ReadText(".github", "scripts", "package.ps1"), StringComparison.Ordinal);
     }
@@ -326,6 +409,71 @@ public sealed partial class ReleaseWorkflowContractTests
 
         Assert.NotEmpty(named);
         Assert.All(named, version => Assert.Equal(GatewayVersion(), version));
+    }
+
+    [Fact]
+    public void The_macOS_package_is_tested_on_the_oldest_macOS_its_documents_state()
+    {
+        // The documents name the oldest macOS the package runs on, the smoke test holds every native file
+        // in it to that version, and CI runs it there, so the floor is proven by a run rather than read
+        // off the binaries alone (ADR 0029). A label GitHub moves, such as macos-latest, would carry the
+        // proof to another version without anyone deciding it.
+        var enforced = EnforcedMacosFloor().Match(RepositoryPaths.ReadText(".github", "scripts", "smoke-package.ps1"));
+
+        Assert.True(enforced.Success, "smoke-package.ps1 must state the macOS floor it enforces.");
+
+        var floor = Version.Parse(enforced.Groups["version"].Value);
+        Assert.Equal(0, floor.Minor);
+        Assert.Equal("macos-" + floor.Major.ToString(CultureInfo.InvariantCulture), Scalar(PackageJob(Jobs(Workflow("ci.yml")), "osx-arm64").Job, "runs-on"));
+
+        // What tells a user the floor says the same; the README only once it offers the package.
+        string[][] stating =
+        [
+            ["docs", "INSTALLATION.md"],
+            [".github", "scripts", "package.ps1"],
+            [".github", "workflows", "release.yml"],
+        ];
+
+        foreach (var document in stating.Append(["README.md"]))
+        {
+            var stated = StatedMacosFloor()
+                .Matches(RepositoryPaths.ReadText(document))
+                .Select(match => match.Groups["version"].Value)
+                .Distinct()
+                .ToArray();
+
+            Assert.True(
+                stated.All(version => version == floor.Major.ToString(CultureInfo.InvariantCulture)) && (stated.Length == 1 || (stated.Length == 0 && document[0] == "README.md")),
+                $"{string.Join('/', document)} states the macOS floor as [{string.Join(", ", stated)}]; the smoke test enforces {floor.Major}.");
+        }
+    }
+
+    [Fact]
+    public void Every_document_that_offers_the_macOS_package_says_how_to_clear_the_quarantine_mark()
+    {
+        // The package is signed ad hoc and not notarized, so a browser's download of it does not open until
+        // the quarantine mark is cleared from the whole folder, SQLite's library included: without -r the
+        // library stays marked (ADR 0029). The smoke test runs the very command the documents give.
+        Assert.Contains(ClearQuarantine, RepositoryPaths.ReadText(".github", "scripts", "smoke-package.ps1"), StringComparison.Ordinal);
+
+        string[][] documents =
+        [
+            ["README.md"],
+            ["docs", "INSTALLATION.md"],
+            [".github", "scripts", "package.ps1"],
+            [".github", "workflows", "release.yml"],
+        ];
+
+        var offering = documents
+            .Select(document => (Name: string.Join('/', document), Text: RepositoryPaths.ReadText(document)))
+            .Where(document => document.Text.Contains("osx-arm64", StringComparison.Ordinal))
+            .ToArray();
+
+        // The guide, the package's README, and the release notes always do; the README once it offers it.
+        Assert.True(offering.Length >= 3, FormattableString.Invariant($"Only {offering.Length} documents offer the macOS package."));
+        Assert.All(offering, document => Assert.True(
+            document.Text.Contains(ClearQuarantine, StringComparison.Ordinal),
+            $"{document.Name} offers the macOS package without saying how to clear the quarantine mark ({ClearQuarantine})."));
     }
 
     private static string GatewayVersion()
@@ -382,6 +530,17 @@ public sealed partial class ReleaseWorkflowContractTests
 
     private static string Uses(YamlMappingNode step) => Scalar(step, "uses") ?? string.Empty;
 
+    /// <summary>The one CI job that builds the platform's package.</summary>
+    private static (string Name, YamlMappingNode Job) PackageJob(IEnumerable<(string Name, YamlMappingNode Job)> jobs, string platform) =>
+        Assert.Single(jobs, entry => Steps(entry.Job).Any(step =>
+            Run(step).Contains("package.ps1 -RuntimeIdentifier " + platform + " ", StringComparison.Ordinal)));
+
+    [GeneratedRegex(@"\$macosFloor = \[version\]'(?<version>[0-9]+\.[0-9]+)'")]
+    private static partial Regex EnforcedMacosFloor();
+
+    [GeneratedRegex(@"macOS (?<version>[0-9]+(?:\.[0-9]+)?) or later")]
+    private static partial Regex StatedMacosFloor();
+
     [GeneratedRegex(@"\[ValidateSet\((?<platforms>[^)]*)\)\]")]
     private static partial Regex ValidateSet();
 
@@ -391,8 +550,8 @@ public sealed partial class ReleaseWorkflowContractTests
     [GeneratedRegex(@"<VersionSuffix>(?<value>[^<]*)</VersionSuffix>")]
     private static partial Regex VersionSuffix();
 
-    // A package file name, agentsplice-<version>-<platform>-x64; an image tag, agent-splice:<version>; or a
-    // release's download address, releases/download/v<version>/.
-    [GeneratedRegex(@"(?:agentsplice-|agent-splice:|releases/download/v)(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=-(?:win|linux)-x64|[\s`'""/]|$)", RegexOptions.Multiline)]
+    // A package file name, agentsplice-<version>-<platform>, the platform win-x64, linux-x64, or osx-arm64;
+    // an image tag, agent-splice:<version>; or a release's download address, releases/download/v<version>/.
+    [GeneratedRegex(@"(?:agentsplice-|agent-splice:|releases/download/v)(?<version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)(?=-(?:win-x64|linux-x64|osx-arm64)|[\s`'""/]|$)", RegexOptions.Multiline)]
     private static partial Regex GuideVersion();
 }

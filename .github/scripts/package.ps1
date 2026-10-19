@@ -2,24 +2,24 @@
 <#
 .SYNOPSIS
 Builds a self-contained package: the gateway for one platform with the dashboard beside it (ADR 0017,
-ADR 0021).
+ADR 0021, ADR 0029).
 
 .DESCRIPTION
 Builds the dashboard with pnpm, publishes the gateway with the publish profile named for the runtime
 identifier, puts the dashboard where the shipped agentsplice:dashboard:rootPath looks for it, adds the
 license and the notices of what the package bundles (ADR 0020), and writes one archive with one
-top-level folder — agentsplice-<version>-win-x64.zip, or agentsplice-<version>-linux-x64.tar.gz — plus
-SHA256SUMS in the format `sha256sum --check` reads.
+top-level folder — agentsplice-<version>-win-x64.zip, agentsplice-<version>-linux-x64.tar.gz, or
+agentsplice-<version>-osx-arm64.tar.gz — plus SHA256SUMS in the format `sha256sum --check` reads.
 
 The .NET build never invokes Node (ADR 0015), so this script is where the two builds meet, as the
-Dockerfile is for the image. CI runs it on windows-latest for win-x64 and on ubuntu-latest for
-linux-x64; it needs the .NET 10 SDK, Node 22, and pnpm 10 — the machine that runs the package needs
-none of them. The Linux package is built on Linux, where its archive can record that the executable is
-executable.
+Dockerfile is for the image. CI runs it on Windows for win-x64, on Ubuntu for linux-x64, and on macOS
+for osx-arm64; it needs the .NET 10 SDK, Node 22, and pnpm 10 — the machine that runs the package needs
+none of them. A tar.gz is written on Linux or macOS, where it can record that the executable is
+executable, with GNU tar: tar on Linux, gtar on macOS (Homebrew's gnu-tar).
 
 .PARAMETER RuntimeIdentifier
-The platform: win-x64 or linux-x64. Each has a publish profile of that name, and a contract test keeps
-this list and the profiles one set.
+The platform: win-x64, linux-x64, or osx-arm64. Each has a publish profile of that name, and a contract
+test keeps this list and the profiles one set.
 
 .PARAMETER OutputDirectory
 Where the archive and SHA256SUMS are written. Defaults to artifacts/package in the repository.
@@ -30,7 +30,7 @@ pwsh -File .github/scripts/package.ps1 -RuntimeIdentifier win-x64 -OutputDirecto
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('win-x64', 'linux-x64')]
+    [ValidateSet('win-x64', 'linux-x64', 'osx-arm64')]
     [string] $RuntimeIdentifier,
 
     [string] $OutputDirectory
@@ -43,13 +43,26 @@ $repository = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $project = Join-Path $repository 'src' 'AgentSplice.Api' 'AgentSplice.Api.csproj'
 $dashboard = Join-Path $repository 'web' 'AgentSplice.Dashboard'
 $windows = $RuntimeIdentifier -eq 'win-x64'
+$macos = $RuntimeIdentifier -eq 'osx-arm64'
 
 if (-not $OutputDirectory) {
     $OutputDirectory = Join-Path $repository 'artifacts' 'package'
 }
 
-if (-not $windows -and -not $IsLinux) {
-    throw "Build the $RuntimeIdentifier package on Linux: an archive written elsewhere cannot record that its executable is executable."
+if (-not $windows -and $IsWindows) {
+    throw "Build the $RuntimeIdentifier package on Linux or macOS: an archive written on Windows cannot record that its executable is executable."
+}
+
+# GNU tar writes the owner, mode, and order the archive records below; macOS's own tar is bsdtar, which
+# takes none of those options, so there it is Homebrew's gtar.
+$tar = if ($IsMacOS) { 'gtar' } else { 'tar' }
+
+if (-not $windows) {
+    $tarVersion = if (Get-Command $tar -CommandType Application -ErrorAction SilentlyContinue) { @(& $tar --version)[0] } else { $null }
+
+    if ("$tarVersion" -notmatch 'GNU tar') {
+        throw "The $RuntimeIdentifier archive is written with GNU tar, which '$tar' is not ($tarVersion). On macOS: brew install gnu-tar."
+    }
 }
 
 function Invoke-Native {
@@ -168,14 +181,23 @@ try {
     }
 
     $start = if ($windows) { '.\AgentSplice.Api.exe' } else { './AgentSplice.Api' }
-    $platform = if ($windows) { 'Windows (x64)' } else { 'Linux (x64)' }
-    $patching = if ($windows) { 'Windows Update does' } else { "your distribution's updates do" }
-    $requirement = if ($windows) { '' } else { "`nIt runs on x64 distributions based on glibc 2.34 or later, with OpenSSL 1.1.1 or later installed." }
+    $platform = if ($windows) { 'Windows (x64)' } elseif ($macos) { 'macOS (Apple silicon)' } else { 'Linux (x64)' }
+    $patching = if ($windows) { 'Windows Update does' } elseif ($macos) { 'macOS updates do' } else { "your distribution's updates do" }
+    $requirement = if ($windows) { '' }
+    elseif ($macos) { "`nIt runs on macOS 15 or later, on a Mac with Apple silicon." }
+    else { "`nIt runs on x64 distributions based on glibc 2.34 or later, with OpenSSL 1.1.1 or later installed." }
 
-    # On Linux the folder's mode is what keeps the store to its owner: SQLite creates the file readable
-    # by whomever the umask allows.
+    # On Linux and macOS the folder's mode is what keeps the store to its owner: SQLite creates the file
+    # readable by whomever the umask allows.
     $privacy = if ($windows) { '' } else {
         "`n`nKeep this folder to your account, so that the store in it is too:`n`n    chmod 700 ."
+    }
+
+    # The executable is signed ad hoc, which names nobody, and is not notarized, so macOS refuses to open
+    # it while the quarantine mark a browser puts on a download is on it (ADR 0029). The smoke test runs
+    # this command.
+    $quarantine = if (-not $macos) { '' } else {
+        "`n`nIf macOS refuses to open AgentSplice.Api because Apple could not verify it, the archive was`ndownloaded with a browser, which marks the download as quarantined. Once its digest has matched`nSHA256SUMS, clear the mark from this folder and start it again:`n`n    xattr -dr com.apple.quarantine ."
     }
 
     # The guide at the release's own tag, when this is a release's build; the repository otherwise, so
@@ -211,7 +233,7 @@ appsettings.json, which an upgrade replaces:
     $start --agentsplice:runtimes:0:baseUrl=http://127.0.0.1:1234/v1
 
 Trace metadata -- never prompts or model output -- is kept in agentsplice.db in this folder
-unless agentsplice:persistence:connectionString names another file.$privacy
+unless agentsplice:persistence:connectionString names another file.$privacy$quarantine
 
 On a machine other people use, set an administrative token, as the instructions show:
 without one, every account on it can read the trace metadata through /api/v1.
@@ -223,7 +245,8 @@ of the .NET runtime and ASP.NET Core it carries are in the licenses folder.
 Full instructions: $guide
 "@
 
-    # ASCII either way. CRLF on Windows, so Notepad on any version shows it as written; LF on Linux.
+    # ASCII either way. CRLF on Windows, so Notepad on any version shows it as written; LF on Linux and
+    # macOS.
     $newline = if ($windows) { "`r`n" } else { "`n" }
     [IO.File]::WriteAllText(
         (Join-Path $staging 'README.txt'),
@@ -275,7 +298,7 @@ Full instructions: $guide
             (Join-Path $staging $executable),
             [IO.UnixFileMode]'UserRead, UserWrite, UserExecute, GroupRead, GroupExecute, OtherRead, OtherExecute')
 
-        Invoke-Native tar @(
+        Invoke-Native $tar @(
             '--create', '--gzip',
             '--file', $archive,
             '--directory', $work,

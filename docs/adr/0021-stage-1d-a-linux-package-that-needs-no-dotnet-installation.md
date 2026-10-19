@@ -1,6 +1,8 @@
 # ADR 0021 — Stage 1D: a Linux package that needs no .NET installation
 
-- Status: Accepted
+- Status: Accepted, decisions 2, 4, and 5 amended by [ADR 0029](0029-a-macos-package-for-apple-silicon.md)
+  (a macOS package, written with GNU tar on Linux or macOS, built by a job that gates nothing, and in a
+  release exactly when that job uploaded it)
 - Date: 2026-10-16
 - Related: [ADR 0017](0017-stage-1d-a-windows-package-that-needs-no-dotnet-sdk.md) (the Windows package
   this one mirrors), [ADR 0018](0018-stage-1d-tagged-releases-as-reviewed-drafts.md) (what a release
@@ -48,6 +50,9 @@ the build machine's umask. Owner and group are written as 0 by number, so the ar
 of the machine that built it, and its entries are sorted. It is built on Linux only, where the published
 executable carries its execute bit; the script refuses otherwise.
 
+> **Amended by ADR 0029.** A tar.gz is refused on Windows only: the macOS package is written on macOS,
+> with GNU tar, which is `gtar` there, and either package can be written on Linux or macOS.
+
 The README in the archive says how to start it from its own folder or by its full path, to keep the
 folder to its owner with `chmod 700`, and, on a machine other people use, to set the administrative
 token. It links the installation guide at the release's own tag when the build is that tag's, and the
@@ -77,6 +82,9 @@ A `package-linux` CI job on `ubuntu-latest` runs both scripts and uploads `agent
 `package-windows` does for Windows. Neither package job restores a dependency cache: a release
 artifact's dependencies come from the lockfile and the registry, never from a store another run wrote.
 
+> **Amended by ADR 0029.** A third job, `package-macos`, builds and smoke-tests the macOS package on
+> `macos-15`. It is allowed to fail without failing the run, and nothing in it can be skipped.
+
 ### 5. A release is assembled on every change, from artifacts taken by their IDs
 
 A `release-assets` CI job takes each package artifact by the ID its job reported, not by its name, so
@@ -92,6 +100,10 @@ that `SHA256SUMS` lists exactly this tag's archives and the folder holds nothing
 draft from the files `SHA256SUMS` lists, so its assets and the digests it publishes cannot drift apart
 (ADR 0018 decision 2). A defect in putting a release together therefore fails a pull request rather than
 a tag.
+
+> **Amended by ADR 0029.** "Exactly one archive per platform" holds for Windows and Linux. The macOS
+> archive is in the release exactly when its job reported an artifact ID, which it does only after every
+> check in it passed; `release-assets` downloads it only then, and warns when it is missing.
 
 ### 6. The guide says what differs
 

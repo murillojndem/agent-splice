@@ -307,8 +307,8 @@ the absolute path that was checked. A disabled dashboard logs neither (ADR 0015)
 The metadata store does the same once it is open and migrated, from
 `AgentSplice.Infrastructure.Persistence.MetadataStoreInitializer`: `1305 MetadataStoreOpened`
 (Information), naming the file. A relative `Data Source` is resolved against the content root, so this
-is where an operator finds out which file that was — beside the executable in the Windows and Linux
-packages, `/data/agentsplice.db` in the image (ADR 0017, ADR 0021). It carries the data source only, never the connection
+is where an operator finds out which file that was — beside the executable in the Windows, Linux, and macOS
+packages, `/data/agentsplice.db` in the image (ADR 0017, ADR 0021, ADR 0029). It carries the data source only, never the connection
 string, which may hold a password. A deployment that retains nothing logs no store at all.
 
 ## Runtime-log ingestion

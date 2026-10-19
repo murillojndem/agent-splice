@@ -225,7 +225,7 @@ Timeline events are immutable and sequence-ordered. Unknown timestamps remain ab
 
 Use EF Core only in Infrastructure. SQLite is the local default; PostgreSQL supports shared/self-hosted installations.
 
-A relative SQLite path is resolved against the host's content root, like every other relative path in the settings, and never against the process's working directory (ADR 0017). The content root is the working directory everywhere except the self-contained packages, Windows and Linux, whose publish profiles set a runtime switch that makes it the executable's directory (ADR 0021); `AgentSplice.Api` decides that before the host is built, and nothing else in the gateway knows which build it is.
+A relative SQLite path is resolved against the host's content root, like every other relative path in the settings, and never against the process's working directory (ADR 0017). The content root is the working directory everywhere except the self-contained packages, Windows, Linux, and macOS, whose publish profiles set a runtime switch that makes it the executable's directory (ADR 0021, ADR 0029); `AgentSplice.Api` decides that before the host is built, and nothing else in the gateway knows which build it is.
 
 Streaming must remain independent of database transaction duration. Metadata may be queued through a bounded in-process channel. Queue saturation and persistence failure require explicit metrics and policies; they must not silently block model output indefinitely.
 

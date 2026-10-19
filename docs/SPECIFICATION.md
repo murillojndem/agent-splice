@@ -1200,7 +1200,7 @@ These are engineering targets, not release claims, until benchmarks exist.
 
 - Windows development supported.
 - Windows installation without Docker or a .NET installation, through a self-contained package
-  (ADR 0017).
+  (ADR 0017); the same on Linux (ADR 0021) and on Macs with Apple silicon (ADR 0029).
 - Linux containers supported.
 - WSL development documented.
 - No CUDA-only assumptions in core code.
@@ -1483,12 +1483,13 @@ Agent client -> localhost AgentSplice -> localhost LM Studio
 
 The direct process is either `dotnet run` from source, on any platform with the .NET 10 SDK, or a
 package: a self-contained, single-file build carrying its own .NET runtime and the dashboard, which runs
-on a machine with no .NET installed — win-x64 for Windows (ADR 0017) and linux-x64 for x64 distributions
-on glibc (ADR 0021). A package makes the directory its executable is in the content root, so it reads
-its settings and serves its dashboard from beside itself wherever it is started from; every other build
-takes the working directory, as ASP.NET Core does. A relative SQLite `Data Source` resolves against the
-content root in every build. Tagged releases publish both packages with one `SHA256SUMS`;
-`docs/INSTALLATION.md` documents every path.
+on a machine with no .NET installed — win-x64 for Windows (ADR 0017), linux-x64 for x64 distributions
+on glibc (ADR 0021), and osx-arm64 for Macs with Apple silicon (ADR 0029). A package makes the directory
+its executable is in the content root, so it reads its settings and serves its dashboard from beside
+itself wherever it is started from; every other build takes the working directory, as ASP.NET Core
+does. A relative SQLite `Data Source` resolves against the content root in every build. Tagged releases
+publish the Windows and Linux packages, and the macOS package when its CI job passed, with one
+`SHA256SUMS`; `docs/INSTALLATION.md` documents every path.
 
 ### 20.2 Docker Compose
 
