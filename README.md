@@ -76,9 +76,9 @@ In PowerShell, download the package and its checksums, and check the digest. The
 `True`:
 
 ```powershell
-curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/agentsplice-0.2.1-alpha-win-x64.zip
-curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/SHA256SUMS
-$zip = 'agentsplice-0.2.1-alpha-win-x64.zip'
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-win-x64.zip
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
+$zip = 'agentsplice-0.2.2-alpha-win-x64.zip'
 $expected = ((Select-String -Path SHA256SUMS -SimpleMatch $zip).Line -split '\s+')[0]
 (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() -eq $expected
 ```
@@ -88,7 +88,7 @@ Then extract it into a folder only your account can write, and start it:
 ```powershell
 Unblock-File $zip
 Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\Programs\AgentSplice"
-& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.1-alpha-win-x64\AgentSplice.Api.exe"
+& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.2-alpha-win-x64\AgentSplice.Api.exe"
 ```
 
 The package is not code-signed. If **Windows protected your PC** appears, choose **More info**, then
@@ -104,9 +104,9 @@ It needs a recent glibc-based distribution, not Alpine;
 and its checksums, and check the digest. The last line must print `…: OK`:
 
 ```bash
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/agentsplice-0.2.1-alpha-linux-x64.tar.gz
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.1-alpha/SHA256SUMS
-archive=agentsplice-0.2.1-alpha-linux-x64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-linux-x64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
+archive=agentsplice-0.2.2-alpha-linux-x64.tar.gz
 grep -F "  $archive" SHA256SUMS | sha256sum --check --strict -
 ```
 
@@ -115,7 +115,39 @@ Then extract it into a folder only your account can write, and start it:
 ```bash
 mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
 tar -xzf "$archive" -C ~/.local/opt/agentsplice
-~/.local/opt/agentsplice/agentsplice-0.2.1-alpha-linux-x64/AgentSplice.Api
+~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-linux-x64/AgentSplice.Api
+```
+
+</details>
+
+<details>
+<summary><b>macOS</b> (Apple silicon): a self-contained package, no .NET and no Docker</summary>
+
+It needs a Mac with Apple silicon and macOS 15 or later; on an Intel Mac, use the image or the source,
+below. Download the package and its checksums, and check the digest. The last line must print `…: OK`:
+
+```bash
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-osx-arm64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
+archive=agentsplice-0.2.2-alpha-osx-arm64.tar.gz
+grep -F "  $archive" SHA256SUMS | shasum -a 256 --check --strict -
+```
+
+Then extract it into a folder only your account can write, and start it:
+
+```bash
+mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
+tar -xzf "$archive" -C ~/.local/opt/agentsplice
+~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-osx-arm64/AgentSplice.Api
+```
+
+The package is signed ad hoc, which names nobody, and Apple has not notarized it. `curl` sets no
+quarantine mark, so it opens as it is. Downloaded with a browser, it can carry the mark, and macOS then
+refuses to open it; once the digest has matched, clear the mark from the package's folder
+([why](docs/INSTALLATION.md#if-macos-refuses-to-open-it)):
+
+```bash
+xattr -dr com.apple.quarantine ~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-osx-arm64
 ```
 
 </details>
@@ -137,20 +169,12 @@ docker run --detach --name agentsplice \
   --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
   --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
   --env AGENTSPLICE_ADMIN_API_KEY \
-  ghcr.io/murillojndem/agent-splice:0.2.1-alpha
+  ghcr.io/murillojndem/agent-splice:0.2.2-alpha
 ```
 
 Docker Desktop forwards `host.docker.internal` to the host. On a Linux engine, LM Studio must listen on
 an address the container can reach, not on loopback alone. The same command in PowerShell, and Compose
 from a clone, are in [Installing AgentSplice](docs/INSTALLATION.md#docker).
-
-</details>
-
-<details>
-<summary><b>macOS</b>: no native package yet</summary>
-
-The image is built for `linux/amd64` only. On Apple silicon, Docker Desktop can run it under emulation,
-which has not been tested; or run AgentSplice from source, below.
 
 </details>
 
@@ -207,7 +231,8 @@ answer. When a budget runs out before anything has reached the client, the clien
 has started, a stall ends it instead, and the exchange records that too.
 
 To wait longer, pass the phases on the command line. Here it is for the Windows package, from its
-folder; the Linux package, and `dotnet run --project src/AgentSplice.Api --`, take the same arguments:
+folder; the Linux and macOS packages, and `dotnet run --project src/AgentSplice.Api --`, take the same
+arguments:
 
 ```powershell
 .\AgentSplice.Api.exe --agentsplice:runtimes:0:timeouts:responseHeaders=00:08:00 --agentsplice:runtimes:0:timeouts:firstByte=00:08:00
@@ -270,7 +295,9 @@ which stays off until you turn it on ([Observability](docs/OBSERVABILITY.md)).
   `/v1`, such as vLLM, may work through it too, but nothing has been recorded with them.
 - **No replay yet.** Replay, comparison across runtimes, conformance suites, and agent evaluation are the
   [roadmap](#roadmap), not this build.
-- **No native macOS package.** The image is `linux/amd64` only.
+- **No signed or notarized packages.** The Windows package is not code-signed, and the macOS one is
+  signed ad hoc, for Apple silicon only, and not notarized; an Intel Mac runs the image, which is
+  `linux/amd64` only.
 - **No authentication on `/v1`.** The gateway listens on loopback by default and refuses a binding beyond
   it unless `/api/v1` has a token; `/v1` takes no credential either way. Without a token, the packages
   serve `/api/v1` and its evidence to every account on the machine ([Security](docs/SECURITY.md)).

@@ -214,10 +214,10 @@ first byte has its own budget, `timeouts:firstByte`, and the response-header bud
 minutes, so a long prompt on local hardware is no longer cut as a stalled stream (ADR 0028, from the
 first trace report's finding 2). Stage 2A stays the stage in progress.
 
-After 0.2.1-alpha, a third self-contained package, for Macs with Apple silicon on macOS 15 or later:
-built and smoke-tested by CI on macOS 15, signed ad hoc and not notarized, and carried by a release
-when its job passed, since that job gates nothing (ADR 0029, launch decision D3). No runtime behaviour
-changes.
+After 0.2.1-alpha, released in 0.2.2-alpha: a third self-contained package, for Macs with Apple silicon
+on macOS 15 or later, built and smoke-tested by CI on macOS 15, signed ad hoc and not notarized, and
+carried by a release when its job passed, since that job gates nothing (ADR 0029, launch decision D3).
+No runtime behaviour changes.
 
 After 0.2.1-alpha, two more dated trace reports: OpenCode through the 0.2.1-alpha Windows package to
 llama.cpp's `llama-server` and to Ollama, each with the shipped `lmstudio` provider given only another

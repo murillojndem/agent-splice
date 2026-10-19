@@ -36,7 +36,7 @@
 
   <PropertyGroup>
     <Product>AgentSplice</Product>
-    <VersionPrefix>0.2.1</VersionPrefix>
+    <VersionPrefix>0.2.2</VersionPrefix>
     <VersionSuffix>alpha</VersionSuffix>
     <!-- The holder NOTICE names (ADR 0020); a contract test keeps the two the same. -->
     <Copyright>Copyright 2026 Murillo Jorge Nóbrega de Melo</Copyright>
