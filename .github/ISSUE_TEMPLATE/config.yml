@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Ask a question
+    url: https://github.com/murillojndem/agent-splice/discussions/categories/q-a
+    about: Questions about setting AgentSplice up or reading its evidence go to Discussions.
   - name: Report a vulnerability
     url: https://github.com/murillojndem/agent-splice/security/advisories/new
     about: Report security problems privately, through GitHub's private vulnerability reporting, never in a public issue.

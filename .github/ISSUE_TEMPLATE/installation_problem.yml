@@ -1,0 +1,55 @@
+name: Installation problem
+description: AgentSplice did not install, start, or reach its dashboard
+title: "[Install]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Report vulnerabilities privately instead (SECURITY.md). Never paste prompts, model output, or
+        credentials here, and replace an administrative token with `<token>` wherever it appears.
+  - type: textarea
+    attributes:
+      label: What happened
+      description: The step that failed, as Installing AgentSplice or the README numbers it, and what you saw.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: AgentSplice version
+      description: The release you downloaded, as its file name or image tag shows it.
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Installation
+      options:
+        - Docker image from GitHub Container Registry
+        - Docker Compose from a clone
+        - Windows package
+        - Linux package
+        - macOS package
+        - From source
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Operating system
+      description: Name, version, and architecture, such as Windows 11 24H2 x64, Ubuntu 24.04 x64, or macOS 15.5 on Apple silicon.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How you started it
+      description: The commands you ran, with every argument and environment variable you set.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Startup log
+      description: What the gateway printed when it started, up to the error, or what the system showed instead.
+      render: text
+  - type: textarea
+    attributes:
+      label: What you tried
+      description: Anything you changed or checked already, such as the port, the checksum, or a different folder.

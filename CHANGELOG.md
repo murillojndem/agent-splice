@@ -2,6 +2,20 @@
 
 All notable changes will be documented here.
 
+## Unreleased
+
+### After 0.2.2-alpha
+
+- **A full code of conduct.** `CODE_OF_CONDUCT.md` is the Contributor Covenant 2.1, its text unchanged
+  but for its list markers, with the maintainer's address for reports. The two-line placeholder it
+  replaces said itself that a full code should come before broad external contributions.
+- **An issue form for an installation that did not work.** A new user's first report is more often "it
+  did not start" than a compatibility defect, and the bug form requires a client, a runtime, and a
+  model that such a user may never have reached. The new form asks for what that report needs: the step
+  that failed, the release, the installation, the operating system, how the gateway was started, and
+  what it printed. It applies `bug`, a label GitHub creates, as the contract test requires of every
+  form. The issue chooser also sends questions to Discussions' Q&A.
+
 ## 0.2.2-alpha — 2026-10-19
 
 ### After 0.2.1-alpha
