@@ -94,7 +94,17 @@ Why the file looks the way it does:
   instead of answering; OpenCode retried, which its log records and its output does not. The AI SDK it
   uses treats a `5xx` as retryable too, which was not tried against OpenCode itself. ADR 0028 gave the
   wait its own budget. If a long prompt still outlasts it, load the model with more than one parallel
-  slot, or raise `firstByte` as shown below.
+  slot, or raise `firstByte` as shown below. To leave the title out, set
+  `"agent": { "title": { "disable": true } }` in `opencode.json`, or pass `--title "<title>"` to
+  `opencode run`; both were checked against OpenCode 1.18.7 on 2026-10-19, and the first against 2.0.32,
+  which sends the title right after the first request instead of before it.
+- **A context smaller than OpenCode's fixed prompt.** OpenCode's system prompt and tool definitions
+  alone come to about 24 KB, roughly 6,000 tokens, before any skills it finds. A runtime loaded with
+  less refuses every agent request, and OpenCode 1.18.7 then alternates compaction with the refused
+  request until it is stopped: the Ollama trace report shows it on Ollama's default context
+  ([finding 6](reports/2026-10-19-opencode-ollama/README.md#6-with-ollamas-default-context-every-agent-step-was-refused)).
+  Load the model with a larger context, or, on OpenCode 1.x, set `"compaction": { "auto": false }`,
+  with which it stops at the first refusal and shows the runtime's message.
 - **Other providers stay available.** Any other provider OpenCode is configured with remains in its
   model picker, and requests to it do not pass through AgentSplice.
 

@@ -20,10 +20,12 @@ really succeeded — without storing a single prompt.
 - **Local-first.** One process on loopback, SQLite, a built-in dashboard, optional OpenTelemetry
   export.
 
-![An exchange in the dashboard: completed, with the runtime's error reported beside it, and where the time went](docs/images/dashboard-exchange-runtime-error.png)
+![The dashboard during a real OpenCode session: exchanges arriving, where an agent step's time went, and a stream LM Studio answered 200 and then failed](docs/images/dashboard-real-session.gif)
 
-The dashboard on a stream the runtime answered `200` and then failed, recorded as the runtime's failure
-rather than as a success. From synthetic data ([more screens](docs/images/README.md)).
+Two real OpenCode sessions through AgentSplice 0.2.2-alpha to LM Studio 0.4.20 on one Windows machine,
+recorded on 2026-10-19 with the waits between exchanges compressed: metadata only, as the gateway keeps
+it. One model's chat template made LM Studio answer `200` and then fail, which the dashboard records as
+the runtime's failure; [how it was recorded](docs/images/README.md).
 
 ## What a real session showed
 

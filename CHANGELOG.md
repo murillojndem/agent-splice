@@ -15,6 +15,18 @@ All notable changes will be documented here.
   that failed, the release, the installation, the operating system, how the gateway was started, and
   what it printed. It applies `bug`, a label GitHub creates, as the contract test requires of every
   form. The issue chooser also sends questions to Discussions' Q&A.
+- **The README opens with a real session.** A GIF recorded on 2026-10-19 from the Windows package of
+  0.2.2-alpha, while OpenCode 1.18.7 ran two sessions through it to LM Studio 0.4.20, replaces the
+  screenshot from synthetic data at the top: the exchanges arriving, where an agent step's time went, and
+  the stream LM Studio answered `200` and then failed, recorded as the runtime's failure (ADR 0026).
+  `docs/images/README.md` says how it was recorded and what it is not: a demonstration, not a trace
+  report.
+- **Two OpenCode notes in the client guide.** How to leave out the session-title request that, on a
+  runtime serving one request at a time, delays the first agent step: `"agent": { "title": { "disable":
+  true } }` or `opencode run --title`. And what happens when the runtime's context is smaller than
+  OpenCode's fixed prompt: every agent request is refused, and OpenCode 1.18.7 alternates compaction
+  with it until stopped, as the Ollama trace report recorded; `"compaction": { "auto": false }` stops it
+  at the first refusal. Both were checked against OpenCode on 2026-10-19; neither changes the gateway.
 
 ## 0.2.2-alpha — 2026-10-19
 
