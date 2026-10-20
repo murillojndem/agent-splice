@@ -126,7 +126,9 @@ tar -xzf "$archive" -C ~/.local/opt/agentsplice
 <summary><b>macOS</b> (Apple silicon): a self-contained package, no .NET and no Docker</summary>
 
 It needs a Mac with Apple silicon and macOS 15 or later; on an Intel Mac, use the image or the source,
-below. Download the package and its checksums, and check the digest. The last line must print `…: OK`:
+below. CI builds and smoke-tests it on macOS 15 for each release that carries it, and nobody has run it
+on a Mac outside CI yet. Download the package and its checksums, and check the digest. The last line
+must print `…: OK`:
 
 ```bash
 curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/agentsplice-0.2.3-alpha-osx-arm64.tar.gz
