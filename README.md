@@ -78,9 +78,9 @@ In PowerShell, download the package and its checksums, and check the digest. The
 `True`:
 
 ```powershell
-curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-win-x64.zip
-curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
-$zip = 'agentsplice-0.2.2-alpha-win-x64.zip'
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/agentsplice-0.2.3-alpha-win-x64.zip
+curl.exe -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/SHA256SUMS
+$zip = 'agentsplice-0.2.3-alpha-win-x64.zip'
 $expected = ((Select-String -Path SHA256SUMS -SimpleMatch $zip).Line -split '\s+')[0]
 (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower() -eq $expected
 ```
@@ -90,7 +90,7 @@ Then extract it into a folder only your account can write, and start it:
 ```powershell
 Unblock-File $zip
 Expand-Archive $zip -DestinationPath "$env:LOCALAPPDATA\Programs\AgentSplice"
-& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.2-alpha-win-x64\AgentSplice.Api.exe"
+& "$env:LOCALAPPDATA\Programs\AgentSplice\agentsplice-0.2.3-alpha-win-x64\AgentSplice.Api.exe"
 ```
 
 The package is not code-signed. If **Windows protected your PC** appears, choose **More info**, then
@@ -106,9 +106,9 @@ It needs a recent glibc-based distribution, not Alpine;
 and its checksums, and check the digest. The last line must print `…: OK`:
 
 ```bash
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-linux-x64.tar.gz
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
-archive=agentsplice-0.2.2-alpha-linux-x64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/agentsplice-0.2.3-alpha-linux-x64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/SHA256SUMS
+archive=agentsplice-0.2.3-alpha-linux-x64.tar.gz
 grep -F "  $archive" SHA256SUMS | sha256sum --check --strict -
 ```
 
@@ -117,7 +117,7 @@ Then extract it into a folder only your account can write, and start it:
 ```bash
 mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
 tar -xzf "$archive" -C ~/.local/opt/agentsplice
-~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-linux-x64/AgentSplice.Api
+~/.local/opt/agentsplice/agentsplice-0.2.3-alpha-linux-x64/AgentSplice.Api
 ```
 
 </details>
@@ -129,9 +129,9 @@ It needs a Mac with Apple silicon and macOS 15 or later; on an Intel Mac, use th
 below. Download the package and its checksums, and check the digest. The last line must print `…: OK`:
 
 ```bash
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/agentsplice-0.2.2-alpha-osx-arm64.tar.gz
-curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.2-alpha/SHA256SUMS
-archive=agentsplice-0.2.2-alpha-osx-arm64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/agentsplice-0.2.3-alpha-osx-arm64.tar.gz
+curl -fLO https://github.com/murillojndem/agent-splice/releases/download/v0.2.3-alpha/SHA256SUMS
+archive=agentsplice-0.2.3-alpha-osx-arm64.tar.gz
 grep -F "  $archive" SHA256SUMS | shasum -a 256 --check --strict -
 ```
 
@@ -140,7 +140,7 @@ Then extract it into a folder only your account can write, and start it:
 ```bash
 mkdir -p ~/.local/opt/agentsplice && chmod 700 ~/.local/opt/agentsplice
 tar -xzf "$archive" -C ~/.local/opt/agentsplice
-~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-osx-arm64/AgentSplice.Api
+~/.local/opt/agentsplice/agentsplice-0.2.3-alpha-osx-arm64/AgentSplice.Api
 ```
 
 The package is signed ad hoc, which names nobody, and Apple has not notarized it. `curl` sets no
@@ -149,7 +149,7 @@ refuses to open it; once the digest has matched, clear the mark from the package
 ([why](docs/INSTALLATION.md#if-macos-refuses-to-open-it)):
 
 ```bash
-xattr -dr com.apple.quarantine ~/.local/opt/agentsplice/agentsplice-0.2.2-alpha-osx-arm64
+xattr -dr com.apple.quarantine ~/.local/opt/agentsplice/agentsplice-0.2.3-alpha-osx-arm64
 ```
 
 </details>
@@ -171,7 +171,7 @@ docker run --detach --name agentsplice \
   --env AGENTSPLICE__RUNTIMES__0__BASEURL=http://host.docker.internal:1234/v1 \
   --env AGENTSPLICE__ADMINISTRATION__APIKEYENVIRONMENTVARIABLE=AGENTSPLICE_ADMIN_API_KEY \
   --env AGENTSPLICE_ADMIN_API_KEY \
-  ghcr.io/murillojndem/agent-splice:0.2.2-alpha
+  ghcr.io/murillojndem/agent-splice:0.2.3-alpha
 ```
 
 Docker Desktop forwards `host.docker.internal` to the host. On a Linux engine, LM Studio must listen on

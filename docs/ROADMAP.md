@@ -224,6 +224,11 @@ llama.cpp's `llama-server` and to Ollama, each with the shipped `lmstudio` provi
 address and id (launch decision D4). They change no status of the compatibility matrix and no runtime
 behaviour.
 
+After 0.2.2-alpha, released in 0.2.3-alpha: a quieter first start, from a cold test of every
+installation path the README gives. `1103 RuntimeCredentialMissing` is Information rather than a
+warning, the shipped settings lower .NET's HTTP client to Warning, and the image no longer warns about
+the port its base image sets. Nothing the gateway records, forwards, or answers changes.
+
 ## Stage 2 — Replay and Conformance
 
 ### Stage 2A — Sanitized replay artifacts
