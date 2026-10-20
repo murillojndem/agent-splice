@@ -206,6 +206,23 @@ public sealed partial class ConfigurationKeyContractTests
     }
 
     [Fact]
+    public void The_shipped_settings_keep_the_http_client_from_narrating_every_runtime_request()
+    {
+        // .NET's HTTP client logs four Information lines for every request to a runtime, and a
+        // connection the runtime refuses as a whole stack trace: the first thing a new user saw when the
+        // gateway started before LM Studio (the cold test of 0.2.2-alpha). The gateway says the same
+        // once, in its own terms — the exchange records the failure, and RuntimeDiscoveryFailed (1101)
+        // names a runtime whose catalogue could not be read — so at Information it is noise that reads
+        // as a fault (docs/OBSERVABILITY.md "Structured logs").
+        var levels = ShippedSettings()
+            .RootElement
+            .GetProperty("Logging")
+            .GetProperty("LogLevel");
+
+        Assert.Equal("Warning", levels.GetProperty("System.Net.Http.HttpClient").GetString());
+    }
+
+    [Fact]
     public void The_compose_configuration_satisfies_the_administrative_binding_guard()
     {
         // The Compose service sets ASPNETCORE_URLS to 0.0.0.0, which AdministrationBindingGuard

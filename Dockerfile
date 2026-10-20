@@ -85,7 +85,13 @@ LABEL org.opencontainers.image.title="AgentSplice" \
 
 # The process binds to the container interface; loopback-only exposure is the operator's port
 # mapping (see docker-compose.yml and docs/SECURITY.md).
+#
+# The base image sets ASPNETCORE_HTTP_PORTS=8080. Beside ASPNETCORE_URLS it binds nothing, but
+# ASP.NET Core then warns at every start that it is overriding it: the first line a new user read in
+# `docker logs`, about a port nothing uses. Cleared, the URLS above are the only binding the image
+# states.
 ENV ASPNETCORE_URLS=http://0.0.0.0:5280 \
+    ASPNETCORE_HTTP_PORTS="" \
     DOTNET_NOLOGO=true \
     DOTNET_CLI_TELEMETRY_OPTOUT=true
 

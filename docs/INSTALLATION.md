@@ -305,7 +305,9 @@ Debian 12, RHEL 9, current Fedora, and their successors — but not Alpine, whic
 not Ubuntu 20.04, Debian 11, or RHEL 8. It carries its own .NET runtime and the dashboard, so it needs
 nothing installed beyond what such a distribution already has, OpenSSL 1.1.1 or later included. The glibc
 floor is the SQLite library the package bundles, which Entity Framework Core 10 requires: the .NET 10
-runtime itself needs only glibc 2.27, and the .NET 8 package needed glibc 2.28 (ADR 0024).
+runtime itself needs only glibc 2.27, and the .NET 8 package needed glibc 2.28 (ADR 0024). The commands
+below download with `curl`, which a minimal installation or a container image may lack: install it with
+the distribution's package manager, or download the two files with a browser.
 
 ### Download and verify
 

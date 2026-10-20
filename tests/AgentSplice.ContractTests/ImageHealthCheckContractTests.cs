@@ -78,6 +78,19 @@ public sealed partial class ImageHealthCheckContractTests
     }
 
     [Fact]
+    public void The_image_binds_only_the_urls_it_states()
+    {
+        // The base image sets ASPNETCORE_HTTP_PORTS=8080. Beside ASPNETCORE_URLS it binds nothing, but
+        // ASP.NET Core then warns at every start that it is overriding it: the first line a new user read
+        // in `docker logs` (the cold test of 0.2.2-alpha), about a port nothing uses.
+        var runtime = RuntimeStage();
+
+        Assert.True(
+            HttpPortsCleared().IsMatch(runtime),
+            "The runtime stage must clear ASPNETCORE_HTTP_PORTS, which the base image sets beside the URLS it binds.");
+    }
+
+    [Fact]
     public void The_health_check_runs_the_probe_the_image_copies()
     {
         var stages = Stages();
@@ -204,6 +217,9 @@ public sealed partial class ImageHealthCheckContractTests
 
     [GeneratedRegex(@"ASPNETCORE_URLS=(?<urls>\S+)")]
     private static partial Regex ImageUrls();
+
+    [GeneratedRegex(@"\bASPNETCORE_HTTP_PORTS=(?:""""|(?=\s|$))")]
+    private static partial Regex HttpPortsCleared();
 
     [GeneratedRegex(@"^EXPOSE\s+(?<port>\d+)\s*$", RegexOptions.Multiline)]
     private static partial Regex Exposed();

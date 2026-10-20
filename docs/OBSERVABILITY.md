@@ -275,7 +275,7 @@ spoke: 1000 the request path, 1100 routing and discovery, 1200 hosting, 1300 per
 | `1003 InstrumentationFailed` | Error | Emitting spans or metrics failed; the client response is unaffected. |
 | `1101 RuntimeDiscoveryFailed` | Warning | A runtime's model catalogue could not be refreshed. |
 | `1102 ModelListFailed` | Error | Building the model list `/v1/models` serves failed. |
-| `1103 RuntimeCredentialMissing` | Warning | A runtime names an API key variable that is unset or blank. |
+| `1103 RuntimeCredentialMissing` | Information | Once per variable, when a runtime names an API key variable that is unset or blank. The shipped settings name `LM_STUDIO_API_KEY`, which a local LM Studio does not need, so most starts log it. |
 | `1201 UnhandledPipelineFault` | Error | A fault escaped the request pipeline entirely. |
 | `1202 TelemetryExportEnabled` | Information | Export is on; the message names the transport and the destination. |
 | `1203 DashboardServed` | Information | A dashboard build is served; the message names the directory. |
@@ -295,7 +295,11 @@ otherwise look like a quiet afternoon (ADR 0027).
 Other components log under their own categories without these identifiers. The one an operator is
 likely to need is ASP.NET Core's host filter, whose `NoAllowedHostMatched` line names a host the gateway
 refused; the shipped `appsettings.json` raises `Microsoft.AspNetCore.HostFiltering` to Information so
-it is visible (`docs/INSTALLATION.md`, "Host names").
+it is visible (`docs/INSTALLATION.md`, "Host names"). It lowers `System.Net.Http.HttpClient` to Warning:
+at Information, .NET's HTTP client logs four lines for every request to a runtime, and a connection the
+runtime refuses as a whole stack trace, which is what a new user saw first when the gateway started
+before LM Studio. The gateway says the same once, in its own terms: the exchange records the failure,
+and `1101` names a runtime whose model catalogue could not be read.
 
 Default logs include structural metadata only. Body logging is not a supported shortcut for trace capture.
 

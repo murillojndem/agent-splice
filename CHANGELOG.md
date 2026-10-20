@@ -27,6 +27,26 @@ All notable changes will be documented here.
   OpenCode's fixed prompt: every agent request is refused, and OpenCode 1.18.7 alternates compaction
   with it until stopped, as the Ollama trace report recorded; `"compaction": { "auto": false }` stops it
   at the first refusal. Both were checked against OpenCode on 2026-10-19; neither changes the gateway.
+- **A quieter first start.** A cold test of 0.2.2-alpha, every installation path as the README gives it,
+  found three things a new user read first that were not problems, and one step a minimal Linux could
+  not take:
+  - `1103 RuntimeCredentialMissing` is Information, no longer a warning. The shipped settings name
+    `LM_STUDIO_API_KEY` so that a key works without further configuration, so most machines leave it
+    unset, and every start warned about a setting nobody made. It is still logged once, in the default
+    console.
+  - The shipped `appsettings.json` lowers `System.Net.Http.HttpClient` to Warning. At Information, .NET's
+    HTTP client logged four lines for every request to the runtime and a refused connection as a whole
+    stack trace, the first thing a user saw when the gateway started before LM Studio. The gateway says
+    the same once: the exchange records the failure, and `1101` names a runtime it cannot read. A
+    contract test holds the level.
+  - The image clears `ASPNETCORE_HTTP_PORTS`, which its base sets to 8080. It bound nothing beside
+    `ASPNETCORE_URLS`, but ASP.NET Core warned at every start that it was overriding it. A contract test
+    holds the image to clearing it; built and started, the image logs no such warning.
+  - `docs/INSTALLATION.md` says the Linux package's commands need `curl`, which a minimal installation
+    or a container image may lack.
+
+  Each new test was checked to fail with its defect put back. Nothing the gateway records, forwards, or
+  answers changes.
 
 ## 0.2.2-alpha — 2026-10-19
 

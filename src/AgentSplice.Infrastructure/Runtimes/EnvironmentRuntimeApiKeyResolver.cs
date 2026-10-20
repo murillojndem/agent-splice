@@ -11,13 +11,17 @@ namespace AgentSplice.Infrastructure.Runtimes;
 /// </summary>
 /// <remarks>
 /// A missing or blank variable is not a failure. A local runtime legitimately needs no key, so
-/// refusing to start would break the most common deployment. It is worth one warning, though,
-/// because "I set <c>apiKeyEnvironmentVariable</c> and the runtime still rejects me" is otherwise
-/// diagnosed by guesswork.
+/// refusing to start would break the most common deployment. It is worth one line, though, because
+/// "I set <c>apiKeyEnvironmentVariable</c> and the runtime still rejects me" is otherwise diagnosed by
+/// guesswork.
 ///
-/// The warning is emitted once per variable name rather than per request: it describes a
-/// configuration state, not a request event, and a per-request warning on a busy gateway would bury
-/// everything else.
+/// The line is Information, not a warning. The shipped settings name <c>LM_STUDIO_API_KEY</c> so that a
+/// key works without further configuration, which leaves it unset on most machines: as a warning, it
+/// was the first thing a new user read at every start, about a setting they never made. At Information
+/// it is still in the default console for whoever needs it.
+///
+/// It is emitted once per variable name rather than per request: it describes a configuration state,
+/// not a request event, and a per-request line on a busy gateway would bury everything else.
 /// </remarks>
 public sealed class EnvironmentRuntimeApiKeyResolver : IRuntimeApiKeyResolver
 {
@@ -48,7 +52,7 @@ public sealed class EnvironmentRuntimeApiKeyResolver : IRuntimeApiKeyResolver
             // Names the runtime and the setting, not the setting's value. The setting is where a key
             // gets pasted by mistake, and a key made of letters, digits, and underscores passes as a
             // variable's name; logging the name would then log the key.
-            logger.LogWarning(
+            logger.LogInformation(
                 GatewayEventIds.RuntimeCredentialMissing,
                 "Runtime {RuntimeId} names an environment variable for its API key in its apiKeyEnvironmentVariable setting, but that variable is unset or blank. Requests will be sent without a credential.",
                 target.Id.Value);
