@@ -333,7 +333,7 @@ AgentSplice exports OpenTelemetry, so its spans and metrics can sit beside your 
 
 [The roadmap](docs/ROADMAP.md) has each stage's scope and exit criteria. To hear when a release ships,
 choose **Watch → Custom → Releases** at the top of this page. Which runtime or client should come next?
-Say so in [Discussions](https://github.com/murillojndem/agent-splice/discussions).
+Vote in [the poll in Discussions](https://github.com/murillojndem/agent-splice/discussions/9).
 
 ## How it's built
 
